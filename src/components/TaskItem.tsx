@@ -166,7 +166,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                 </div>
             )}
             <div className="flex items-start gap-3">
-                <div className={`mt-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors ${view === 'schedule' ? 'invisible' : ''}`}><GripVertical size={14} /></div>
+                <div className={`mt-1 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors hidden md:block ${view === 'schedule' ? 'invisible' : ''}`}><GripVertical size={14} /></div>
                 <div className="mt-0.5 flex items-center gap-1">
                     {hasChildren && view !== 'next' ? <button onClick={(e) => {e.stopPropagation(); toggleExpansion(task.id)}} className="text-slate-400 hover:text-slate-800 transition-transform">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button> : <div className="w-[16px]" /> }
                     <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} />
