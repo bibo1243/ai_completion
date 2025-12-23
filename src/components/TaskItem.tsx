@@ -177,7 +177,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                     {task.description && <span className="text-[10px] text-slate-300 mr-2">...</span>}
                     <div className={`ml-auto ${isDone ? 'opacity-50' : 'opacity-100'}`}> {renderDateBadge()} </div>
                 </div>
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 pl-2">
+                <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">
                     <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="p-1 hover:text-red-500 text-slate-300 transition-colors"><Trash2 size={14} /></button>
                 </div>
             </div>

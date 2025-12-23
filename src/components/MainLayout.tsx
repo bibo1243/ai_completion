@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
@@ -12,6 +12,7 @@ export const MainLayout = () => {
   const { syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth } = useContext(AppContext);
   const [localQuickAdd, setLocalQuickAdd] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const textSizeClass = { small: 'text-sm', normal: 'text-base', large: 'text-lg' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-base';
   const fontWeightClass = themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-bold';
@@ -60,7 +61,8 @@ export const MainLayout = () => {
 
   return (
     <div className="flex h-screen bg-white text-gray-900 font-sans selection:bg-indigo-50 selection:text-indigo-900">
-      <div style={{ width: sidebarWidth }} className="relative flex-shrink-0">
+      {/* Desktop Sidebar */}
+      <div style={{ width: sidebarWidth }} className="relative flex-shrink-0 hidden md:block">
         <Sidebar view={view} setView={setView} tagFilter={tagFilter} setTagFilter={setTagFilter} />
         {/* Resizer Handle */}
         <div 
@@ -68,10 +70,23 @@ export const MainLayout = () => {
             onMouseDown={() => setIsResizing(true)}
         />
       </div>
+
+      {/* Mobile Sidebar Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 md:hidden" onClick={() => setMobileMenuOpen(false)}>
+            <div className="absolute left-0 top-0 h-full w-[280px] bg-white shadow-2xl animate-in slide-in-from-left duration-200" onClick={e => e.stopPropagation()}>
+                <Sidebar view={view} setView={(v: any) => { setView(v); setMobileMenuOpen(false); }} tagFilter={tagFilter} setTagFilter={(t: any) => { setTagFilter(t); setMobileMenuOpen(false); }} />
+            </div>
+        </div>
+      )}
+
       <main className="flex-1 flex flex-col relative overflow-hidden">
-        <header className="h-14 flex items-center justify-between px-8 border-b border-gray-50 z-10 sticky top-0 bg-white/90 backdrop-blur-sm">
-          <div className="flex items-center gap-4">
-            {canNavigateBack ? ( <button onClick={navigateBack} className="p-1 hover:bg-gray-100 rounded text-slate-500 flex items-center gap-1 text-sm font-medium transition-colors" title="返回 Next Actions (Alt + Left)"> <CornerUpLeft size={16} /> 返回 </button> ) : ( <h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-gray-800`}>{getHeaderTitle()}</h2> )}
+        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-gray-50 z-10 sticky top-0 bg-white/90 backdrop-blur-sm">
+          <div className="flex items-center gap-2 md:gap-4">
+            <button className="md:hidden p-1 -ml-2 text-gray-500 hover:bg-gray-100 rounded" onClick={() => setMobileMenuOpen(true)}>
+                <Menu size={20} />
+            </button>
+            {canNavigateBack ? ( <button onClick={navigateBack} className="p-1 hover:bg-gray-100 rounded text-slate-500 flex items-center gap-1 text-sm font-medium transition-colors" title="返回 Next Actions (Alt + Left)"> <CornerUpLeft size={16} /> <span className="hidden md:inline">返回</span> </button> ) : ( <h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-gray-800`}>{getHeaderTitle()}</h2> )}
             <div className="flex items-center gap-2">
                 <button onClick={archiveCompletedTasks} className="p-1.5 rounded hover:bg-gray-100 text-slate-500 hover:text-emerald-600 transition-colors" title="歸檔所有已完成任務 (Archive Completed)"> <Archive size={16} /> </button>
                 <div className="w-px h-4 bg-gray-200 mx-1"></div>
@@ -108,7 +123,7 @@ export const MainLayout = () => {
             </div>
         )}
 
-        {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-32 p-6"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
+        {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-16 p-4 md:pt-32 md:p-6"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 md:p-6"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
         {toast && <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50 text-sm ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-900 text-white'}`}><span>{toast.msg}</span>{toast.undo && <button onClick={() => { toast.undo?.(); setToast(null); }} className="opacity-70 hover:opacity-100 transition-opacity">Undo</button>}</div>}
       </main>
     </div>
