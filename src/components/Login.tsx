@@ -10,6 +10,23 @@ export const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [guestId, setGuestId] = useState('');
+  const [useGuest, setUseGuest] = useState(false);
+
+  const handleGuestLogin = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!guestId.trim()) return;
+      
+      // Validate UUID format basic check
+      if (guestId.length < 10) {
+          setError('ID 格式似乎不正確，請輸入完整的 UUID');
+          return;
+      }
+      
+      localStorage.setItem('gtd_user_id', guestId.trim());
+      window.location.href = '/'; // Hard reload to pick up the new ID in AppContext
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -161,6 +178,41 @@ export const Login = () => {
               </svg>
               Google
             </button>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-200"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500 text-xs">開發者 / 訪客模式</span>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            {!useGuest ? (
+                <button 
+                    onClick={() => setUseGuest(true)}
+                    className="w-full text-xs text-gray-400 hover:text-gray-600 underline text-center"
+                >
+                    使用特定 Guest ID 登入
+                </button>
+            ) : (
+                <form onSubmit={handleGuestLogin} className="flex gap-2">
+                    <input 
+                        type="text" 
+                        placeholder="輸入 Guest ID (UUID)..." 
+                        value={guestId}
+                        onChange={e => setGuestId(e.target.value)}
+                        className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-300 outline-none"
+                    />
+                    <button type="submit" className="text-xs bg-gray-800 text-white px-3 py-1.5 rounded hover:bg-black transition-colors">
+                        進入
+                    </button>
+                </form>
+            )}
           </div>
         </div>
 

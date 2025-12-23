@@ -32,6 +32,8 @@ export const AppContext = createContext<{
   exportData: () => void;
   importData: (file: File) => Promise<void>;
     
+  logout: () => Promise<void>;
+
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -125,20 +127,28 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         // Validate UUID format
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         
+        let currentUser: any = null;
+
         if (!userId || !uuidRegex.test(userId)) {
-            console.warn("Invalid or missing User ID, resetting to default.");
-            userId = '00000000-0000-0000-0000-000000000000';
-            localStorage.setItem('gtd_user_id', userId);
-        }
-        let currentUser;
-        if (supabaseClient) {
-            const { data: { session }, error } = await supabaseClient.auth.getSession();
-            if (error) throw error;
-            currentUser = session?.user || { id: userId };
-            setUser(currentUser);
+            console.warn("No valid User ID found.");
+            if (supabaseClient) {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (error) throw error;
+                currentUser = session?.user || null;
+                setUser(currentUser);
+            } else {
+                setUser(null);
+            }
         } else {
-            currentUser = { id: userId };
-            setUser(currentUser);
+            if (supabaseClient) {
+                const { data: { session }, error } = await supabaseClient.auth.getSession();
+                if (error) throw error;
+                currentUser = session?.user || { id: userId };
+                setUser(currentUser);
+            } else {
+                currentUser = { id: userId };
+                setUser(currentUser);
+            }
         }
         
         // Reload persisted state once user is known
@@ -336,6 +346,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
           }
       };
       reader.readAsText(file);
+  };
+
+  const logout = async () => {
+      if (supabaseClient) {
+          await supabaseClient.auth.signOut();
+      }
+      localStorage.removeItem('gtd_user_id');
+      setUser(null);
+      setTasks([]);
+      setTags([]);
+      // We don't force reload here, let App.tsx handle the redirect to /login
   };
 
   const pushToHistory = (action: HistoryRecord) => { setHistoryStack(prev => [...prev, action]); setRedoStack([]); };
@@ -729,7 +750,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AppContext.Provider value={{ 
-        user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, updateTask, deleteTask, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion, 
+        user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, updateTask, deleteTask, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, clearAllTasks, exportData, importData, logout, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion, 
         view, setView: setViewAndPersist, 
         tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, initError,
         sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User, LogOut } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
@@ -9,7 +9,7 @@ import { JournalView } from './JournalView';
 import { AdvancedFilterBar } from './AdvancedFilterBar';
 
 export const MainLayout = () => {
-  const { user, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth } = useContext(AppContext);
+  const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth } = useContext(AppContext);
   const [localQuickAdd, setLocalQuickAdd] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -100,15 +100,16 @@ export const MainLayout = () => {
             </div>
 
             {/* User Info */}
-            <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200 ml-1">
+            <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200 ml-1 group relative cursor-pointer" onClick={logout} title="登出 / 切換使用者">
                 <div className="hidden md:flex flex-col items-end">
                     <span className="text-[9px] text-gray-400 uppercase tracking-wider font-bold leading-none mb-0.5">User</span>
                     <span className="text-[10px] font-mono text-gray-600 leading-none" title={user?.id}>
                         {user?.email ? user.email : (user?.id ? `ID: ${user.id.slice(0,6)}...` : 'Guest')}
                     </span>
                 </div>
-                <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-                    <User size={12} />
+                <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 group-hover:bg-red-50 group-hover:text-red-600 group-hover:border-red-100 transition-colors">
+                    <User size={12} className="group-hover:hidden" />
+                    <LogOut size={12} className="hidden group-hover:block" />
                 </div>
             </div>
 
