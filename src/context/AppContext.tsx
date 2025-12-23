@@ -136,8 +136,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 if (error) throw error;
                 currentUser = session?.user || null;
                 setUser(currentUser);
+                if (!currentUser) setLoading(false);
             } else {
                 setUser(null);
+                setLoading(false);
             }
         } else {
             if (supabaseClient) {
@@ -145,6 +147,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 if (error) throw error;
                 currentUser = session?.user || { id: userId };
                 setUser(currentUser);
+                if (!currentUser) setLoading(false);
             } else {
                 currentUser = { id: userId };
                 setUser(currentUser);
