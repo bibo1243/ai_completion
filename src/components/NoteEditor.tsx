@@ -29,7 +29,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
 }) => {
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            StarterKit as any,
             Link.configure({
                 openOnClick: false,
                 autolink: true,

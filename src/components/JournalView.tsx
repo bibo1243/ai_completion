@@ -6,7 +6,7 @@ import { TaskInput } from './TaskInput';
 import { TagChip } from './TagChip';
 
 export const JournalView = () => {
-  const { tasks, tags, addTask, addTag, deleteTask } = useContext(AppContext);
+  const { tasks, tags, addTask, addTag } = useContext(AppContext);
   const [editingTask, setEditingTask] = useState<TaskData | null>(null);
 
   // Find the 'Album' tag

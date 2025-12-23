@@ -3,7 +3,7 @@ import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loa
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor } from '../types';
-import { COLOR_THEMES } from '../constants';
+import { COLOR_THEMES, ThemeColor } from '../constants';
 import { isDescendant } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
 import { SmartDateInput } from './SmartDateInput';

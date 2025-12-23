@@ -1,5 +1,3 @@
-import { TaskColor } from '../types';
-
 export const APP_VERSION = "v1.6.0";
 export const INDENT_SIZE = 28;
 

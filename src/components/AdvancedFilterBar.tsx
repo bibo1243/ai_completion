@@ -1,8 +1,8 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DropdownSelect } from './DropdownSelect';
 import { SmartDateInput } from './SmartDateInput';
-import { Tag, Calendar, Palette, X } from 'lucide-react';
+import { Tag, Palette, X } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 
 export const AdvancedFilterBar = () => {
