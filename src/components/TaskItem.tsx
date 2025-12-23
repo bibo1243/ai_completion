@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useContext } from 'react';
-import { ChevronRight, ChevronDown, GripVertical, Trash2, Calendar, Layers, Circle, CornerDownRight } from 'lucide-react';
+import { ChevronRight, ChevronDown, GripVertical, Trash2, Calendar, Layers, Circle, CornerDownRight, Tag } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
 import { COLOR_THEMES, INDENT_SIZE } from '../constants';
@@ -173,7 +173,19 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                 </div>
                 <div className="flex-1 min-w-0 pt-0.5 cursor-text flex items-center">
                     <span className={`${textSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'} mr-2`}>{task.title}</span>
-                    {(task.tags || []).length > 0 && ( <div className="flex items-center gap-1 mr-2"> {(task.tags || []).map(tid => { const tName = tags.find(t => t.id === tid)?.name; if(!tName) return null; return ( <span key={tid} className={`text-[10px] font-light border border-slate-200 rounded-md px-1.5 py-px ${isDone ? 'text-slate-300 bg-slate-50' : 'text-slate-500 bg-slate-50'}`}> #{tName} </span> ); })} </div> )}
+                    {(task.tags || []).length > 0 && ( 
+                        <>
+                            {/* Desktop: Full Tag Names */}
+                            <div className="hidden md:flex items-center gap-1 mr-2"> 
+                                {(task.tags || []).map(tid => { const tName = tags.find(t => t.id === tid)?.name; if(!tName) return null; return ( <span key={tid} className={`text-[10px] font-light border border-slate-200 rounded-md px-1.5 py-px ${isDone ? 'text-slate-300 bg-slate-50' : 'text-slate-500 bg-slate-50'}`}> #{tName} </span> ); })} 
+                            </div>
+                            {/* Mobile: Simple Icon */}
+                            <div className="md:hidden flex items-center mr-2 text-slate-400">
+                                <Tag size={12} />
+                                {(task.tags || []).length > 1 && <span className="text-[9px] ml-0.5">{(task.tags || []).length}</span>}
+                            </div>
+                        </>
+                    )}
                     {task.description && <span className="text-[10px] text-slate-300 mr-2">...</span>}
                     <div className={`ml-auto ${isDone ? 'opacity-50' : 'opacity-100'}`}> {renderDateBadge()} </div>
                 </div>
