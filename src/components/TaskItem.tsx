@@ -172,7 +172,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                     <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} />
                 </div>
                 <div className="flex-1 min-w-0 pt-0.5 cursor-text flex items-center">
-                    <span className={`${textSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'} mr-2`}>{task.title}</span>
+                   <span className={`${textSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-700'} mr-2 truncate block max-w-[200px] md:max-w-none`}>{task.title}</span>
                     {(task.tags || []).length > 0 && ( 
                         <>
                             {/* Desktop: Full Tag Names */}
