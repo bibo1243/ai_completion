@@ -25,7 +25,7 @@ export const formatDate = (dateStr: string | null) => {
   return d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-export const getRelativeDateString = (dateStr: string | null) => {
+export const getRelativeDateString = (dateStr: string | null, includeTime = true) => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   const now = new Date();
@@ -35,16 +35,26 @@ export const getRelativeDateString = (dateStr: string | null) => {
 
   const diffDays = Math.floor((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '明天';
-  if (diffDays === -1) return '昨天';
-  if (diffDays < 0) return `${Math.abs(diffDays)} 天前`;
-  return `${date.getMonth() + 1}/${date.getDate()}`;
+  let str = '';
+  if (diffDays === 0) str = '今天';
+  else if (diffDays === 1) str = '明天';
+  else if (diffDays === -1) str = '昨天';
+  else if (diffDays < 0) str = `${Math.abs(diffDays)} 天前`;
+  else str = `${date.getMonth() + 1}月${date.getDate()}日`;
+
+  if (includeTime) {
+    const hours = date.getHours();
+    const mins = date.getMinutes();
+    if (hours !== 0 || mins !== 0) {
+      str += ` ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+  }
+  return str;
 };
 
 export const isSameDay = (d1: Date, d2: Date) => d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 export const isToday = (dateStr: string | null) => dateStr ? isSameDay(new Date(dateStr), new Date()) : false;
-export const isOverdue = (dateStr: string | null) => dateStr ? new Date(dateStr).getTime() < new Date().setHours(0,0,0,0) : false;
+export const isOverdue = (dateStr: string | null) => dateStr ? new Date(dateStr).getTime() < new Date().setHours(0, 0, 0, 0) : false;
 
 export const isDescendant = (potentialParentId: string | null, targetId: string, allTasks: TaskData[]): boolean => {
   if (!potentialParentId) return false;

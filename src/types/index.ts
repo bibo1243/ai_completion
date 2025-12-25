@@ -27,7 +27,14 @@ export interface TaskData {
   created_at: string;
   completed_at: string | null;
   order_index: number;
+  view_orders?: Record<string, number>;
+  is_all_day: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  duration: number | null;
   images?: string[];
+  attachments?: Array<{ name: string; url: string; size: number; type: string }>;
+  reviewed_at: string | null;
 }
 
 export interface FlatTask {
@@ -56,9 +63,9 @@ export interface DragState {
 export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG';
 
 export interface BatchUpdateRecord {
-    id: string;
-    before: Partial<TaskData>;
-    after: Partial<TaskData>;
+  id: string;
+  before: Partial<TaskData>;
+  after: Partial<TaskData>;
 }
 
 export interface HistoryRecord {
@@ -67,17 +74,21 @@ export interface HistoryRecord {
 }
 
 export interface ThemeSettings {
-    fontWeight: 'normal' | 'thin';
-    fontSize: 'small' | 'normal' | 'large';
+  fontWeight: 'normal' | 'thin';
+  fontSize: 'small' | 'normal' | 'large';
+  fontFamily: 'system' | 'things';
+  timeFormat?: '12h' | '24h';
+  showLunar?: boolean;
+  showTaiwanHolidays?: boolean;
 }
 
 export type AIProvider = 'gemini' | 'openai';
 
 export interface AISettings {
-    provider: AIProvider;
-    apiKey: string;
-    baseUrl?: string;
-    modelName?: string;
+  provider: AIProvider;
+  apiKey: string;
+  baseUrl?: string;
+  modelName?: string;
 }
 
 export interface NavRecord {

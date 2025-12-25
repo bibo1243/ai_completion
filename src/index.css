@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Things';
+  src: local('Avenir Next'), local('Helvetica Neue'), local('Segoe UI'), sans-serif;
+}
+
+.font-things {
+  font-family: 'Avenir Next', 'Helvetica Neue', 'Segoe UI', sans-serif;
+}
+
 /* 隱藏捲軸但保持功能 */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -10,3 +19,16 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Animations for tooltip */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-in {
+  animation: fadeIn 0.15s ease-out forwards;
+}
+
+.fade-in { opacity: 1; }
+.zoom-in { transform: scale(1); }

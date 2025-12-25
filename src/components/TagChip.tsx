@@ -3,9 +3,9 @@ import { X } from 'lucide-react';
 import { TagData } from '../types';
 import { AppContext } from '../context/AppContext';
 
-export const TagChip = ({ tag, onRemove, size = 'normal' }: { tag: TagData, onRemove?: () => void, size?: 'small'|'normal' }) => {
-    const { themeSettings } = useContext(AppContext);
-    
+export const TagChip = ({ tag, onRemove, size = 'normal' }: { tag: TagData, onRemove?: () => void, size?: 'small' | 'normal' }) => {
+    const { themeSettings, tagsWithResolvedColors } = useContext(AppContext);
+
     const sizeMap = {
         small: {
             text: { small: 'text-[8px]', normal: 'text-[9px]', large: 'text-[10px]' },
@@ -17,13 +17,13 @@ export const TagChip = ({ tag, onRemove, size = 'normal' }: { tag: TagData, onRe
         }
     };
 
-    const textSizeClass = sizeMap[size].text[themeSettings.fontSize as 'small'|'normal'|'large'] || sizeMap[size].text.normal;
+    const textSizeClass = sizeMap[size].text[themeSettings.fontSize as 'small' | 'normal' | 'large'] || sizeMap[size].text.normal;
     const paddingClass = sizeMap[size].padding;
     const fontWeightClass = themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-normal';
-    
+
     return (
         <div className={`inline-flex items-center gap-1 bg-slate-50 text-slate-600 ${paddingClass} rounded-md border border-slate-200 ${textSizeClass} ${fontWeightClass}`}>
-            <div className="w-1.5 h-1.5 rounded-full" style={{backgroundColor: tag.color}}/>
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tagsWithResolvedColors[tag.id] || tag.color }} />
             <span>{tag.name}</span>
             {onRemove && <button type="button" onClick={onRemove} className="hover:text-slate-900"><X size={10} /></button>}
         </div>

@@ -5,13 +5,13 @@ const DEFAULT_API_KEY = "AIzaSyBbGFzQkwhEmNQduYxaZnnxxHR-DlQjj98";
 
 // Helper to get settings from storage
 const getAISettings = () => {
-    return {
-        provider: localStorage.getItem('ai_provider') || 'gemini',
-        googleKey: localStorage.getItem('google_ai_key') || DEFAULT_API_KEY,
-        openaiKey: localStorage.getItem('openai_api_key') || '',
-        baseUrl: localStorage.getItem('ai_base_url') || 'https://api.openai.com/v1',
-        modelName: localStorage.getItem('ai_model') || 'gpt-3.5-turbo'
-    };
+  return {
+    provider: localStorage.getItem('ai_provider') || 'gemini',
+    googleKey: localStorage.getItem('google_ai_key') || DEFAULT_API_KEY,
+    openaiKey: localStorage.getItem('openai_api_key') || '',
+    baseUrl: localStorage.getItem('ai_base_url') || 'https://api.openai.com/v1',
+    modelName: localStorage.getItem('ai_model') || 'gpt-3.5-turbo'
+  };
 };
 
 export interface AIResponse {
@@ -21,132 +21,198 @@ export interface AIResponse {
 }
 
 export interface AIExpertAnalysis {
-  strengths: string;
-  blindSpots: string;
-  collaboration: string;
-  nextSteps: string;
+  strengths?: string;
+  blindSpots?: string;
+  collaboration?: string;
+  nextSteps?: string;
+  fullResponse?: string;
 }
 
 const getGenAIModel = () => {
-    const { googleKey } = getAISettings();
-    if (!googleKey) {
-        throw new Error("Google API Key is missing. Please set it in Settings.");
-    }
-    const genAI = new GoogleGenerativeAI(googleKey);
-    return genAI;
+  const { googleKey } = getAISettings();
+  if (!googleKey) {
+    throw new Error("Google API Key is missing. Please set it in Settings.");
+  }
+  const genAI = new GoogleGenerativeAI(googleKey);
+  return genAI;
 };
 
 const executeGeminiRequest = async (prompt: string): Promise<any> => {
-    const genAI = getGenAIModel();
-    const modelsToTry = [
-        "gemini-2.0-flash-001",
-        "gemini-2.0-flash-lite-preview-02-05", 
-        "gemini-flash-latest", 
-        "gemini-pro-latest"
-    ];
-    
-    let lastError;
-    
-    for (const modelName of modelsToTry) {
-        try {
-            console.log(`Attempting to use AI model: ${modelName}`);
-            const model = genAI.getGenerativeModel({ 
-                model: modelName,
-                generationConfig: {
-                    temperature: 0.7,
-                    topK: 40,
-                    topP: 0.95,
-                    maxOutputTokens: 2048,
-                }
-            });
+  const genAI = getGenAIModel();
+  const modelsToTry = [
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite-preview-02-05",
+    "gemini-1.5-pro",
+    "gemini-pro-latest"
+  ];
 
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
-            
-            console.log("AI Raw Response:", text); // Debug log
+  let lastError;
 
-            // Clean up markdown code blocks if present
-            const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(cleanText);
-        } catch (err: any) {
-            console.warn(`Model ${modelName} failed:`, err.message);
-            lastError = err;
-            continue;
+  for (const modelName of modelsToTry) {
+    try {
+      console.log(`Attempting to use AI model: ${modelName}`);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
         }
+      });
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+
+      console.log("AI Raw Response:", text);
+
+      try {
+        // Find JSON block or extract from text
+        let jsonStr = text;
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[0];
+        }
+        const cleanText = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+        try {
+          return JSON.parse(cleanText);
+        } catch (e) {
+          // Fallback: if there are literal newlines in the string values, 
+          // attempt to escape them and try again.
+          // A better approach for this specific AI-generated "one-field" JSON:
+          if (cleanText.includes('"fullResponse": "')) {
+            const startTag = '"fullResponse": "';
+            const startIdx = cleanText.indexOf(startTag) + startTag.length;
+            const endIdx = cleanText.lastIndexOf('"');
+            if (startIdx > startTag.length - 1 && endIdx > startIdx) {
+              const content = cleanText.substring(startIdx, endIdx);
+              const escapedContent = content.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+              return { fullResponse: escapedContent };
+            }
+          }
+          throw e;
+        }
+      } catch (parseErr) {
+        console.warn("JSON Parse failed, returning raw text in fallback structure");
+        if (prompt.includes("strengths")) {
+          return {
+            strengths: text.slice(0, 500),
+            blindSpots: "無法解析 AI 回傳格式",
+            collaboration: "請檢查內容或指令是否過於簡短",
+            nextSteps: "建議手動嘗試優化指令"
+          };
+        }
+        throw parseErr;
+      }
+    } catch (err: any) {
+      console.warn(`Model ${modelName} failed:`, err.message);
+      lastError = err;
+      continue;
     }
-    throw lastError;
+  }
+  throw lastError;
 };
 
-const executeOpenAIRequest = async (prompt: string): Promise<any> => {
-    const { openaiKey, baseUrl, modelName } = getAISettings();
-    
-    if (!openaiKey) {
-        throw new Error("API Key is missing. Please set it in Settings.");
+const executeOpenAIRequest = async (prompt: string, expectJson: boolean = true): Promise<any> => {
+  const { openaiKey, baseUrl, modelName } = getAISettings();
+
+  if (!openaiKey) {
+    throw new Error("API Key is missing. Please set it in Settings.");
+  }
+
+  let url = baseUrl.trim();
+  if (url.endsWith('/')) url = url.slice(0, -1);
+
+  const endpoint = `${url}/chat/completions`;
+
+  console.log(`Using OpenAI-compatible provider: ${url}, model: ${modelName}`);
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiKey}`
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages: [
+          { role: "system", content: expectJson ? "You are a helpful assistant. Output valid JSON only." : "You are a helpful assistant." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.7,
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
-    // Ensure baseUrl doesn't end with slash if we append /chat/completions, 
-    // BUT usually users provide the base URL like https://api.deepseek.com
-    // The standard endpoint is /chat/completions
-    let url = baseUrl.trim();
-    if (url.endsWith('/')) url = url.slice(0, -1);
-    if (!url.endsWith('/v1')) {
-         // Some providers might need /v1, some might not. 
-         // Best practice: User provides full base URL including /v1 if needed, 
-         // OR we try to be smart. 
-         // Let's assume user provides "https://api.deepseek.com" -> we append "/chat/completions"
-         // If user provides "https://api.deepseek.com/v1" -> we append "/chat/completions"
-         // Actually, most SDKs take "baseURL" as "https://api.example.com/v1".
-    }
-    
-    // Construct the endpoint
-    const endpoint = `${url}/chat/completions`;
+    const data = await response.json();
+    const text = data.choices[0]?.message?.content || "";
 
-    console.log(`Using OpenAI-compatible provider: ${url}, model: ${modelName}`);
+    console.log("AI Raw Response:", text);
+
+    if (!expectJson) return text;
 
     try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${openaiKey}`
-            },
-            body: JSON.stringify({
-                model: modelName,
-                messages: [
-                    { role: "system", content: "You are a helpful assistant. Output valid JSON only." },
-                    { role: "user", content: prompt }
-                ],
-                temperature: 0.7,
-                // stream: false // default
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText}`);
-        }
-
-        const data = await response.json();
-        const text = data.choices[0]?.message?.content || "";
-        
-        console.log("AI Raw Response:", text);
-
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      let jsonStr = text;
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) jsonStr = jsonMatch[0];
+      const cleanText = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+      try {
         return JSON.parse(cleanText);
-
-    } catch (error) {
-        console.error("OpenAI Provider Error:", error);
-        throw error;
+      } catch (err) {
+        // Fallback for OpenAI as well
+        if (cleanText.includes('"fullResponse": "')) {
+          const startTag = '"fullResponse": "';
+          const startIdx = cleanText.indexOf(startTag) + startTag.length;
+          const endIdx = cleanText.lastIndexOf('"');
+          if (startIdx > startTag.length - 1 && endIdx > startIdx) {
+            const content = cleanText.substring(startIdx, endIdx);
+            const escapedContent = content.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+            return { fullResponse: escapedContent };
+          }
+        }
+        throw err;
+      }
+    } catch (err) {
+      console.warn("OpenAI JSON Parse failed");
+      throw err;
     }
+
+  } catch (error) {
+    console.error("OpenAI Provider Error:", error);
+    throw error;
+  }
+};
+
+const executeGeminiSimpleRequest = async (prompt: string): Promise<string> => {
+  const genAI = getGenAIModel();
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text().trim();
+};
+
+const executeSimpleAIRequest = async (prompt: string): Promise<string> => {
+  const { provider } = getAISettings();
+  if (provider === 'openai') {
+    const result = await executeOpenAIRequest(prompt, false);
+    return typeof result === 'string' ? result : JSON.stringify(result);
+  }
+  return await executeGeminiSimpleRequest(prompt);
 };
 
 const executeAIRequest = async (prompt: string): Promise<any> => {
-    const { provider } = getAISettings();
-    if (provider === 'openai') {
-        return await executeOpenAIRequest(prompt);
-    }
-    return await executeGeminiRequest(prompt);
+  const { provider } = getAISettings();
+  if (provider === 'openai') {
+    return await executeOpenAIRequest(prompt);
+  }
+  return await executeGeminiRequest(prompt);
 };
 
 export const polishContent = async (content: string, currentTitle: string): Promise<AIResponse> => {
@@ -184,38 +250,59 @@ export const polishContent = async (content: string, currentTitle: string): Prom
   }
 };
 
-export const analyzeContentAsExpert = async (content: string, currentTitle: string): Promise<AIExpertAnalysis> => {
-  const prompt = `
-    Role: You are an experienced supervisor at a Children's Placement Agency in Taiwan (台灣兒家安置機構主管).
-    Task: Analyze the following task/journal entry from a management perspective.
-    
-    Current Title: "${currentTitle}"
-    Content:
-    "${content}"
-    
-    Analysis Requirements:
-    1. **Strengths (做得好的地方)**: Identify what is being done well in the content, praising the effort or strategy.
-    2. **Potential Blind Spots (思考盲點)**: Point out potential risks, overlooked aspects, or problems with this way of thinking.
-    3. **Cross-unit Collaboration (跨單合作)**: Suggest how to collaborate with other units/departments (e.g., social workers, psychologists, administration) to handle this better.
-    4. **Next Steps (下一步行動)**: Provide concrete, actionable next steps.
-    
-    Output JSON format ONLY:
-    {
-      "strengths": "Analysis of strengths (Traditional Chinese)",
-      "blindSpots": "Analysis of blind spots (Traditional Chinese)",
-      "collaboration": "Suggestions for collaboration (Traditional Chinese)",
-      "nextSteps": "Actionable next steps (Traditional Chinese)"
-    }
-    
-    Tone: Professional, empathetic, constructive, and experienced. Use Traditional Chinese (繁體中文).
-    Format: The output text should be formatted as clean paragraphs or bullet points within the JSON strings.
-  `;
+export interface AIAssistantResponse {
+  fullResponse: string;
+}
+
+export const askAIAssistant = async (content: string, currentTitle: string, customPrompt?: string): Promise<AIAssistantResponse> => {
+  const defaultBasePrompt = `你是一位全能且智慧的 AI 助手。請根據以下內容提供深度且有見地的分析與擬議建議。
+  
+  【標題】：${currentTitle}
+  【詳細內容】：${content}
+  
+  請提供一個結構清晰、文字優美且具有洞察力的回覆。`;
+
+  const finalInstruction = (customPrompt && customPrompt.trim()) ? customPrompt : defaultBasePrompt;
+
+  const finalPrompt = `【系統指令】：
+${finalInstruction}
+
+【目標內容標題】：
+"${currentTitle}"
+
+【目標內容備註】：
+"${content}"
+
+要求：
+1. 請提供詳盡、完整且具備實質價值的回答。
+2. 針對內容中的細節進行具體展開與深度分析。
+3. 語氣專業、同理且具啟發性。
+4. 使用繁體中文（Traditional Chinese）。
+5. 回應必須封裝在 JSON 格式中：
+{
+  "fullResponse": "您的詳細回應內容（支援 Markdown 格式）"
+}`;
 
   try {
-    if (!content.trim()) throw new Error("Content is empty");
-    return await executeAIRequest(prompt);
+    if (!content.trim()) throw new Error("內容為空，無法分析");
+    return await executeAIRequest(finalPrompt);
   } catch (error) {
-    console.error("AI Expert Analysis Error:", error);
+    console.error("AI Assistant Error:", error);
     throw error;
+  }
+};
+
+export const generatePromptTitle = async (promptText: string): Promise<string> => {
+  const prompt = `請為以下 AI 指令（Prompt）擬定一個極簡短的標題（不超過 10 個字），用於指令庫中方便辨識。輸出標題文字即可，不要包含任何引用符號。
+  
+  指令內容：
+  "${promptText}"`;
+
+  try {
+    const result = await executeSimpleAIRequest(prompt);
+    return result.trim().replace(/^"|"$/g, '');
+  } catch (error) {
+    console.error("Generate Prompt Title Error:", error);
+    return promptText.slice(0, 15) + (promptText.length > 15 ? "..." : "");
   }
 };

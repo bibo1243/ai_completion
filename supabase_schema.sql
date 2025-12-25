@@ -29,6 +29,11 @@ create table public.tasks (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   completed_at timestamp with time zone null,
   order_index numeric default 0,
+  view_orders jsonb default '{}'::jsonb,
+  is_all_day boolean default false,
+  start_time text,
+  end_time text,
+  duration integer,
   images text[] default array[]::text[],
   
   constraint tasks_pkey primary key (id)
