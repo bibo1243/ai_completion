@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => {
-    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, view, setToast } = useContext(AppContext);
+    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
     const [dueDate, setDueDate] = useState<string | null>(initialData?.due_date || null);
@@ -1096,7 +1096,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                             {/* File Attachments List */}
                             {attachments.length > 0 && (
                                 <div className="mt-2 space-y-1">
-                                    {attachments.map((file, idx) => (
+                                    {attachments.map((file) => (
                                         <div
                                             key={file.url}
                                             className="group flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 hover:border-gray-200 transition-colors"
@@ -1117,11 +1117,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                 }}
                                                 onBlur={() => {
                                                     if (initialData) {
-                                                        const latestAttachments = attachments.map(a => a.url === file.url ? { ...a, name: file.name } : a); // Ensure we use latest name
-                                                        // Note: 'attachments' in closure might be stale if not careful, but React state setter 'setAttachments' handles update. 
-                                                        // However, for 'updateTask', we need value. Since we updated state on change, 'attachments' var here depends on render cycle.
-                                                        // On blur, 'attachments' might be the old one if closure captured it? 
-                                                        // Actually, in Functional Component, 'attachments' is const from render. onBlur captures that render's 'attachments'.
+                                                        // Note: 'attachments' in closure might be stale if not careful...
+                                                        // In Functional Component, 'attachments' is const from render. onBlur captures that render's 'attachments'.
                                                         // If we type, we trigger re-render, so 'attachments' is fresh. It's fine.
                                                         updateTask(initialData.id, { attachments }, [], { skipHistory: true });
                                                     }

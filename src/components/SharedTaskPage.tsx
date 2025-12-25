@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { TaskData } from '../types';
-import { Loader2, Calendar, Tag as TagIcon, CheckCircle2, Image as ImageIcon, Download, Paperclip, X } from 'lucide-react';
+import { Loader2, Calendar, Tag as TagIcon, CheckCircle2, Download, Paperclip, X } from 'lucide-react';
 
 export const SharedTaskPage = () => {
     const { taskId } = useParams<{ taskId: string }>();
@@ -15,14 +15,16 @@ export const SharedTaskPage = () => {
         const fetchTask = async () => {
             if (!taskId) return;
             try {
-                const { data, error } = await supabase
-                    .from('tasks')
-                    .select('*')
-                    .eq('id', taskId)
-                    .single();
+                if (supabase) {
+                    const { data, error } = await supabase
+                        .from('tasks')
+                        .select('*')
+                        .eq('id', taskId)
+                        .single();
 
-                if (error) throw error;
-                setTask(data);
+                    if (error) throw error;
+                    setTask(data);
+                }
             } catch (err: any) {
                 console.error("Error fetching task:", err);
                 setError("無法讀取任務，可能已被刪除或您沒有權限瀏覽。");
@@ -34,8 +36,7 @@ export const SharedTaskPage = () => {
         fetchTask();
 
         // Subscribe to real-time updates
-        const channel = supabase
-            .channel(`public:tasks:id=eq.${taskId}`)
+        const channel = supabase?.channel(`public:tasks:id=eq.${taskId}`)
             .on(
                 'postgres_changes',
                 {
@@ -63,7 +64,7 @@ export const SharedTaskPage = () => {
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            if (channel) supabase?.removeChannel(channel);
         };
     }, [taskId]);
 
@@ -179,7 +180,6 @@ export const SharedTaskPage = () => {
                             <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">圖片 ({task.images.length})</h4>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                 {task.images.map((url, idx) => {
-                                    const isImg = url.match(/\.(jpg|jpeg|png|gif|webp|avif)|blob:/i);
                                     // Make sure we have a valid key
                                     return (
                                         <div
