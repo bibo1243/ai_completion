@@ -25,7 +25,7 @@ interface TagTreeItem {
 }
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors } = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage } = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [isAddingTag, setIsAddingTag] = useState(false);
     const [addingSubTagTo, setAddingSubTagTo] = useState<string | null>(null);
@@ -386,7 +386,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
                                         }}
                                         className="p-1 hover:bg-gray-200 rounded text-gray-400"
-                                        title="新增子標籤"
+                                        title={t('addSubTag')}
                                     >
                                         <Plus size={12} />
                                     </button>
@@ -412,7 +412,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     onClick={e => e.stopPropagation()}
                                 >
                                     <div className="mb-3">
-                                        <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">標籤款式</p>
+                                        <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">{t('tagStyle')}</p>
                                         <div className="grid grid-cols-5 gap-1.5 focus:outline-none">
                                             {TAG_COLORS.map(c => (
                                                 <button
@@ -424,7 +424,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                                         updateTag(tag.id, { color: c });
                                                         setPopoverId(null);
                                                     }}
-                                                    title="選擇標籤顏色"
+                                                    title={t('selectTagColor')}
                                                 />
                                             ))}
                                         </div>
@@ -436,13 +436,13 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             setPopoverId(null);
                                             if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
                                         }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-slate-600 font-medium">
-                                            <Plus size={12} /> 新增子標籤
+                                            <Plus size={12} /> {t('addSubTag')}
                                         </button>
                                         <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-slate-600 font-medium">
-                                            <Edit2 size={12} /> 重新命名
+                                            <Edit2 size={12} /> {t('rename')}
                                         </button>
-                                        <button onClick={() => { if (confirm('確定要刪除此標籤嗎？')) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-red-50 rounded text-xs text-red-600 font-medium">
-                                            <Trash2 size={12} /> 刪除標籤
+                                        <button onClick={() => { if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-red-50 rounded text-xs text-red-600 font-medium">
+                                            <Trash2 size={12} /> {t('deleteTag')}
                                         </button>
                                     </div>
                                 </div>
@@ -465,7 +465,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 onBlur={() => {
                                     if (!newTagName.trim()) setAddingSubTagTo(null);
                                 }}
-                                placeholder="子標籤名稱..."
+                                placeholder={t('subTagPlaceholder')}
                                 className="w-full text-[10px] py-1 px-2 bg-indigo-50/30 border border-indigo-100/50 rounded outline-none focus:ring-1 focus:ring-indigo-200 transition-all font-medium text-gray-700 placeholder:text-gray-300"
                             />
                         </form>
@@ -480,7 +480,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     return (
         <aside className="w-full bg-[#fbfbfb] border-r border-gray-100 h-screen flex flex-col p-5 sticky top-0 overflow-hidden">
             <div className={`mb-8 flex items-center ${sidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between px-1'} opacity-60`}>
-                {!sidebarCollapsed && <div className="flex items-center gap-2"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase">Workspace</span></div>}
+                {!sidebarCollapsed && <div className="flex items-center gap-2"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase">{t('appearance')}</span></div>}
                 <button onClick={toggleSidebar} className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500">
                     {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
                 </button>
@@ -488,21 +488,21 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             <nav className="flex-1 space-y-6 overflow-y-auto no-scrollbar">
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">COLLECT</p>}
-                    <NavItem id="all" label="Inbox" normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} />
+                    <NavItem id="all" label={t('inbox')} normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} />
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ARRANGE</p>}
                     <NavItem id="focus" label="Focus" active={view === 'focus'} icon={Target} />
-                    <NavItem id="today" label="Today" overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today'} icon={Star} />
-                    <NavItem id="schedule" label="Schedule" active={view === 'schedule'} icon={Calendar} />
+                    <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today'} icon={Star} />
+                    <NavItem id="schedule" label={t('upcoming')} active={view === 'schedule'} icon={Calendar} />
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ORGANIZE</p>}
-                    <NavItem id="waiting" label="Someday" normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} />
+                    <NavItem id="waiting" label={t('someday')} normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} />
                     <NavItem id="journal" label="Journal" active={view === 'journal' && !tagFilter} icon={Book} />
                     <NavItem id="prompt" label="Prompt" normalCount={counts.prompt} active={view === 'prompt'} icon={Sparkles} />
-                    <NavItem id="logbook" label="Logbook" normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} />
-                    <NavItem id="trash" label="Trash" normalCount={counts.trash} active={view === 'trash'} icon={Trash2} />
+                    <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} />
+                    <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} />
                 </div>
                 <div className="mt-2">
                     {!sidebarCollapsed && (
@@ -563,7 +563,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 className="w-full group flex items-center gap-1.5 px-3 py-1 text-gray-300 hover:text-gray-400 text-xs transition-colors transition-opacity opacity-0 hover:opacity-100"
                             >
                                 <Plus size={10} />
-                                <span className="font-medium">新增標籤...</span>
+                                <span className="font-medium">{t('addTagPlaceholder')}</span>
                             </button>
                         )}
                     </div>
@@ -576,32 +576,39 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 </div>
                 {showSettings && (
                     <div ref={settingsRef} className="absolute bottom-full left-0 mb-2 w-full bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-50 animate-in fade-in zoom-in duration-100">
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">Appearance</h3>
+                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">{t('appearance')}</h3>
                         <div className="space-y-3 mb-4">
                             <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">Font Weight</span> </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('language')}</span> </div>
                                 <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Normal</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'thin' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'thin' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Thin</button>
+                                    <button onClick={() => setLanguage('zh')} className={`flex-1 text-[10px] py-1 rounded ${language === 'zh' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '中文' : 'Chinese'}</button>
+                                    <button onClick={() => setLanguage('en')} className={`flex-1 text-[10px] py-1 rounded ${language === 'en' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '英文' : 'English'}</button>
                                 </div>
                             </div>
                             <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">Text Size</span> </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontWeight')}</span> </div>
                                 <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Small</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Normal</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Large</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontNormal')}</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'thin' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'thin' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontThin')}</button>
                                 </div>
                             </div>
                             <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">Font Family</span> </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontSize')}</span> </div>
                                 <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'system' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'system' || !themeSettings.fontFamily ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>System</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'things' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'things' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>Things</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeNormal')}</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeLarge')}</button>
                                 </div>
                             </div>
                             <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">Time Format</span> </div>
+                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontFamily')}</span> </div>
+                                <div className="flex bg-gray-100 rounded p-0.5">
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'system' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'system' || !themeSettings.fontFamily ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontSystem')}</button>
+                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'things' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'things' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontThings')}</button>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('timeFormat')}</span> </div>
                                 <div className="flex bg-gray-100 rounded p-0.5">
                                     <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
                                     <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '12h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '12h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>12H</button>
@@ -609,7 +616,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                             </div>
                         </div>
 
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">行事曆設定</h3>
+                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('calendarSettings')}</h3>
                         <div className="mb-4 space-y-2">
                             <label className="flex items-center gap-2 cursor-pointer select-none">
                                 <input
@@ -618,7 +625,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     onChange={(e) => setThemeSettings({ ...themeSettings, showLunar: e.target.checked })}
                                     className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                                 />
-                                <span className="text-xs font-medium text-gray-600">顯示農曆</span>
+                                <span className="text-xs font-medium text-gray-600">{t('showLunar')}</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer select-none">
                                 <input
@@ -627,15 +634,15 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     onChange={(e) => setThemeSettings({ ...themeSettings, showTaiwanHolidays: e.target.checked })}
                                     className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                                 />
-                                <span className="text-xs font-medium text-gray-600">顯示台灣假日</span>
+                                <span className="text-xs font-medium text-gray-600">{t('showTaiwanHolidays')}</span>
                             </label>
                         </div>
 
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">AI Settings</h3>
+                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('aiSettings')}</h3>
                         <div className="mb-4 space-y-3">
                             {/* Provider Selector */}
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Provider</label>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{t('provider')}</label>
                                 <select
                                     value={aiSettings.provider}
                                     onChange={(e) => setAiSettings(p => ({ ...p, provider: e.target.value }))}
@@ -700,14 +707,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
                         <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">Data</h3>
                         <div className="space-y-1">
-                            <button onClick={() => { if (confirm("確定要刪除所有任務嗎？此動作將會先自動下載備份。")) clearAllTasks(); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Trash2 size={12} /> Delete All Tasks
+                            <button onClick={() => { if (confirm(language === 'zh' ? "確定要刪除所有任務嗎？此動作將會先自動下載備份。" : "Are you sure you want to delete all tasks? A backup will be downloaded first.")) clearAllTasks(); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                <Trash2 size={12} /> {language === 'zh' ? '刪除所有任務' : 'Delete All Tasks'}
                             </button>
                             <button onClick={exportData} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Download size={12} /> Backup Data
+                                <Download size={12} /> {language === 'zh' ? '備份資料' : 'Backup Data'}
                             </button>
                             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Upload size={12} /> Import Data
+                                <Upload size={12} /> {language === 'zh' ? '導匯入資料' : 'Import Data'}
                             </button>
                             <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
                         </div>

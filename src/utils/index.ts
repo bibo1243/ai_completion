@@ -19,13 +19,13 @@ export const parseSmartDate = (input: string, _referenceDate: Date): Date | null
   return null;
 };
 
-export const formatDate = (dateStr: string | null) => {
+export const formatDate = (dateStr: string | null, lang: 'zh' | 'en' = 'zh') => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return d.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-export const getRelativeDateString = (dateStr: string | null, includeTime = true) => {
+export const getRelativeDateString = (dateStr: string | null, includeTime = true, lang: 'zh' | 'en' = 'zh') => {
   if (!dateStr) return '';
   const date = new Date(dateStr);
   const now = new Date();
@@ -36,11 +36,11 @@ export const getRelativeDateString = (dateStr: string | null, includeTime = true
   const diffDays = Math.floor((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
   let str = '';
-  if (diffDays === 0) str = '今天';
-  else if (diffDays === 1) str = '明天';
-  else if (diffDays === -1) str = '昨天';
-  else if (diffDays < 0) str = `${Math.abs(diffDays)} 天前`;
-  else str = `${date.getMonth() + 1}月${date.getDate()}日`;
+  if (diffDays === 0) str = lang === 'zh' ? '今天' : 'Today';
+  else if (diffDays === 1) str = lang === 'zh' ? '明天' : 'Tomorrow';
+  else if (diffDays === -1) str = lang === 'zh' ? '昨天' : 'Yesterday';
+  else if (diffDays < 0) str = lang === 'zh' ? `${Math.abs(diffDays)} 天前` : `${Math.abs(diffDays)}d ago`;
+  else str = lang === 'zh' ? `${date.getMonth() + 1}月${date.getDate()}日` : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   if (includeTime) {
     const hours = date.getHours();

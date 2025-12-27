@@ -3,6 +3,7 @@ import { supabase as supabaseClient } from '../supabaseClient';
 import { TaskData, TagData, SyncStatus, DragState, HistoryRecord, ThemeSettings, NavRecord, FlatTask, BatchUpdateRecord, TaskStatus } from '../types';
 import { isSameDay, isToday, isDescendant, isOverdue } from '../utils';
 import { DRAG_GHOST_IMG } from '../constants';
+import { translations } from '../translations';
 
 export const AppContext = createContext<{
     user: any;
@@ -88,6 +89,9 @@ export const AppContext = createContext<{
     initError: string | null;
     tagsWithResolvedColors: Record<string, string>;
     isCmdPressed: boolean;
+    language: 'zh' | 'en';
+    setLanguage: (lang: 'zh' | 'en') => void;
+    t: (key: string) => string;
 }>({} as any);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
@@ -141,9 +145,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const [advancedFilters, setAdvancedFilters] = useState<{ additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }>({ additionalTags: [], startDate: null, dueDate: null, color: null });
     const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
         const saved = localStorage.getItem(`theme_settings_${user?.id}`);
-        const defaults: ThemeSettings = { fontWeight: 'thin', fontSize: 'normal', fontFamily: 'system', timeFormat: '24h', showLunar: false, showTaiwanHolidays: false };
+        const defaults: ThemeSettings = { fontWeight: 'thin', fontSize: 'normal', fontFamily: 'system', timeFormat: '24h', showLunar: false, showTaiwanHolidays: false, language: 'zh' };
         return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
     });
+    const language = themeSettings.language || 'zh';
+
+    const setLanguage = (lang: 'zh' | 'en') => {
+        setThemeSettings(prev => ({ ...prev, language: lang }));
+    };
+
+    const t = useCallback((key: string) => {
+        // @ts-ignore
+        return translations[language][key] || key;
+    }, [language]);
+
     const [pendingFocusTaskId, setPendingFocusTaskId] = useState<string | null>(null);
     const [calendarDate, setCalendarDate] = useState(() => {
         const saved = localStorage.getItem(`calendar_current_date_${user?.id}`);
@@ -1149,7 +1164,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             calendarDate, setCalendarDate, taskCounts,
             focusSplitWidth, setFocusSplitWidth,
             reviewTask, restoreTask, emptyTrash,
-            isCmdPressed, tagsWithResolvedColors
+            isCmdPressed, tagsWithResolvedColors,
+            language, setLanguage, t
         }}>
             {children}
         </AppContext.Provider>

@@ -9,7 +9,7 @@ import { DropIndicator } from './DropIndicator';
 import { TaskColor } from '../types';
 
 export const TaskList = () => {
-    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash } = useContext(AppContext);
+    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t } = useContext(AppContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollInterval = useRef<any>(null);
 
@@ -167,14 +167,14 @@ export const TaskList = () => {
                     <div className="flex items-center justify-between mb-6 px-4 py-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
                         <div className="flex items-center gap-2">
                             <Trash2 className="text-gray-400" size={18} />
-                            <span className="font-medium text-gray-500 text-sm">Trash</span>
+                            <span className="font-medium text-gray-500 text-sm">{t('trashEmptyTitle')}</span>
                         </div>
                         {visibleTasks.length > 0 && (
                             <button
-                                onClick={emptyTrash}
+                                onClick={() => { if (confirm(t('emptyTrashConfirm'))) emptyTrash(); }}
                                 className="px-3 py-1.5 bg-white border border-gray-200 text-red-500 text-xs font-medium rounded hover:bg-red-50 hover:border-red-200 transition-colors shadow-sm"
                             >
-                                Empty Trash
+                                {t('emptyTrash')}
                             </button>
                         )}
                     </div>

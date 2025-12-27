@@ -8,7 +8,7 @@ import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
 export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
-    const { updateTask, deleteTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, isCmdPressed, restoreTask } = useContext(AppContext);
+    const { updateTask, deleteTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, isCmdPressed, restoreTask, t, language } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -173,7 +173,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         let badgeStyle = "bg-slate-50 text-slate-400";
         if (is_Today) badgeStyle = "bg-yellow-50 text-yellow-600 font-medium";
         else if (is_Overdue) badgeStyle = "bg-red-50 text-red-600 font-medium";
-        return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}> <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day)} </span>);
+        return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}> <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day, language)} </span>);
     };
 
     const titleFontClass = themeSettings.fontWeight === 'thin' ? 'font-extralight' : 'font-medium';
@@ -256,7 +256,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                 onClick={(e) => { e.stopPropagation(); restoreTask(task.id); }}
                                 className="px-2 py-1 bg-white border border-gray-200 text-indigo-600 text-[10px] font-medium rounded hover:bg-indigo-50 hover:border-indigo-200 transition-colors shadow-sm whitespace-nowrap"
                             >
-                                Put Back
+                                {t('putBack')}
                             </button>
                         </>
                     ) : (

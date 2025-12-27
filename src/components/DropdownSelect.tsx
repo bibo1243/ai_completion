@@ -4,7 +4,7 @@ import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 
 export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect, onSearch, placeholder, allowAdd, onDeleteItem, innerRef, multiSelect = false, theme }: any) => {
-    const { themeSettings } = useContext(AppContext);
+    const { themeSettings, t } = useContext(AppContext);
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [activeIndex, setActiveIndex] = useState(-1);
@@ -140,7 +140,7 @@ export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect
                                 <span className="truncate">{item.title || item.name}</span>
                                 {item.parentName && (
                                     <span className="text-[9px] text-gray-400 font-normal bg-gray-100 px-1 rounded truncate">
-                                        来自: {item.parentName}
+                                        {t('from')}: {item.parentName}
                                     </span>
                                 )}
                             </div>
@@ -156,7 +156,7 @@ export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect
                             className={`px-2 py-1.5 text-xs cursor-pointer rounded flex items-center gap-1 ${activeIndex === filteredItems.length ? 'bg-indigo-50 text-indigo-700' : 'text-indigo-600 hover:bg-indigo-50'}`}
                             onMouseDown={(e) => { e.preventDefault(); handleSelect(null, query); }}
                         >
-                            <Plus size={12} /> 新增 "{query}"
+                            <Plus size={12} /> {t('addNewTag')} "{query}"
                         </div>
                     )}
                 </div>

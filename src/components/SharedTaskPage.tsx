@@ -10,6 +10,8 @@ export const SharedTaskPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
+    const [language, setLanguage] = useState<'zh' | 'en'>('zh');
+
 
     useEffect(() => {
         const fetchTask = async () => {
@@ -27,7 +29,7 @@ export const SharedTaskPage = () => {
                 }
             } catch (err: any) {
                 console.error("Error fetching task:", err);
-                setError("無法讀取任務，可能已被刪除或您沒有權限瀏覽。");
+                setError(language === 'zh' ? "無法讀取任務，可能已被刪除或您沒有權限瀏覽。" : "Unable to read task. It may have been deleted or you don't have permission.");
             } finally {
                 setLoading(false);
             }
@@ -83,8 +85,8 @@ export const SharedTaskPage = () => {
                     <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
                         <span className="text-2xl">⚠️</span>
                     </div>
-                    <h3 className="text-xl font-semibold text-gray-900">無法顯示任務</h3>
-                    <p className="text-gray-500">{error || "找不到該任務資料"}</p>
+                    <h3 className="text-xl font-semibold text-gray-900">{language === 'zh' ? '無法顯示任務' : 'Unable to Show Task'}</h3>
+                    <p className="text-gray-500">{error || (language === 'zh' ? "找不到該任務資料" : "Task data not found")}</p>
                 </div>
             </div>
         );
@@ -170,14 +172,14 @@ export const SharedTaskPage = () => {
                         />
                     ) : (
                         <div className="text-gray-400 italic text-center py-10">
-                            沒有備註內容
+                            {language === 'zh' ? '沒有備註內容' : 'No description'}
                         </div>
                     )}
 
                     {/* Images Section */}
                     {task.images && task.images.length > 0 && (
                         <div className="mt-8">
-                            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">圖片 ({task.images.length})</h4>
+                            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{language === 'zh' ? '圖片' : 'Images'} ({task.images.length})</h4>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                 {task.images.map((url, idx) => {
                                     // Make sure we have a valid key
@@ -199,7 +201,7 @@ export const SharedTaskPage = () => {
                     {/* File Attachments Section */}
                     {task.attachments && task.attachments.length > 0 && (
                         <div className="mt-8">
-                            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">附件 ({task.attachments.length})</h4>
+                            <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">{language === 'zh' ? '附件' : 'Attachments'} ({task.attachments.length})</h4>
                             <div className="space-y-2">
                                 {task.attachments.map((file, idx) => (
                                     <div
@@ -263,6 +265,14 @@ export const SharedTaskPage = () => {
                     </div>
                 </div>
             )}
+            <div className="fixed top-4 right-4 z-[110] flex gap-2">
+                <button
+                    onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
+                    className="px-3 py-1.5 bg-white/80 backdrop-blur-md border border-gray-200 rounded-full text-xs font-bold text-gray-600 hover:bg-white transition-all shadow-sm"
+                >
+                    {language === 'zh' ? 'English' : '中文'}
+                </button>
+            </div>
         </div>
     );
 };

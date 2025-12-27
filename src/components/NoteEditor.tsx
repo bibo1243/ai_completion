@@ -1,5 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useContext } from 'react';
+import { AppContext } from '../context/AppContext';
 import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -132,6 +134,39 @@ const KeyboardNavigation = (onExit?: () => void) => Extension.create({
     },
 });
 
+// Custom Paragraph extension that adds unique IDs to each paragraph
+const ParagraphWithId = Node.create({
+    name: 'paragraph',
+    priority: 1000,
+    group: 'block',
+    content: 'inline*',
+
+    parseHTML() {
+        return [{ tag: 'p' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        // Generate a unique ID if not present
+        const id = HTMLAttributes['data-paragraph-id'] || `p-${Math.random().toString(36).substr(2, 9)}`;
+        return ['p', mergeAttributes(HTMLAttributes, { 'data-paragraph-id': id }), 0];
+    },
+
+    addAttributes() {
+        return {
+            'data-paragraph-id': {
+                default: null,
+                parseHTML: element => element.getAttribute('data-paragraph-id'),
+                renderHTML: attributes => {
+                    if (!attributes['data-paragraph-id']) {
+                        return {};
+                    }
+                    return { 'data-paragraph-id': attributes['data-paragraph-id'] };
+                },
+            },
+        };
+    },
+});
+
 interface NoteEditorProps {
     initialContent: string;
     onChange: (content: string) => void;
@@ -150,14 +185,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     onExit,
     editable = true,
     className = "",
-    placeholder = "添加備註...",
+    placeholder = "",
     textSizeClass = "text-base",
     descFontClass = "font-normal",
     autoFocus = false,
 }) => {
+    const { t } = useContext(AppContext);
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
+                paragraph: false, // Disable default paragraph
                 heading: {
                     levels: [1, 2, 3],
                 },
@@ -170,12 +207,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     keepAttributes: false,
                 },
             }),
+            ParagraphWithId, // Add custom paragraph with IDs
             Link.configure({
                 openOnClick: false,
                 autolink: true,
             }),
             Placeholder.configure({
-                placeholder: placeholder,
+                placeholder: placeholder || t('addNotePlaceholder'),
                 emptyEditorClass: 'is-editor-empty before:content-[attr(data-placeholder)] before:text-slate-300 before:float-left before:pointer-events-none before:h-0',
             }),
             TaskList,

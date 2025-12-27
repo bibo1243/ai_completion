@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor } from '../types';
@@ -15,9 +15,12 @@ import NoteEditor from './NoteEditor';
 import { polishContent, askAIAssistant, AIAssistantResponse, generatePromptTitle } from '../services/ai';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import { PresentationView } from './PresentationView';
+import { ParagraphAttachmentLinker } from './ParagraphAttachmentLinker';
+import { AttachmentLink } from '../types';
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => {
-    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast } = useContext(AppContext);
+    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
     const [dueDate, setDueDate] = useState<string | null>(initialData?.due_date || null);
@@ -52,6 +55,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerOffset, setDatePickerOffset] = useState(0); // Days offset from today
+    const [viewMode, setViewMode] = useState<'edit' | 'presentation'>('edit');
+    const [attachmentLinks, setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
 
     const previousPrompts = useMemo(() => {
         const promptTag = tags.find(t => t.name.trim().toLowerCase() === 'prompt');
@@ -318,7 +323,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             start_time: isAllDay ? null : startTime,
             end_time: isAllDay ? null : endTime,
             duration: duration ? Number(duration) : null,
-            attachments: attachments
+            attachments: attachments,
+            attachment_links: attachmentLinks
         };
 
         if (onClose) {
@@ -868,6 +874,18 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                             <div className="flex justify-end mb-1 gap-2">
                                 <button
                                     type="button"
+                                    onClick={() => setViewMode(viewMode === 'edit' ? 'presentation' : 'edit')}
+                                    className={`flex items-center gap-1.5 text-xs transition-colors px-2 py-0.5 rounded-full ${viewMode === 'presentation'
+                                        ? 'bg-purple-50 text-purple-600 font-bold shadow-sm ring-1 ring-purple-100'
+                                        : 'text-purple-500 hover:text-purple-700 hover:bg-purple-50 font-medium'
+                                        }`}
+                                    title={viewMode === 'edit' ? t('presentationMode') : t('editMode')}
+                                >
+                                    {viewMode === 'edit' ? <Eye size={12} /> : <Edit3 size={12} />}
+                                    <span>{viewMode === 'edit' ? t('presentationMode') : t('editMode')}</span>
+                                </button>
+                                <button
+                                    type="button"
                                     onClick={handleAiAssistant}
                                     disabled={isAssistantLoading || isAiLoading}
                                     className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-50 text-indigo-600 font-bold shadow-sm ring-1 ring-indigo-100' : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 font-medium'}`}
@@ -959,14 +977,23 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
                             <div className={`flex gap-4 transition-all duration-300 items-stretch ${showAnalysis ? 'h-[630px]' : ''}`}>
                                 <div className="flex-1 transition-all duration-300 overflow-hidden flex flex-col">
-                                    <NoteEditor
-                                        initialContent={desc}
-                                        onChange={setDesc}
-                                        onExit={() => startDateRef.current?.focus()}
-                                        textSizeClass={textSizeClass}
-                                        descFontClass={descFontClass}
-                                        className="h-full"
-                                    />
+                                    {viewMode === 'edit' ? (
+                                        <NoteEditor
+                                            initialContent={desc}
+                                            onChange={setDesc}
+                                            onExit={() => startDateRef.current?.focus()}
+                                            textSizeClass={textSizeClass}
+                                            descFontClass={descFontClass}
+                                            className="h-full"
+                                        />
+                                    ) : (
+                                        <PresentationView
+                                            content={desc}
+                                            attachments={attachments}
+                                            images={images}
+                                            attachmentLinks={attachmentLinks}
+                                        />
+                                    )}
                                 </div>
 
                                 {showAnalysis && (
@@ -1169,6 +1196,19 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                             </button>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+
+                            {/* Paragraph-Attachment Linker */}
+                            {(attachments.length > 0 || images.length > 0) && desc && (
+                                <div className="mt-4 pt-4 border-t border-gray-100">
+                                    <ParagraphAttachmentLinker
+                                        content={desc}
+                                        attachments={attachments}
+                                        images={images}
+                                        attachmentLinks={attachmentLinks}
+                                        onLinksChange={setAttachmentLinks}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -1396,7 +1436,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-gray-700 focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
                                     >
                                         {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-                                        <span>檔案</span>
+                                        <span>{t('attachFiles')}</span>
                                     </button>
 
                                     {/* Parent/Project Selection */}
@@ -1465,21 +1505,21 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setPolishModal({ ...polishModal, isOpen: false })}>
                     <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-bold text-gray-800 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /><span>AI 潤飾建議</span></h3>
+                            <h3 className="font-bold text-gray-800 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /><span>{t('aiPolishSuggestions')}</span></h3>
                             <div className="flex gap-1">
-                                <button onClick={undoPolish} disabled={polishModal.historyIndex <= 0} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title="復原"><Undo size={16} /></button>
-                                <button onClick={redoPolish} disabled={polishModal.historyIndex >= polishModal.history.length - 1} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title="重做"><Redo size={16} /></button>
+                                <button onClick={undoPolish} disabled={polishModal.historyIndex <= 0} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('undo')}><Undo size={16} /></button>
+                                <button onClick={redoPolish} disabled={polishModal.historyIndex >= polishModal.history.length - 1} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('redo')}><Redo size={16} /></button>
                             </div>
                         </div>
                         <div className="mb-4">
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">建議標題 (可編輯)</label>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedTitle')}</label>
                             <input className="w-full p-2 mb-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none shadow-sm transition-all font-medium" value={polishModal.title} onChange={(e) => updatePolishTitle(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">建議內容 (可編輯)</label>
+                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedContent')}</label>
                             <textarea className="w-full h-40 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none leading-relaxed shadow-sm transition-all" value={polishModal.content} onChange={(e) => updatePolishContent(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
                         </div>
                         <div className="flex gap-3 justify-end">
-                            <button onClick={() => setPolishModal({ ...polishModal, isOpen: false })} className="px-4 py-1.5 text-gray-600 hover:bg-gray-100 rounded text-sm font-medium transition-colors">取消</button>
-                            <button onClick={() => { setTitle(polishModal.title); setDesc(polishModal.content); setPolishModal({ ...polishModal, isOpen: false, history: [], historyIndex: -1 }); setToast({ msg: "已套用 AI 潤飾內容", type: 'info' }); }} className="px-4 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5"><Check size={14} strokeWidth={3} />確認取代</button>
+                            <button onClick={() => setPolishModal({ ...polishModal, isOpen: false })} className="px-4 py-1.5 text-gray-600 hover:bg-gray-100 rounded text-sm font-medium transition-colors">{t('cancel')}</button>
+                            <button onClick={() => { setTitle(polishModal.title); setDesc(polishModal.content); setPolishModal({ ...polishModal, isOpen: false, history: [], historyIndex: -1 }); setToast({ msg: t('aiPolishApplied'), type: 'info' }); }} className="px-4 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5"><Check size={14} strokeWidth={3} />{t('confirmReplace')}</button>
                         </div>
                     </div>
                 </div>

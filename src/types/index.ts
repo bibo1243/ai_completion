@@ -12,6 +12,11 @@ export interface TagData {
   order_index?: number;
 }
 
+export interface AttachmentLink {
+  paragraphId: string;
+  attachmentUrls: string[];
+}
+
 export interface TaskData {
   id: string;
   user_id: string;
@@ -34,6 +39,7 @@ export interface TaskData {
   duration: number | null;
   images?: string[];
   attachments?: Array<{ name: string; url: string; size: number; type: string }>;
+  attachment_links?: AttachmentLink[];
   reviewed_at: string | null;
 }
 
@@ -80,6 +86,7 @@ export interface ThemeSettings {
   timeFormat?: '12h' | '24h';
   showLunar?: boolean;
   showTaiwanHolidays?: boolean;
+  language?: 'zh' | 'en';
 }
 
 export type AIProvider = 'gemini' | 'openai';
