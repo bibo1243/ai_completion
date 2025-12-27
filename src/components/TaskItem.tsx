@@ -149,13 +149,19 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         }
     };
 
+    const isFocusView = view === 'focus';
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
     const selectionStyle = isSelected ? 'bg-[#cfe1fc]' : '';
     const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-slate-50` : '';
     const completedStyle = isDone ? 'bg-emerald-50/30' : '';
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
     const animationStyle = 'transition-all duration-200 ease-in-out';
-    const finalClass = `group relative mb-0.5 rounded-lg outline-none select-none cursor-default py-1.5 ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle}`;
+
+    // Smaller padding and margins for focus view
+    const focusViewPadding = isFocusView ? 'py-0.5' : 'py-1.5';
+    const focusViewMargin = isFocusView ? 'mb-0' : 'mb-0.5';
+
+    const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle}`;
 
     const renderDateBadge = () => {
         if (!task.start_date && !task.start_time) return null;
@@ -205,6 +211,10 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     };
 
     const breadcrumbData = getBreadcrumbData();
+    const fontSizeClass = isFocusView ? 'text-xs' : textSizeClass;
+    const checkboxSize = isFocusView ? 12 : 14;
+    const iconSize = isFocusView ? 12 : 16;
+    const tagTextSize = isFocusView ? 'text-[8px]' : 'text-[10px]';
 
     return (
         <motion.div
@@ -228,12 +238,12 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                 onEdit();
             }}
         >
-            <div className="flex flex-col px-3">
+            <div className={`flex flex-col ${isFocusView ? 'px-1' : 'px-3'}`}>
                 {/* Breadcrumb for Focus/Today View - Styled Bubble */}
                 {breadcrumbData && (
-                    <div className="flex items-center gap-1 mb-0.5 ml-[52px]">
+                    <div className={`flex items-center gap-1 mb-0.5 ${isFocusView ? 'ml-[36px]' : 'ml-[52px]'}`}>
                         <span
-                            className="text-[9px] font-bold px-2 py-0.5 rounded-full truncate max-w-[200px] border"
+                            className={`${isFocusView ? 'text-[8px]' : 'text-[9px]'} font-bold px-2 py-0.5 rounded-full truncate max-w-[200px] border`}
                             style={{
                                 backgroundColor: (COLOR_THEMES[breadcrumbData.color as keyof typeof COLOR_THEMES]?.color || '#6366f1') + '15',
                                 color: COLOR_THEMES[breadcrumbData.color as keyof typeof COLOR_THEMES]?.color || '#6366f1',
@@ -262,11 +272,11 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                     ) : (
                         <>
                             <div className="flex items-center gap-1">
-                                {hasChildren && view !== 'today' ? <button onClick={(e) => { e.stopPropagation(); toggleExpansion(task.id) }} className="text-slate-400 hover:text-slate-800 transition-transform">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</button> : <div className="w-[16px]" />}
-                                <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} />
+                                {hasChildren && view !== 'today' ? <button onClick={(e) => { e.stopPropagation(); toggleExpansion(task.id) }} className="text-slate-400 hover:text-slate-800 transition-transform">{isExpanded ? <ChevronDown size={checkboxSize} /> : <ChevronRight size={checkboxSize} />}</button> : <div className={`${isFocusView ? 'w-[12px]' : 'w-[16px]'}`} />}
+                                <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} size={isFocusView ? 14 : 18} />
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
-                                <span className={`${textSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-slate-700'} mr-2 truncate block flex-shrink`}>{task.title}</span>
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-slate-700'} mr-2 truncate block flex-shrink`}>{task.title}</span>
                                 {(task.tags || []).length > 0 && (
                                     <>
                                         {/* Desktop: Full Tag Names */}
@@ -276,7 +286,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                                 if (!tName) return null;
                                                 return (
                                                     <div key={tid} className="relative flex-shrink-0">
-                                                        <span className={`text-[10px] font-light border border-slate-200 rounded-md px-1.5 py-px ${isDone ? 'text-slate-300 bg-slate-50' : 'text-slate-500 bg-slate-50'} whitespace-nowrap`}>
+                                                        <span className={`${tagTextSize} font-light border border-slate-200 rounded-md px-1.5 py-px ${isDone ? 'text-slate-300 bg-slate-50' : 'text-slate-500 bg-slate-50'} whitespace-nowrap`}>
                                                             #{tName}
                                                         </span>
                                                     </div>
@@ -285,8 +295,8 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                         </div>
                                         {/* Mobile: Simple Icon */}
                                         <div className="md:hidden flex items-center mr-2 text-slate-400 flex-shrink-0">
-                                            <Tag size={12} />
-                                            {(task.tags || []).length > 1 && <span className="text-[9px] ml-0.5">{(task.tags || []).length}</span>}
+                                            <Tag size={iconSize} />
+                                            {(task.tags || []).length > 1 && <span className={`${isFocusView ? 'text-[8px]' : 'text-[9px]'} ml-0.5`}>{(task.tags || []).length}</span>}
                                         </div>
                                     </>
                                 )}
@@ -294,7 +304,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                 <div className={`ml-auto ${isDone ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
                             </div>
                             <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">
-                                <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id, view === 'trash'); }} className="p-1 hover:text-red-500 text-slate-300 transition-colors"><Trash2 size={14} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id, view === 'trash'); }} className="p-1 hover:text-red-500 text-slate-300 transition-colors"><Trash2 size={iconSize} /></button>
                             </div>
                         </>
                     )}

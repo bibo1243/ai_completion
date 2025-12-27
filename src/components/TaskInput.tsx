@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor } from '../types';
@@ -12,12 +13,15 @@ import { TagChip } from './TagChip';
 import { supabase } from '../supabaseClient';
 import imageCompression from 'browser-image-compression';
 import NoteEditor from './NoteEditor';
-import { polishContent, askAIAssistant, AIAssistantResponse, generatePromptTitle } from '../services/ai';
+import { askAIAssistant, AIAssistantResponse, generatePromptTitle, generateSEOTitle } from '../services/ai';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import { PresentationView } from './PresentationView';
 import { ParagraphAttachmentLinker } from './ParagraphAttachmentLinker';
 import { AttachmentLink } from '../types';
+
+const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對與標點符號修正），嚴禁任何開場白、結尾、說明或感想。輸出內容必須僅包含潤飾後的正文內容。";
+
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => {
     const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t } = useContext(AppContext);
@@ -44,19 +48,31 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const attachmentInputRef = useRef<HTMLInputElement>(null);
     const attachmentBtnRef = useRef<HTMLButtonElement>(null);
     const [focusedAttachmentUrl, setFocusedAttachmentUrl] = useState<string | null>(null);
+    const editorRef = useRef<any>(null);
+    const [polishRange, setPolishRange] = useState<{ from: number, to: number } | null>(null);
+    const [polishPosition, setPolishPosition] = useState<{ top: number, left: number } | null>(null);
+    const [highlightRange, setHighlightRange] = useState<{ from: number, to: number } | null>(null);
 
-    const [isAiLoading, setIsAiLoading] = useState(false);
     const [isAssistantLoading, setIsAssistantLoading] = useState(false);
+    const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+    const [generatedTitle, setGeneratedTitle] = useState('');
+    const [showTitlePreview, setShowTitlePreview] = useState(false);
     const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
     const [customPrompt, setCustomPrompt] = useState('');
+    const [promptSearchQuery, setPromptSearchQuery] = useState('');
+    const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+    const [searchResultsCount, setSearchResultsCount] = useState(0);
     const [saveToLibrary, setSaveToLibrary] = useState(false);
     const [polishModal, setPolishModal] = useState<{ isOpen: boolean, title: string, content: string, history: { title: string, content: string }[], historyIndex: number }>({ isOpen: false, title: '', content: '', history: [], historyIndex: -1 });
     const [assistantResponse, setAssistantResponse] = useState<AIAssistantResponse | null>(null);
+    const [editableAssistantResponse, setEditableAssistantResponse] = useState<string>('');
+    const [isEditingAssistant, setIsEditingAssistant] = useState(false);
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerOffset, setDatePickerOffset] = useState(0); // Days offset from today
     const [viewMode, setViewMode] = useState<'edit' | 'presentation'>('edit');
     const [attachmentLinks, setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
+
 
     const previousPrompts = useMemo(() => {
         const promptTag = tags.find(t => t.name.trim().toLowerCase() === 'prompt');
@@ -64,6 +80,43 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         return tasks.filter(t => t.tags.includes(promptTag.id) && t.status !== 'deleted' && t.status !== 'logged')
             .sort((a, b) => b.created_at.localeCompare(a.created_at));
     }, [tasks, tags]);
+
+    // 篩選和搜尋提示詞
+    const filteredPrompts = useMemo(() => {
+        if (!promptSearchQuery.trim()) return previousPrompts;
+        const query = promptSearchQuery.toLowerCase();
+        return previousPrompts.filter(p =>
+            p.title.toLowerCase().includes(query) ||
+            (p.description && p.description.toLowerCase().includes(query))
+        );
+    }, [previousPrompts, promptSearchQuery]);
+
+    // 常用提示詞（使用頻率最高的前5個）
+    const frequentPrompts = useMemo(() => {
+        // 這裡可以根據使用次數排序，暫時使用最新的5個
+        return previousPrompts.slice(0, 5);
+    }, [previousPrompts]);
+
+    // 計算搜尋結果總數
+    useEffect(() => {
+        if (!promptSearchQuery.trim()) {
+            setSearchResultsCount(0);
+            setCurrentSearchIndex(0);
+            return;
+        }
+
+        let count = 0;
+        filteredPrompts.forEach(p => {
+            const titleMatches = (p.title.match(new RegExp(promptSearchQuery, 'gi')) || []).length;
+            const descMatches = p.description
+                ? (p.description.match(new RegExp(promptSearchQuery, 'gi')) || []).length
+                : 0;
+            count += titleMatches + descMatches;
+        });
+
+        setSearchResultsCount(count);
+        setCurrentSearchIndex(0);
+    }, [promptSearchQuery, filteredPrompts]);
 
     const updatePolishContent = (newContent: string) => {
         setPolishModal(prev => {
@@ -95,11 +148,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         setPolishModal(prev => {
             if (prev.historyIndex <= 0) return prev;
             const newIndex = prev.historyIndex - 1;
-            const entry = prev.history[newIndex];
             return {
                 ...prev,
-                title: entry.title,
-                content: entry.content,
+                title: prev.history[newIndex].title,
+                content: prev.history[newIndex].content,
                 historyIndex: newIndex
             };
         });
@@ -109,11 +161,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         setPolishModal(prev => {
             if (prev.historyIndex >= prev.history.length - 1) return prev;
             const newIndex = prev.historyIndex + 1;
-            const entry = prev.history[newIndex];
             return {
                 ...prev,
-                title: entry.title,
-                content: entry.content,
+                title: prev.history[newIndex].title,
+                content: prev.history[newIndex].content,
                 historyIndex: newIndex
             };
         });
@@ -135,17 +186,13 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
     // Auto-save: Update task in database as you type (debounced)
     useEffect(() => {
-        if (!initialData?.id || isQuickAdd) return;
-
         const timer = setTimeout(() => {
-            if (title !== initialData.title || desc !== initialData.description) {
-                updateTask(initialData.id, {
-                    title,
-                    description: desc
-                }, [], { skipHistory: true });
+            if (title !== initialData?.title || desc !== initialData?.description) {
+                if (initialData && !isQuickAdd) {
+                    updateTask(initialData.id, { title, description: desc }, [], { skipHistory: true });
+                }
             }
-        }, 800);
-
+        }, 1000);
         return () => clearTimeout(timer);
     }, [title, desc, initialData, updateTask, isQuickAdd]);
 
@@ -158,38 +205,54 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         }
     }, [desc]);
 
-    const handleAiPolish = async () => {
-        if (!desc || !desc.trim()) {
-            alert("Please enter some content first.");
-            return;
-        }
-        setIsAiLoading(true);
-        try {
-            const result = await polishContent(desc, title);
+    // Effect to remove highlight when clicking anywhere (after AI replacement)
+    useEffect(() => {
+        if (!highlightRange || !editorRef.current) return;
 
-            // Open modal for content review
-            setPolishModal({
-                isOpen: true,
-                title: result.newTitle,
-                content: result.newContent,
-                history: [{ title: result.newTitle, content: result.newContent }],
-                historyIndex: 0
-            });
+        const handleClick = () => {
+            const editor = editorRef.current;
+            if (editor && highlightRange) {
+                // Remove highlight from the marked range
+                editor.chain()
+                    .setTextSelection({ from: highlightRange.from, to: highlightRange.to })
+                    .unsetHighlight()
+                    .setTextSelection(editor.state.selection.to) // Keep cursor position
+                    .run();
+                setHighlightRange(null);
+            }
+        };
 
-        } catch (error) {
-            console.error(error);
-            alert("AI Service Error. Please check your connection or key.");
-        } finally {
-            setIsAiLoading(false);
-        }
-    };
+        // Add click listener with a small delay to prevent immediate trigger
+        const timer = setTimeout(() => {
+            document.addEventListener('click', handleClick, { once: true });
+        }, 100);
+
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('click', handleClick);
+        };
+    }, [highlightRange]);
 
 
     const handleRunAssistant = async (prompt?: string) => {
-        if (!desc || !desc.trim()) {
-            setToast?.({ msg: "Please enter some content first.", type: 'error' });
+        // Get content to process - use plain text, not HTML
+        let contentToProcess: string;
+        if (polishRange && editorRef.current) {
+            // Selected text from NoteEditor
+            contentToProcess = editorRef.current.state.doc.textBetween(polishRange.from, polishRange.to, ' ');
+        } else if (editorRef.current) {
+            // Full content - extract plain text from editor (not HTML)
+            contentToProcess = editorRef.current.getText();
+        } else {
+            // Fallback: strip HTML tags from desc
+            contentToProcess = desc.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        if (!contentToProcess || !contentToProcess.trim()) {
+            setToast?.({ msg: "Please enter or select some content first.", type: 'error' });
             return;
         }
+
         setIsAssistantLoading(true);
         setIsPromptModalOpen(false);
         setShowAnalysis(true);
@@ -212,8 +275,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 }
             }
 
-            const result = await askAIAssistant(desc, title, prompt);
+            // When polishing selected text, don't include task title to prevent it from being modified
+            const titleForAI = polishRange ? '' : title;
+            const result = await askAIAssistant(contentToProcess, titleForAI, prompt);
             setAssistantResponse(result);
+            setEditableAssistantResponse(result.fullResponse);
+            setIsEditingAssistant(false);
         } catch (error: any) {
             console.error(error);
             let errorMsg = error.message || "發生未知錯誤";
@@ -239,6 +306,100 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         setIsPromptModalOpen(true);
     };
 
+    const handleClosePromptModal = () => {
+        setIsPromptModalOpen(false);
+        setPolishRange(null);
+    };
+
+    const [showTitlePromptSelection, setShowTitlePromptSelection] = useState(false);
+
+    const titlePrompts = useMemo(() => {
+        // Find tag "for標題" (loose matching)
+        const forTitleTag = tags.find(t => t.name.trim().toLowerCase().includes('for標題'));
+        if (!forTitleTag) return [];
+
+        return tasks.filter(t =>
+            t.tags.includes(forTitleTag.id) &&
+            t.status !== 'deleted' &&
+            t.status !== 'logged'
+        ).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }, [tasks, tags]);
+
+    const executeTitleGeneration = async (customInstruction?: string) => {
+        // Get note content as plain text
+        let noteContent: string;
+        if (editorRef.current) {
+            noteContent = editorRef.current.getText();
+        } else {
+            noteContent = desc.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        console.log("Note content for title generation:", noteContent.substring(0, 200) + "...");
+        console.log("Content length:", noteContent.length);
+
+        if (!noteContent || !noteContent.trim()) {
+            setToast?.({ msg: '請先輸入備註內容再生成標題', type: 'error' });
+            return;
+        }
+
+        setIsGeneratingTitle(true);
+        setShowTitlePromptSelection(false); // Close modal if open
+
+        try {
+            const seoTitle = await generateSEOTitle(noteContent, customInstruction);
+            console.log("Generated SEO title:", seoTitle);
+            setGeneratedTitle(seoTitle);
+            setShowTitlePreview(true);
+        } catch (error) {
+            console.error('Generate title error:', error);
+            setToast?.({ msg: '生成標題失敗', type: 'error' });
+        } finally {
+            setIsGeneratingTitle(false);
+        }
+    };
+
+    const handleGenerateTitle = async () => {
+        // Prepare content check first to avoid opening modal for empty content
+        let noteContent: string;
+        if (editorRef.current) {
+            noteContent = editorRef.current.getText();
+        } else {
+            noteContent = desc.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        if (!noteContent || !noteContent.trim()) {
+            setToast?.({ msg: '請先輸入備註內容再生成標題', type: 'error' });
+            return;
+        }
+
+        // If we have custom title prompts, show selection
+        if (titlePrompts.length > 0) {
+            setShowTitlePromptSelection(true);
+        } else {
+            // Otherwise use default but notify user why menu didn't show
+            // Only show check toast if user might have expected a menu (implied by this feature existing)
+            // Ideally, we only show this if they definitely wanted detailed control, but for now 
+            // since they asked for this feature, it's good feedback.
+            // setToast?.({ msg: '未找到「for標題」標籤的提示詞，使用預設模式', type: 'info' }); 
+            // Actually, showing a toast every time might be annoying if they usually just want the default.
+            // But for debugging their issue, I'll log it clearly and maybe show it once?
+            console.log("No custom title prompts found. Using default.");
+            executeTitleGeneration();
+        }
+    };
+
+    const handleConfirmTitle = () => {
+        setTitle(generatedTitle);
+        setShowTitlePreview(false);
+        setGeneratedTitle('');
+        setToast?.({ msg: '已套用 SEO 優化標題', type: 'info' });
+    };
+
+    const handleCancelTitle = () => {
+        setShowTitlePreview(false);
+        setGeneratedTitle('');
+    };
+
     const getEffectiveColor = (pid: string | null): TaskColor => {
         if (!pid) return color;
         let curr = tasks.find(t => t.id === pid);
@@ -254,6 +415,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const theme: ThemeColor = COLOR_THEMES[effectiveColor] || COLOR_THEMES.blue;
 
     useClickOutside(containerRef, () => {
+        // Don't close when AI prompt modal, analysis panel, or title preview is open (they're rendered via portal)
+        if (isPromptModalOpen) return;
+        if (showAnalysis && polishPosition) return;
+        if (showTitlePreview) return;
+        if (showTitlePromptSelection) return;
+
         if (initialData && onClose) {
             if (title.trim()) handleSubmit();
             else {
@@ -343,57 +510,46 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
         let files: File[] = [];
-        if ('files' in e.target && e.target.files) {
-            files = Array.from(e.target.files);
-        } else if ('dataTransfer' in e && e.dataTransfer.files) {
-            files = Array.from(e.dataTransfer.files);
+        if ('files' in e.target && (e.target as HTMLInputElement).files) {
+            files = Array.from((e.target as HTMLInputElement).files!);
+        } else if ('dataTransfer' in e && (e as React.DragEvent).dataTransfer.files) {
+            files = Array.from((e as React.DragEvent).dataTransfer.files);
         }
 
         if (files.length === 0 || !supabase) return;
         setIsUploading(true);
-        const newAttachments: string[] = [];
 
         try {
+            const newImageUrls: string[] = [];
+            const newMetaAttachments: Array<{ name: string; url: string; size: number; type: string }> = [];
+            const MAX_SIZE = 100 * 1024 * 1024;
+
             for (const file of files) {
-                // Limit: 100MB
-                const MAX_SIZE = 100 * 1024 * 1024;
                 if (file.size > MAX_SIZE) {
                     setToast?.({ msg: `檔案太大: ${file.name} (限制 100MB)`, type: 'error' });
                     continue;
                 }
 
-                console.log(`Processing ${file.name}, size: ${(file.size / 1024).toFixed(2)} KB`);
-
-                let uploadFile = file;
                 const isImage = file.type.startsWith('image/');
+                let uploadFile = file;
 
-                // Only compress images and if they are larger than 2MB
                 if (isImage && file.size > 2 * 1024 * 1024) {
                     try {
-                        const options = {
-                            maxSizeMB: 1.0,
-                            maxWidthOrHeight: 1920,
-                            useWebWorker: true
-                        };
-                        const compressedFile = await imageCompression(file, options);
-                        console.log(`Compressed ${file.name}, new size: ${(compressedFile.size / 1024).toFixed(2)} KB`);
-                        uploadFile = compressedFile;
+                        const options = { maxSizeMB: 1.0, maxWidthOrHeight: 1920, useWebWorker: true };
+                        uploadFile = await imageCompression(file, options);
                     } catch (err) {
                         console.warn('Compression failed, using original file:', err);
                     }
                 }
 
-                // Use UUID for storage to avoid any encoding issues
-                // Original filename is preserved in the images array metadata
-                const fileExt = file.name.split('.').pop() || 'jpg';
+                const fileExt = file.name.split('.').pop() || (isImage ? 'jpg' : 'bin');
                 const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
                 const filePath = `${user.id}/${fileName}`;
 
-                console.log('Uploading file:', filePath);
-                const { error: uploadError } = await supabase.storage
-                    .from('attachments')
-                    .upload(filePath, uploadFile);
-
+                const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, uploadFile, {
+                    contentType: file.type,
+                    upsert: false
+                });
                 if (uploadError) {
                     console.error('Upload error:', uploadError);
                     continue;
@@ -401,18 +557,28 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
                 const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
                 if (data) {
-                    newAttachments.push(data.publicUrl);
+                    const fileData = { name: file.name, url: data.publicUrl, size: file.size, type: file.type };
+                    newMetaAttachments.push(fileData);
+                    if (isImage) {
+                        newImageUrls.push(data.publicUrl);
+                    }
                 }
             }
-            const updatedImages = [...images, ...newAttachments];
-            setImages(updatedImages);
 
-            // Update database immediately
-            if (initialData && newAttachments.length > 0) {
-                updateTask(initialData.id, { images: updatedImages }, [], { skipHistory: true });
+            const updatedImages = [...images, ...newImageUrls];
+            const updatedAttachments = [...attachments, ...newMetaAttachments];
+
+            setImages(updatedImages);
+            setAttachments(updatedAttachments);
+
+            if (initialData && (newImageUrls.length > 0 || newMetaAttachments.length > 0)) {
+                updateTask(initialData.id, {
+                    images: updatedImages,
+                    attachments: updatedAttachments
+                }, [], { skipHistory: true });
             }
         } catch (error) {
-            console.error('Error uploading attachments:', error);
+            console.error('Error uploading files:', error);
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -421,15 +587,18 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
     const handleRemoveImage = async (url: string) => {
         const newImages = images.filter(i => i !== url);
-        // Remove from state
-        setImages(newImages);
+        const newAttachments = attachments.filter(a => a.url !== url);
 
-        // Update database immediately
+        setImages(newImages);
+        setAttachments(newAttachments);
+
         if (initialData) {
-            updateTask(initialData.id, { images: newImages }, [], { skipHistory: true });
+            updateTask(initialData.id, {
+                images: newImages,
+                attachments: newAttachments
+            }, [], { skipHistory: true });
         }
 
-        // Delete from storage
         if (supabase) {
             try {
                 const urlObj = new URL(url);
@@ -437,7 +606,6 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 if (pathMatch) {
                     const filePath = pathMatch[1];
                     await supabase.storage.from('attachments').remove([filePath]);
-                    console.log(`Deleted image from storage: ${filePath}`);
                 }
             } catch (err) {
                 console.warn('Failed to delete image from storage:', err);
@@ -450,21 +618,19 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         if (!files || files.length === 0 || !supabase) return;
 
         setIsUploading(true);
-        const newAttachments: Array<{ name: string; url: string; size: number; type: string }> = [];
-
         try {
-            for (const file of Array.from(files)) {
-                console.log(`Processing attachment: ${file.name}, size: ${(file.size / 1024).toFixed(2)} KB`);
+            const newAttachmentsList: Array<{ name: string; url: string; size: number; type: string }> = [];
+            const newImageUrls: string[] = [];
 
-                // Use UUID for storage to avoid any encoding issues
-                // Original filename is preserved in the attachments metadata
+            for (const file of Array.from(files)) {
                 const fileExt = file.name.split('.').pop() || 'bin';
                 const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
                 const filePath = `${user.id}/${fileName}`;
 
-                const { error: uploadError } = await supabase.storage
-                    .from('attachments')
-                    .upload(filePath, file);
+                const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
+                    contentType: file.type,
+                    upsert: false
+                });
 
                 if (uploadError) {
                     console.error('Upload error:', uploadError);
@@ -474,29 +640,29 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
                 const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
                 if (data) {
-                    newAttachments.push({
-                        name: file.name,
-                        url: data.publicUrl,
-                        size: file.size,
-                        type: file.type
-                    });
+                    const isImage = file.type.startsWith('image/');
+                    const fileData = { name: file.name, url: data.publicUrl, size: file.size, type: file.type };
+                    newAttachmentsList.push(fileData);
+                    if (isImage) {
+                        newImageUrls.push(data.publicUrl);
+                    }
                 }
             }
 
-            const updatedAttachments = [...attachments, ...newAttachments];
+            const updatedAttachments = [...attachments, ...newAttachmentsList];
+            const updatedImages = [...images, ...newImageUrls];
+
             setAttachments(updatedAttachments);
+            setImages(updatedImages);
 
-            // Update database immediately
-            if (initialData && newAttachments.length > 0) {
-                updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
+            if (initialData && (newAttachmentsList.length > 0 || newImageUrls.length > 0)) {
+                updateTask(initialData.id, { attachments: updatedAttachments, images: updatedImages }, [], { skipHistory: true });
             }
 
-            // Auto-focus the last uploaded attachment
-            if (newAttachments.length > 0) {
-                setFocusedAttachmentUrl(newAttachments[newAttachments.length - 1].url);
+            if (newAttachmentsList.length > 0) {
+                setFocusedAttachmentUrl(newAttachmentsList[newAttachmentsList.length - 1].url);
             }
-
-            setToast?.({ msg: `已上傳 ${newAttachments.length} 個檔案`, type: 'info' });
+            setToast?.({ msg: `已上傳 ${newAttachmentsList.length} 個檔案`, type: 'info' });
         } catch (error) {
             console.error('Error uploading attachments:', error);
             setToast?.({ msg: '上傳失敗', type: 'error' });
@@ -508,15 +674,15 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
     const handleRemoveAttachment = async (url: string) => {
         const newAttachments = attachments.filter(a => a.url !== url);
-        // Remove from state
-        setAttachments(newAttachments);
+        const newImages = images.filter(i => i !== url);
 
-        // Update database immediately
+        setAttachments(newAttachments);
+        setImages(newImages);
+
         if (initialData) {
-            updateTask(initialData.id, { attachments: newAttachments }, [], { skipHistory: true });
+            updateTask(initialData.id, { attachments: newAttachments, images: newImages }, [], { skipHistory: true });
         }
 
-        // Delete from storage
         if (supabase) {
             try {
                 const urlObj = new URL(url);
@@ -524,7 +690,6 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 if (pathMatch) {
                     const filePath = pathMatch[1];
                     await supabase.storage.from('attachments').remove([filePath]);
-                    console.log(`Deleted attachment from storage: ${filePath}`);
                 }
             } catch (err) {
                 console.warn('Failed to delete attachment from storage:', err);
@@ -721,6 +886,14 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             }
             if (e.key === 'Escape') { e.preventDefault(); setShowSuggestions(false); return; }
         }
+        // Cmd/Win + Enter to submit and exit (except in NoteEditor)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isInEditor) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSubmit();
+            return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
             // Allow Enter for newlines in textarea/contenteditable
             if ((e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
@@ -780,6 +953,260 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
 
     const borderClass = initialData ? `border-${effectiveColor}-200` : 'border-gray-100/50';
 
+    const renderPromptModal = () => {
+        // Ensure the modal stays within viewport bounds
+        const safeTop = polishPosition ? Math.max(10, Math.min(polishPosition.top, window.innerHeight - 500)) : 0;
+        const safeLeft = polishPosition ? Math.max(220, Math.min(polishPosition.left, window.innerWidth - 220)) : 0;
+
+        const modalContent = (
+            <motion.div
+                key="prompt-modal"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className={polishPosition
+                    ? "fixed bg-white rounded-xl shadow-2xl border border-gray-100 p-4 flex flex-col gap-4 overflow-hidden w-[400px]"
+                    : "absolute top-[30px] right-0 w-[400px] bg-white rounded-xl shadow-2xl border border-gray-100 z-[100] p-4 flex flex-col gap-4 overflow-hidden"
+                }
+                style={polishPosition ? {
+                    top: safeTop,
+                    left: safeLeft,
+                    transform: 'translateX(-50%)',
+                    zIndex: 99999
+                } : {}}
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                        <Sparkles className="text-indigo-500" size={16} />
+                        AI 靈感指令
+                    </h3>
+                    <button onClick={handleClosePromptModal} className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-100 rounded-full">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    {/* 搜尋框 */}
+                    <input
+                        type="text"
+                        placeholder="搜尋提示詞..."
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition-all"
+                        value={promptSearchQuery}
+                        onChange={(e) => setPromptSearchQuery(e.target.value)}
+                    />
+
+                    {/* 常用提示詞 */}
+                    {!promptSearchQuery && frequentPrompts.length > 0 && (
+                        <div>
+                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">常用指令</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                                {frequentPrompts.map(p => (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setCustomPrompt(p.description || p.title);
+                                            setPromptSearchQuery('');
+                                        }}
+                                        className="text-[10px] px-2 py-1 rounded-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all border border-indigo-100 font-medium"
+                                        title={p.description || p.title}
+                                    >
+                                        {p.title}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <textarea
+                        className="w-full h-32 p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none transition-all placeholder:text-slate-300"
+                        placeholder="輸入針對此內容的特殊指令（例如：針對此內容給予五個推廣建議、或者是分析這段話的情緒...）"
+                        value={customPrompt}
+                        onChange={(e) => setCustomPrompt(e.target.value)}
+                    />
+
+                    <div className="flex items-center gap-2">
+                        <input type="checkbox" id="saveToLib" checked={saveToLibrary} onChange={(e) => setSaveToLibrary(e.target.checked)} className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" />
+                        <label htmlFor="saveToLib" className="text-xs text-slate-500 cursor-pointer select-none">儲存此指令到指令庫</label>
+                    </div>
+
+                    <div className="flex gap-2 justify-end">
+                        <button
+                            onClick={() => handleRunAssistant(STRICT_POLISH_PROMPT)}
+                            className="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-[10px] font-bold transition-all border border-indigo-200 shadow-sm active:scale-95 flex flex-col items-center justify-center gap-0.5"
+                            title="嚴格潤稿：修正錯字、標點並優化語氣，僅輸出正文"
+                        >
+                            <Sparkles size={12} />
+                            <span>內容潤稿</span>
+                        </button>
+                        <button
+                            onClick={() => handleRunAssistant()}
+                            className="flex-1 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-bold transition-all border border-slate-200 shadow-sm active:scale-95 flex flex-col items-center justify-center gap-0.5"
+                        >
+                            <Brain size={12} />
+                            <span>預設分析</span>
+                        </button>
+                        <button
+                            onClick={() => handleRunAssistant(customPrompt)}
+                            disabled={!customPrompt.trim()}
+                            className="flex-[2] py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-200 disabled:opacity-50 disabled:grayscale active:scale-95"
+                        >
+                            執行自定義指令
+                        </button>
+                    </div>
+                </div>
+                {filteredPrompts.length > 0 && (
+                    <div className="border-t border-gray-50 pt-3 mt-1">
+                        <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                {promptSearchQuery ? '搜尋結果' : '歷史指令庫'}
+                            </h4>
+                            {promptSearchQuery && searchResultsCount > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] text-gray-500">
+                                        {currentSearchIndex + 1} / {searchResultsCount}
+                                    </span>
+                                    <div className="flex gap-0.5">
+                                        <button
+                                            onClick={() => {
+                                                setCurrentSearchIndex((prev) =>
+                                                    prev > 0 ? prev - 1 : searchResultsCount - 1
+                                                );
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                                            title="上一個 (Cmd+Shift+G)"
+                                        >
+                                            <ChevronUp size={12} />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setCurrentSearchIndex((prev) =>
+                                                    prev < searchResultsCount - 1 ? prev + 1 : 0
+                                                );
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"
+                                            title="下一個 (Cmd+G)"
+                                        >
+                                            <ChevronDown size={12} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div
+                            className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto custom-scrollbar pr-1"
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+                                    e.preventDefault();
+                                    if (e.shiftKey) {
+                                        // Cmd+Shift+G: 上一個
+                                        setCurrentSearchIndex((prev) =>
+                                            prev > 0 ? prev - 1 : searchResultsCount - 1
+                                        );
+                                    } else {
+                                        // Cmd+G: 下一個
+                                        setCurrentSearchIndex((prev) =>
+                                            prev < searchResultsCount - 1 ? prev + 1 : 0
+                                        );
+                                    }
+                                }
+                            }}
+                        >
+                            {filteredPrompts.map((p, promptIndex) => {
+                                const highlightText = (text: string, query: string, isTitle: boolean) => {
+                                    if (!query.trim()) return text;
+                                    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+                                    let globalMatchIndex = 0;
+
+                                    // 計算這個提示詞之前有多少個匹配
+                                    for (let i = 0; i < promptIndex; i++) {
+                                        const prevPrompt = filteredPrompts[i];
+                                        const titleMatches = (prevPrompt.title.match(new RegExp(query, 'gi')) || []).length;
+                                        const descMatches = prevPrompt.description
+                                            ? (prevPrompt.description.match(new RegExp(query, 'gi')) || []).length
+                                            : 0;
+                                        globalMatchIndex += titleMatches + descMatches;
+                                    }
+
+                                    // 如果是描述，加上標題的匹配數
+                                    if (!isTitle) {
+                                        const titleMatches = (p.title.match(new RegExp(query, 'gi')) || []).length;
+                                        globalMatchIndex += titleMatches;
+                                    }
+
+                                    return parts.map((part, i) => {
+                                        if (part.toLowerCase() === query.toLowerCase()) {
+                                            const isCurrentMatch = globalMatchIndex === currentSearchIndex;
+                                            const markElement = (
+                                                <mark
+                                                    key={i}
+                                                    className={`${isCurrentMatch
+                                                        ? 'bg-orange-400 text-white ring-2 ring-orange-500'
+                                                        : 'bg-yellow-200 text-slate-900'
+                                                        } font-bold px-0.5 rounded`}
+                                                    ref={isCurrentMatch ? (el) => {
+                                                        if (el) {
+                                                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        }
+                                                    } : undefined}
+                                                >
+                                                    {part}
+                                                </mark>
+                                            );
+                                            globalMatchIndex++;
+                                            return markElement;
+                                        }
+                                        return part;
+                                    });
+                                };
+
+                                return (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setCustomPrompt(p.description || p.title);
+                                            setPromptSearchQuery('');
+                                            setCurrentSearchIndex(0);
+                                        }}
+                                        className="flex-shrink-0 text-left text-[11px] p-2 rounded-xl hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-all border border-slate-100 hover:border-indigo-100 shadow-sm bg-white active:scale-[0.98]"
+                                        title={p.description || p.title}
+                                    >
+                                        <div className="font-medium">
+                                            {highlightText(p.title, promptSearchQuery, true)}
+                                        </div>
+                                        {p.description && p.description !== p.title && (
+                                            <div className="text-[10px] text-gray-400 mt-0.5">
+                                                {highlightText(p.description, promptSearchQuery, false)}
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        );
+
+        // When using portal, wrap AnimatePresence inside the portal
+        if (polishPosition) {
+            return createPortal(
+                <AnimatePresence>
+                    {isPromptModalOpen && modalContent}
+                </AnimatePresence>,
+                document.body
+            );
+        }
+
+        // When not using portal, render inline with AnimatePresence
+        return (
+            <AnimatePresence>
+                {isPromptModalOpen && modalContent}
+            </AnimatePresence>
+        );
+    };
+
     return (
         <div
             ref={containerRef}
@@ -827,36 +1254,123 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 <div className="flex-1 space-y-4 relative pr-6">
                     <div className="flex items-end justify-between">
                         <div className="flex-1 relative space-y-2">
-                            <input
-                                ref={titleRef}
-                                autoFocus
-                                type="text"
-                                value={title}
-                                onChange={e => {
-                                    const val = e.target.value;
-                                    // Check if user just typed '@ '
-                                    if (val.endsWith('@ ') && !showDatePicker) {
-                                        setShowDatePicker(true);
-                                        setDatePickerOffset(0);
-                                        const today = new Date();
-                                        const dateStr = today.toLocaleDateString('sv-SE');
-                                        const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-                                        const weekday = weekdays[today.getDay()].replace('星期', '');
-                                        setTitle(val.slice(0, -2) + `${dateStr}（${weekday}）`);
+                            {/* Title input row with AI generate button */}
+                            <div className="flex items-center relative">
+                                <input
+                                    ref={titleRef}
+                                    autoFocus
+                                    type="text"
+                                    value={title}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        // Check if user just typed '@ '
+                                        if (val.endsWith('@ ') && !showDatePicker) {
+                                            setShowDatePicker(true);
+                                            setDatePickerOffset(0);
+                                            const today = new Date();
+                                            const dateStr = today.toLocaleDateString('sv-SE');
+                                            const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                                            const weekday = weekdays[today.getDay()].replace('星期', '');
+                                            setTitle(val.slice(0, -2) + `${dateStr}（${weekday}）`);
 
-                                    } else {
-                                        // Allow any edit, just turn off picker if pattern is broken (handled by user action usually)
-                                        // But if we are in picker mode, we should only exit if the pattern is broken by user deletion/typing
-                                        // Actually, simpler logic: if it doesn't match the pattern at the end, close picker
-                                        if (showDatePicker && !val.match(/\d{4}-\d{2}-\d{2}（[一二三四五六日]）$/)) {
-                                            setShowDatePicker(false);
+                                        } else {
+                                            // Allow any edit, just turn off picker if pattern is broken (handled by user action usually)
+                                            // But if we are in picker mode, we should only exit if the pattern is broken by user deletion/typing
+                                            // Actually, simpler logic: if it doesn't match the pattern at the end, close picker
+                                            if (showDatePicker && !val.match(/\d{4}-\d{2}-\d{2}（[一二三四五六日]）$/)) {
+                                                setShowDatePicker(false);
+                                            }
+                                            setTitle(val);
                                         }
-                                        setTitle(val);
-                                    }
-                                }}
-                                placeholder="任務名稱..."
-                                className={`w-full ${textSizeClass} ${titleFontClass} transition-all duration-300 placeholder:font-light placeholder-gray-300 border-none bg-transparent focus:ring-0 outline-none p-0 leading-tight ${isDone ? 'opacity-30' : (showDatePicker ? 'text-slate-400' : 'text-slate-800')}`}
-                            />
+                                    }}
+                                    placeholder="任務名稱..."
+                                    className={`flex-1 ${textSizeClass} ${titleFontClass} transition-all duration-300 placeholder:font-light placeholder-gray-300 border-none bg-transparent focus:ring-0 outline-none p-0 leading-tight ${isDone ? 'opacity-30' : (showDatePicker ? 'text-slate-400' : 'text-slate-800')}`}
+                                />
+                            </div>
+
+                            {/* Title Prompt Selection Modal */}
+                            {showTitlePromptSelection && createPortal(
+                                <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={() => setShowTitlePromptSelection(false)}>
+                                    <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-4 w-[400px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                                            <div className="flex items-center gap-2 text-slate-700">
+                                                <Sparkles size={16} className="text-amber-500" />
+                                                <h3 className="font-bold text-sm">選擇 AI 標題生成指令</h3>
+                                            </div>
+                                            <button onClick={() => setShowTitlePromptSelection(false)} className="text-slate-400 hover:text-slate-600">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                                            <button
+                                                onClick={() => executeTitleGeneration()}
+                                                className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-all group"
+                                            >
+                                                <div className="font-medium text-sm text-slate-700 group-hover:text-indigo-700">預設 SEO 專家模式</div>
+                                                <div className="text-xs text-slate-500 mt-1">使用系統預設的 SEO 專家角色，總結文章並生成吸引人的標題。</div>
+                                            </button>
+
+                                            {titlePrompts.map(prompt => (
+                                                <button
+                                                    key={prompt.id}
+                                                    onClick={() => executeTitleGeneration(prompt.description || '')}
+                                                    className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50 transition-all group"
+                                                >
+                                                    <div className="font-medium text-sm text-slate-700 group-hover:text-amber-700">{prompt.title}</div>
+                                                    <div className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                                        {(prompt.description || '').replace(/<[^>]+>/g, '')}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>,
+                                document.body
+                            )}
+
+                            {/* Title Preview Modal - rendered via portal */}
+                            {showTitlePreview && createPortal(
+                                <div
+                                    className="fixed bg-white rounded-xl shadow-2xl border border-indigo-100 p-4 animate-in fade-in zoom-in-95 duration-200"
+                                    style={{
+                                        top: titleRef.current ? titleRef.current.getBoundingClientRect().bottom + 8 : 100,
+                                        left: titleRef.current ? titleRef.current.getBoundingClientRect().left : 100,
+                                        width: titleRef.current ? titleRef.current.getBoundingClientRect().width : 300,
+                                        zIndex: 99999
+                                    }}
+                                >
+                                    <div className="flex items-center gap-2 text-indigo-600 mb-3">
+                                        <Wand2 size={14} />
+                                        <span className="text-xs font-bold">AI 生成標題預覽</span>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        value={generatedTitle}
+                                        onChange={(e) => setGeneratedTitle(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
+                                        placeholder="編輯標題..."
+                                    />
+                                    <div className="flex justify-end gap-2 mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleCancelTitle}
+                                            className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                        >
+                                            取消
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleConfirmTitle}
+                                            className="px-3 py-1.5 text-xs bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors font-medium"
+                                        >
+                                            確定套用
+                                        </button>
+                                    </div>
+                                </div>,
+                                document.body
+                            )}
 
                             {showSuggestions && (
                                 <div className="w-full mt-1 mb-2">
@@ -875,9 +1389,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                 <button
                                     type="button"
                                     onClick={() => setViewMode(viewMode === 'edit' ? 'presentation' : 'edit')}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors px-2 py-0.5 rounded-full ${viewMode === 'presentation'
-                                        ? 'bg-purple-50 text-purple-600 font-bold shadow-sm ring-1 ring-purple-100'
-                                        : 'text-purple-500 hover:text-purple-700 hover:bg-purple-50 font-medium'
+                                    className={`flex items-center gap-1.5 text-[10px] transition-all px-2.5 py-1 rounded-full border shadow-sm ${viewMode === 'presentation'
+                                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 font-medium'
                                         }`}
                                     title={viewMode === 'edit' ? t('presentationMode') : t('editMode')}
                                 >
@@ -886,99 +1400,39 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={handleAiAssistant}
-                                    disabled={isAssistantLoading || isAiLoading}
+                                    onClick={() => { handleAiAssistant(); setPolishPosition(null); }}
+                                    disabled={isAssistantLoading}
                                     className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-50 text-indigo-600 font-bold shadow-sm ring-1 ring-indigo-100' : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 font-medium'}`}
                                     title="AI Assistant Brain"
                                 >
                                     {isAssistantLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                                     <span>AI 助理</span>
                                 </button>
+                                {/* AI Generate Title Button */}
                                 <button
                                     type="button"
-                                    onClick={handleAiPolish}
-                                    disabled={isAiLoading || isAssistantLoading}
-                                    className="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700 transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full hover:bg-indigo-50"
-                                    title="AI Polish Content & Title"
+                                    onClick={handleGenerateTitle}
+                                    disabled={isGeneratingTitle}
+                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingTitle ? 'bg-amber-50 text-amber-600 font-bold shadow-sm ring-1 ring-amber-100' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50 font-medium'}`}
+                                    title="從備註內容生成 SEO 優化標題"
                                 >
-                                    {isAiLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                                    <span className="font-medium">AI 潤稿</span>
+                                    {isGeneratingTitle ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                    <span>AI 標題</span>
                                 </button>
-                                <AnimatePresence>
-                                    {isPromptModalOpen && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, y: -10 }}
-                                            className="absolute top-[30px] right-0 w-[400px] bg-white rounded-xl shadow-2xl border border-gray-100 z-[100] p-4 flex flex-col gap-4 overflow-hidden"
-                                        >
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                                    <Sparkles className="text-indigo-500" size={16} />
-                                                    AI 靈感指令
-                                                </h3>
-                                                <button onClick={() => setIsPromptModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-100 rounded-full">
-                                                    <X size={16} />
-                                                </button>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <textarea
-                                                    autoFocus
-                                                    className="w-full h-32 p-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none transition-all placeholder:text-slate-300"
-                                                    placeholder="輸入針對此內容的特殊指令（例如：針對此內容給予五個推廣建議、或者是分析這段話的情緒...）"
-                                                    value={customPrompt}
-                                                    onChange={(e) => setCustomPrompt(e.target.value)}
-                                                />
-
-                                                <div className="flex items-center gap-2">
-                                                    <input type="checkbox" id="saveToLib" checked={saveToLibrary} onChange={(e) => setSaveToLibrary(e.target.checked)} className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300" />
-                                                    <label htmlFor="saveToLib" className="text-xs text-slate-500 cursor-pointer select-none">儲存此指令到指令庫</label>
-                                                </div>
-
-                                                <div className="flex gap-2 justify-end">
-                                                    <button
-                                                        onClick={() => handleRunAssistant()}
-                                                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-100 active:scale-95"
-                                                    >
-                                                        預設分析
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRunAssistant(customPrompt)}
-                                                        disabled={!customPrompt.trim()}
-                                                        className="flex-[2] py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-200 disabled:opacity-50 disabled:grayscale active:scale-95"
-                                                    >
-                                                        執行自定義指令
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            {previousPrompts.length > 0 && (
-                                                <div className="border-t border-gray-50 pt-3 mt-1">
-                                                    <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">歷史指令庫</h4>
-                                                    <div className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
-                                                        {previousPrompts.map(p => (
-                                                            <button
-                                                                key={p.id}
-                                                                type="button"
-                                                                onClick={() => { setCustomPrompt(p.description || p.title); }}
-                                                                className="flex-shrink-0 text-left text-[11px] p-2 rounded-xl hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-all border border-slate-100 hover:border-indigo-100 truncate shadow-sm bg-white active:scale-[0.98]"
-                                                                title={p.title}
-                                                            >
-                                                                {p.title}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                {renderPromptModal()}
                             </div>
 
-                            <div className={`flex gap-4 transition-all duration-300 items-stretch ${showAnalysis ? 'h-[630px]' : ''}`}>
+                            <div className={`flex flex-col md:flex-row gap-4 transition-all duration-300 items-stretch ${showAnalysis ? 'min-h-[630px]' : ''}`}>
                                 <div className="flex-1 transition-all duration-300 overflow-hidden flex flex-col">
                                     {viewMode === 'edit' ? (
                                         <NoteEditor
+                                            onEditorReady={(editor) => { editorRef.current = editor; }}
+                                            onPolish={(_, range, pos) => {
+                                                setPolishRange(range);
+                                                if (pos) setPolishPosition(pos);
+                                                setIsPromptModalOpen(true);
+                                                setCustomPrompt('');
+                                            }}
                                             initialContent={desc}
                                             onChange={setDesc}
                                             onExit={() => startDateRef.current?.focus()}
@@ -996,97 +1450,199 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                     )}
                                 </div>
 
-                                {showAnalysis && (
-                                    <div className="w-[340px] shrink-0 animate-in slide-in-from-right-4 fade-in duration-500 border-l border-indigo-50 pl-4 flex flex-col h-full overflow-hidden">
-                                        {!assistantResponse ? (
-                                            <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                                                <div className="relative">
-                                                    <Brain size={32} className="text-indigo-400 animate-pulse" />
-                                                    <Sparkles size={16} className="absolute -top-1 -right-1 text-amber-400 animate-bounce" />
-                                                </div>
-                                                <div className="flex flex-col items-center gap-1">
-                                                    <span className="text-[11px] font-bold text-slate-500">靈感助理思考中...</span>
-                                                    <div className="flex gap-1">
-                                                        <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                                                        <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                                                        <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce"></div>
+                                {showAnalysis && (() => {
+                                    // Calculate safe position for floating panel
+                                    const panelTop = polishPosition ? Math.max(10, Math.min(polishPosition.top, window.innerHeight - 500)) : 0;
+                                    const panelLeft = polishPosition ? Math.min(polishPosition.left + 220, window.innerWidth - 360) : 0;
+
+                                    const panelContent = (
+                                        <div
+                                            className={polishPosition
+                                                ? "fixed w-[340px] shrink-0 animate-in slide-in-from-right-4 fade-in duration-300 flex flex-col max-h-[80vh] overflow-hidden bg-white rounded-2xl shadow-2xl"
+                                                : "w-full md:w-[340px] shrink-0 animate-in slide-in-from-right-4 md:slide-in-from-bottom-4 fade-in duration-500 border-l border-indigo-50 pl-0 md:pl-4 flex flex-col h-full overflow-hidden"
+                                            }
+                                            style={polishPosition ? {
+                                                top: panelTop,
+                                                left: panelLeft,
+                                                zIndex: 99998
+                                            } : {}}
+                                        >
+                                            {!assistantResponse ? (
+                                                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                    <div className="relative">
+                                                        <Brain size={32} className="text-indigo-400 animate-pulse" />
+                                                        <Sparkles size={16} className="absolute -top-1 -right-1 text-amber-400 animate-bounce" />
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span className="text-[11px] font-bold text-slate-500">靈感助理思考中...</span>
+                                                        <div className="flex gap-1">
+                                                            <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                                                            <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                                                            <div className="w-1 h-1 bg-indigo-400 rounded-full animate-bounce"></div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1 pb-4 custom-scrollbar">
-                                                {/* Assistant Insight Card */}
-                                                <div className="bg-white rounded-2xl shadow-xl shadow-indigo-100/20 border border-indigo-50 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
-                                                    {/* Card Header */}
-                                                    <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-2 text-white">
-                                                                <Brain size={16} className="animate-pulse" />
-                                                                <span className="text-xs font-bold tracking-wider">AI 靈感洞察</span>
+                                            ) : (
+                                                <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1 pb-12 custom-scrollbar">
+                                                    {/* Assistant Insight Card */}
+                                                    <div className="bg-white rounded-2xl shadow-xl shadow-indigo-100/20 border border-indigo-50 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                                                        {/* Card Header */}
+                                                        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2 text-white">
+                                                                    <Brain size={16} className="animate-pulse" />
+                                                                    <span className="text-xs font-bold tracking-wider">AI 靈感洞察</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setShowAnalysis(false);
+                                                                        setPolishRange(null);
+                                                                    }}
+                                                                    className="text-white/60 hover:text-white transition-colors"
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
                                                             </div>
-                                                            <button
-                                                                onClick={() => setShowAnalysis(false)}
-                                                                className="text-white/60 hover:text-white transition-colors"
-                                                            >
-                                                                <X size={14} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Card Body */}
-                                                    <div className="p-5 flex flex-col gap-4">
-                                                        <div className="markdown-content text-[13px] text-slate-700 leading-relaxed overflow-hidden prose prose-sm prose-indigo max-w-none">
-                                                            <ReactMarkdown>
-                                                                {assistantResponse.fullResponse}
-                                                            </ReactMarkdown>
                                                         </div>
 
-                                                        {/* Actions */}
-                                                        <div className="flex flex-col gap-2 pt-2 border-t border-slate-50">
-                                                            <button
-                                                                onClick={async () => {
-                                                                    const inspirationTag = tags.find(t => t.name.includes('靈感'))?.id || await addTag('靈感');
-                                                                    if (inspirationTag) {
-                                                                        await addTask({
-                                                                            title: `💡 靈感：${title || '未命名'}`,
-                                                                            description: assistantResponse.fullResponse,
-                                                                            tags: [inspirationTag],
-                                                                            status: 'active',
-                                                                            color: 'purple'
-                                                                        });
-                                                                        setToast?.({ msg: '已儲存為靈感卡', type: 'info' });
-                                                                    }
-                                                                }}
-                                                                className="flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
-                                                            >
-                                                                <Download size={14} />
-                                                                儲存為靈感卡
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setDesc((prev: string) => prev + "\n\n--- AI 建議 ---\n" + assistantResponse.fullResponse);
-                                                                    setToast?.({ msg: '內容已插入備註', type: 'info' });
-                                                                }}
-                                                                className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
-                                                            >
-                                                                <ArrowRight size={14} />
-                                                                插入到備註
-                                                            </button>
+                                                        {/* Card Body */}
+                                                        <div className="p-5 flex flex-col gap-4">
+                                                            {isEditingAssistant ? (
+                                                                <textarea
+                                                                    value={editableAssistantResponse}
+                                                                    onChange={(e) => setEditableAssistantResponse(e.target.value)}
+                                                                    className="w-full h-64 p-3 text-[13px] text-slate-700 leading-relaxed border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none"
+                                                                />
+                                                            ) : (
+                                                                <div className="markdown-content text-[13px] text-slate-700 leading-relaxed prose prose-sm prose-indigo max-w-none">
+                                                                    <ReactMarkdown>
+                                                                        {editableAssistantResponse}
+                                                                    </ReactMarkdown>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Actions */}
+                                                            <div className="flex flex-col gap-2 pt-2 border-t border-slate-50">
+                                                                {isEditingAssistant ? (
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setIsEditingAssistant(false);
+                                                                            }}
+                                                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+                                                                        >
+                                                                            <Check size={14} />
+                                                                            完成編輯
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditableAssistantResponse(assistantResponse?.fullResponse || '');
+                                                                                setIsEditingAssistant(false);
+                                                                            }}
+                                                                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all active:scale-95"
+                                                                        >
+                                                                            取消
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <>
+                                                                        <button
+                                                                            onClick={() => setIsEditingAssistant(true)}
+                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
+                                                                        >
+                                                                            <Edit3 size={14} />
+                                                                            編輯內容
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                const inspirationTag = tags.find(t => t.name.includes('靈感'))?.id || await addTag('靈感');
+                                                                                if (inspirationTag) {
+                                                                                    await addTask({
+                                                                                        title: `💡 靈感：${title || '未命名'}`,
+                                                                                        description: editableAssistantResponse,
+                                                                                        tags: [inspirationTag],
+                                                                                        status: 'active',
+                                                                                        color: 'purple'
+                                                                                    });
+                                                                                    setToast?.({ msg: '已儲存為靈感卡', type: 'info' });
+                                                                                }
+                                                                            }}
+                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+                                                                        >
+                                                                            <Download size={14} />
+                                                                            儲存為靈感卡
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setDesc((prev: string) => prev + "\n\n--- AI 建議 ---\n" + editableAssistantResponse);
+                                                                                setToast?.({ msg: '內容已插入備註', type: 'info' });
+                                                                                setShowAnalysis(false);
+                                                                            }}
+                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
+                                                                        >
+                                                                            <ArrowRight size={14} />
+                                                                            插入到備註底部
+                                                                        </button>
+
+                                                                        {polishRange && (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    if (editorRef.current) {
+                                                                                        const editor = editorRef.current;
+                                                                                        const from = polishRange.from;
+                                                                                        const to = from + editableAssistantResponse.length;
+
+                                                                                        // Insert the new content
+                                                                                        editor.commands.insertContentAt(polishRange, editableAssistantResponse);
+
+                                                                                        // Apply yellow highlight and position cursor at end
+                                                                                        setTimeout(() => {
+                                                                                            editor.chain()
+                                                                                                .setTextSelection({ from, to })
+                                                                                                .setHighlight({ color: '#fef08a' }) // Yellow highlighter
+                                                                                                .setTextSelection(to) // Position cursor at end
+                                                                                                .focus()
+                                                                                                .run();
+
+                                                                                            // Store the highlight range for removal on click outside
+                                                                                            setHighlightRange({ from, to });
+                                                                                        }, 50);
+
+                                                                                        setPolishRange(null);
+                                                                                        setPolishPosition(null);
+                                                                                        setShowAnalysis(false);
+                                                                                        setToast?.({ msg: '已取代選中內容（黃色標註處，點擊其他處可移除標註）', type: 'info' });
+                                                                                    }
+                                                                                }}
+                                                                                className="flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl text-xs font-bold transition-all border border-green-200 shadow-sm active:scale-95"
+                                                                            >
+                                                                                <Check size={14} />
+                                                                                取代選中內容
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                            )}
+                                        </div>
+                                    );
+
+                                    // Use portal when floating, otherwise render inline
+                                    return polishPosition ? createPortal(panelContent, document.body) : panelContent;
+                                })()}
                             </div>
 
                             {/* Attachments Preview Area */}
                             {images.length > 0 && (
                                 <div className="grid grid-cols-4 gap-2 mt-2">
                                     {images.map((url, idx) => {
-                                        const isImg = url.match(/\.(jpg|jpeg|png|gif|webp|avif)/i);
-                                        const fileName = url.split('/').pop()?.split('-').slice(2).join('-') || 'File';
+                                        const attachmentMeta = attachments.find(a => a.url === url);
+                                        const isImg = url.match(/\.(jpg|jpeg|png|gif|webp|avif)/i) ||
+                                            attachmentMeta?.type?.startsWith('image/');
+                                        const fileName = attachmentMeta?.name || 'Image';
 
                                         return (
                                             <div
@@ -1095,11 +1651,11 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                 onClick={() => isImg ? setPreviewImage(url) : window.open(url, '_blank')}
                                             >
                                                 {isImg ? (
-                                                    <img src={url} alt="attachment" className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                                    <img src={url} alt={fileName} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                                                 ) : (
                                                     <div className="flex flex-col items-center gap-1 p-2">
                                                         <div className="w-8 h-8 rounded bg-white border border-gray-200 flex items-center justify-center shadow-sm">
-                                                            <ImageIcon size={16} className="text-gray-400" />
+                                                            <Paperclip size={16} className="text-gray-400" />
                                                         </div>
                                                         <span className="text-[9px] text-gray-500 truncate w-full px-1 text-center font-medium leading-tight">
                                                             {fileName}
@@ -1207,7 +1763,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                         attachments={attachments}
                                         images={images}
                                         attachmentLinks={attachmentLinks}
-                                        onLinksChange={setAttachmentLinks}
+                                        onLinksChange={(newLinks) => {
+                                            setAttachmentLinks(newLinks);
+                                            if (initialData) {
+                                                updateTask(initialData.id, { attachment_links: newLinks }, [], { skipHistory: true });
+                                            }
+                                        }}
                                     />
                                 </div>
                             )}

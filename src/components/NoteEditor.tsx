@@ -1,4 +1,4 @@
-import React, { useEffect, useContext } from 'react';
+import React, { useEffect, useContext, useState, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import { Node, mergeAttributes } from '@tiptap/core';
@@ -7,6 +7,11 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import TextStyle from '@tiptap/extension-text-style';
+import { Color } from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import { Sparkles } from 'lucide-react';
+
 
 // Custom extension to handle internal tab and Cmd+Enter exit
 const KeyboardNavigation = (onExit?: () => void) => Extension.create({
@@ -146,9 +151,7 @@ const ParagraphWithId = Node.create({
     },
 
     renderHTML({ HTMLAttributes }) {
-        // Generate a unique ID if not present
-        const id = HTMLAttributes['data-paragraph-id'] || `p-${Math.random().toString(36).substr(2, 9)}`;
-        return ['p', mergeAttributes(HTMLAttributes, { 'data-paragraph-id': id }), 0];
+        return ['p', mergeAttributes(HTMLAttributes), 0];
     },
 
     addAttributes() {
@@ -158,7 +161,9 @@ const ParagraphWithId = Node.create({
                 parseHTML: element => element.getAttribute('data-paragraph-id'),
                 renderHTML: attributes => {
                     if (!attributes['data-paragraph-id']) {
-                        return {};
+                        // Generate a unique ID if it doesn't exist
+                        const id = `p-${Math.random().toString(36).substr(2, 9)}`;
+                        return { 'data-paragraph-id': id };
                     }
                     return { 'data-paragraph-id': attributes['data-paragraph-id'] };
                 },
@@ -171,6 +176,8 @@ interface NoteEditorProps {
     initialContent: string;
     onChange: (content: string) => void;
     onExit?: () => void;
+    onPolish?: (text: string, range: { from: number, to: number }, position?: { top: number, left: number }) => void;
+    onEditorReady?: (editor: any) => void;
     editable?: boolean;
     className?: string;
     placeholder?: string;
@@ -183,6 +190,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     initialContent,
     onChange,
     onExit,
+    onPolish,
+    onEditorReady,
     editable = true,
     className = "",
     placeholder = "",
@@ -191,6 +200,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     autoFocus = false,
 }) => {
     const { t } = useContext(AppContext);
+    const [showColorPicker, setShowColorPicker] = useState(false);
+    const [colorPickerPosition, setColorPickerPosition] = useState({ top: 0, left: 0 });
+    const colorPickerTimeout = useRef<NodeJS.Timeout | null>(null);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -208,6 +221,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 },
             }),
             ParagraphWithId, // Add custom paragraph with IDs
+            TextStyle,
+            Color,
+            Highlight.configure({ multicolor: true }),
             Link.configure({
                 openOnClick: false,
                 autolink: true,
@@ -238,6 +254,35 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 onChange(html);
             }
         },
+        onSelectionUpdate: ({ editor }) => {
+            // 清除之前的定時器
+            if (colorPickerTimeout.current) {
+                clearTimeout(colorPickerTimeout.current);
+            }
+
+            // 檢查是否有選中文字
+            const { from, to } = editor.state.selection;
+            const hasSelection = from !== to;
+
+            if (hasSelection && editable) {
+                // 0.5 秒後顯示顏色選擇器
+                colorPickerTimeout.current = setTimeout(() => {
+                    const selection = window.getSelection();
+                    if (selection && selection.rangeCount > 0) {
+                        const range = selection.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+
+                        setColorPickerPosition({
+                            top: rect.bottom + 5,
+                            left: rect.left + (rect.width / 2)
+                        });
+                        setShowColorPicker(true);
+                    }
+                }, 500);
+            } else {
+                setShowColorPicker(false);
+            }
+        },
     });
 
     // Handle initialContent changes (e.g., from AI polish)
@@ -266,6 +311,12 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         }
     }, [editor, autoFocus]);
 
+    useEffect(() => {
+        if (editor && onEditorReady) {
+            onEditorReady(editor);
+        }
+    }, [editor, onEditorReady]);
+
     if (!editor) {
         return null;
     }
@@ -273,6 +324,76 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     return (
         <div className={`note-editor-wrapper ${className} relative bg-transparent border-none`}>
             <EditorContent editor={editor} />
+
+            {/* 顏色選擇器 */}
+            {showColorPicker && (
+                <div
+                    className="fixed z-50 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 flex gap-1.5 animate-in fade-in zoom-in-95 duration-200 items-center"
+                    style={{
+                        top: `${colorPickerPosition.top}px`,
+                        left: `${colorPickerPosition.left}px`,
+                        transform: 'translateX(-50%)'
+                    }}
+                >
+                    {/* AI Polish Button - First */}
+                    <button
+                        type="button"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const { from, to } = editor.state.selection;
+                            const text = editor.state.doc.textBetween(from, to, ' ');
+                            onPolish?.(text, { from, to }, colorPickerPosition);
+                            setShowColorPicker(false);
+                        }}
+                        className="w-8 h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 shadow-sm hover:scale-105 hover:ring-2 hover:ring-indigo-300 transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                        title="AI 潤色 (Polish Selection)"
+                    >
+                        <Sparkles size={16} />
+                    </button>
+                    <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+                    {/* Color Buttons */}
+                    {[
+                        { color: '#000000', label: '黑色' },
+                        { color: '#ef4444', label: '紅色' },
+                        { color: '#f97316', label: '橙色' },
+                        { color: '#f59e0b', label: '黃色' },
+                        { color: '#10b981', label: '綠色' },
+                        { color: '#3b82f6', label: '藍色' },
+                        { color: '#8b5cf6', label: '紫色' },
+                        { color: '#ec4899', label: '粉色' },
+                        { color: '#64748b', label: '灰色' },
+                    ].map(({ color, label }) => (
+                        <button
+                            key={color}
+                            type="button"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                editor?.chain().focus().setColor(color).run();
+                                setShowColorPicker(false);
+                            }}
+                            className="w-7 h-7 rounded-full border-2 border-white shadow-md hover:scale-110 hover:ring-2 hover:ring-indigo-300 transition-all active:scale-95 cursor-pointer"
+                            style={{ backgroundColor: color }}
+                            title={label}
+                        />
+                    ))}
+                    <button
+                        type="button"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            editor?.chain().focus().unsetColor().run();
+                            setShowColorPicker(false);
+                        }}
+                        className="w-7 h-7 rounded-full border-2 border-gray-300 bg-white shadow-md hover:scale-110 hover:ring-2 hover:ring-gray-300 transition-all active:scale-95 flex items-center justify-center text-gray-400 text-xs font-bold cursor-pointer"
+                        title="清除顏色"
+                    >
+                        清除
+                    </button>
+                </div>
+            )}
+
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .ProseMirror p.is-editor-empty:first-child::before {
@@ -293,8 +414,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 }
                 .ProseMirror h1 { font-size: 1.25rem; font-weight: 700; margin-top: 0.5rem; margin-bottom: 0.5rem; color: #334155; }
                 .ProseMirror h2 { font-size: 1.1rem; font-weight: 700; margin-top: 0.5rem; margin-bottom: 0.5rem; color: #475569; }
-                .ProseMirror ul { list-style-type: disc; padding-left: 1.25rem; margin-top: 0.25rem; }
-                .ProseMirror ol { list-style-type: decimal; padding-left: 1.25rem; margin-top: 0.25rem; }
+                .ProseMirror ul { list-style-type: disc; list-style-position: outside; padding-left: 2rem; margin-top: 0.25rem; margin-left: 0; }
+                .ProseMirror ol { list-style-type: decimal; list-style-position: outside; padding-left: 2rem; margin-top: 0.25rem; margin-left: 0; }
+                .ProseMirror li { padding-left: 0.25rem; }
             `}} />
         </div>
     );

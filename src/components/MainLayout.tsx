@@ -24,11 +24,18 @@ export const MainLayout = () => {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setLocalQuickAdd(p => !p); }
-      if (e.key === 'Escape') setLocalQuickAdd(false);
+      if (e.key === 'Escape') {
+        // 優先關閉編輯模態框
+        if (editingTaskId) {
+          setEditingTaskId(null);
+        } else {
+          setLocalQuickAdd(false);
+        }
+      }
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, []);
+  }, [editingTaskId, setEditingTaskId]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -142,17 +149,19 @@ export const MainLayout = () => {
         {/* Modal for Calendar/Journal Editing if needed */}
         {editingTaskId && (view === 'calendar' || view === 'journal' || view === 'focus') && editingTask && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] flex items-center justify-center p-6" onClick={() => setEditingTaskId(null)}>
-            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-6" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center mb-4">
+            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10">
                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Edit Task</h3>
                 <button onClick={() => setEditingTaskId(null)} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600"><X size={18} /></button>
               </div>
-              <TaskInput initialData={editingTask} onClose={() => setEditingTaskId(null)} />
+              <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
+                <TaskInput initialData={editingTask} onClose={() => setEditingTaskId(null)} />
+              </div>
             </div>
           </div>
         )}
 
-        {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-16 p-4 md:pt-32 md:p-6"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 md:p-6"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
+        {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-16 p-4 md:pt-32 md:p-6 overflow-y-auto"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 md:p-6 mb-16"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
       </main>
     </div>

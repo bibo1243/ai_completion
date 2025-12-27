@@ -43,7 +43,9 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
     // Explicitly handle Enter to prevent submitting the parent form (TaskInput)
     if (e.key === 'Enter') {
       e.preventDefault();
-      e.stopPropagation(); // CRITICAL: Stop event from bubbling to TaskInput
+      if (!(e.metaKey || e.ctrlKey)) {
+        e.stopPropagation(); // Stop only normal individual Enter
+      }
       if (isOpen) {
         confirmSelection();
       } else {
@@ -93,7 +95,19 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
       const count = dayTasks.length;
       let dotColor = 'bg-transparent';
       if (count >= 1 && count <= 3) dotColor = 'bg-green-400'; else if (count >= 4 && count <= 10) dotColor = 'bg-yellow-400'; else if (count > 10) dotColor = 'bg-red-500';
-      days.push(<button key={d} type="button" onClick={() => handleDateClick(d)} onMouseEnter={() => setHoveredDate(date)} className={`h-8 w-8 rounded-full flex items-center justify-center text-xs relative transition-all ${isHighlighted ? `bg-indigo-600/80 text-white font-bold shadow-md` : isSaved ? 'bg-black text-white font-bold' : 'hover:bg-gray-100'} ${isToday(date.toISOString()) && !isSaved && !isHighlighted ? 'text-indigo-600 font-bold' : ''}`}> {d} {!isSaved && !isHighlighted && count > 0 && <div className={`absolute bottom-1 w-1 h-1 rounded-full ${dotColor}`}></div>} </button>);
+      days.push(
+        <button
+          key={d}
+          type="button"
+          onMouseDown={(e) => e.preventDefault()} // Keep focus on trigger/input
+          onClick={() => handleDateClick(d)}
+          onMouseEnter={() => setHoveredDate(date)}
+          className={`h-8 w-8 rounded-full flex items-center justify-center text-xs relative transition-all ${isHighlighted ? `bg-indigo-600/80 text-white font-bold shadow-md` : isSaved ? 'bg-black text-white font-bold' : 'hover:bg-gray-100'} ${isToday(date.toISOString()) && !isSaved && !isHighlighted ? 'text-indigo-600 font-bold' : ''}`}
+        >
+          {d}
+          {!isSaved && !isHighlighted && count > 0 && <div className={`absolute bottom-1 w-1 h-1 rounded-full ${dotColor}`}></div>}
+        </button>
+      );
     }
     return days;
   };
@@ -129,9 +143,9 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
             {highlightedDate && <div className="absolute right-2 top-2 text-[10px] text-indigo-500 font-bold bg-indigo-50 px-1 rounded animate-pulse">{t('identified')}: {formatDate(highlightedDate.toISOString(), language)}</div>}
           </div>
           <div className="flex justify-between items-center mb-2">
-            <button type="button" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft size={16} /></button>
+            <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft size={16} /></button>
             <span className="font-bold text-sm text-gray-800">{currentDate.toLocaleString(language === 'zh' ? 'zh-TW' : 'en-US', { month: 'long', year: 'numeric' })}</span>
-            <button type="button" onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-gray-100 rounded"><ChevronRight size={16} /></button>
+            <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-gray-100 rounded"><ChevronRight size={16} /></button>
           </div>
           <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-bold text-gray-400">
             {(language === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S']).map(d => <span key={d}>{d}</span>)}
@@ -146,7 +160,7 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
               {previewTasks.length > 0 ? previewTasks.map((t: any) => (<div key={t.id} className="text-[10px] bg-gray-50 p-1 rounded truncate border-l-2 border-indigo-400 pl-2 text-gray-600">{t.title}</div>)) : <div className="text-[10px] text-gray-300 italic text-center py-2">{t('noSchedule')}</div>}
             </div>
           </div>
-          <button type="button" onClick={confirmSelection} className="w-full mt-3 bg-indigo-600 text-white text-xs font-bold py-1.5 rounded hover:bg-indigo-700 transition-colors">{t('confirmDate')}</button>
+          <button type="button" onMouseDown={e => e.preventDefault()} onClick={confirmSelection} className="w-full mt-3 bg-indigo-600 text-white text-xs font-bold py-1.5 rounded hover:bg-indigo-700 transition-colors">{t('confirmDate')}</button>
         </div>
       )}
     </div>

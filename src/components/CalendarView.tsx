@@ -15,6 +15,8 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const phantomRef = useRef<HTMLDivElement | null>(null);
   const previewDataRef = useRef<{ startTimeMin: number; duration: number; date?: Date } | null>(null);
+  const doubleClickTimer = useRef<NodeJS.Timeout | null>(null);
+  const isDoubleClick = useRef(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (forcedViewMode) return forcedViewMode;
@@ -139,6 +141,22 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
 
   const [crossPanePreview, setCrossPanePreview] = useState<{ date: Date; startTimeMin: number; taskId: string } | null>(null);
   const [selectionPreview, setSelectionPreview] = useState<{ date: Date; startTimeMin?: number } | null>(null); // Holographic placement state
+  const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null); // 閃光動畫狀態：儲存日期字串
+
+  // 月曆滾輪切換月份
+  const handleMonthWheel = (e: React.WheelEvent) => {
+    if (viewMode !== 'month') return;
+    e.preventDefault();
+    const newDate = new Date(calendarDate);
+    if (e.deltaY > 0) {
+      // 向下滾動 = 下個月
+      newDate.setMonth(newDate.getMonth() + 1);
+    } else {
+      // 向上滾動 = 上個月
+      newDate.setMonth(newDate.getMonth() - 1);
+    }
+    setCalendarDate(newDate);
+  };
 
   useEffect(() => {
     if (!dragState.isDragging || !dragState.draggedId || interaction) {
@@ -303,15 +321,29 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
 
   const handleInteractionStart = (e: React.MouseEvent, task: TaskData, type: 'move' | 'resize-top' | 'resize-bottom', date: Date, startDate: Date, numDays: number, initialDayOffset: number) => {
     e.preventDefault(); e.stopPropagation();
-    hasMoved.current = false;
-    bubbleRef.current = (e.currentTarget.classList.contains('task-bubble') ? e.currentTarget : e.currentTarget.closest('.task-bubble')) as HTMLDivElement;
-    const initialMin = timeToMinutes(task.start_time);
-    const initialDur = task.duration || 60;
-    setInteraction({ type, taskId: task.id, initialMouseY: e.clientY, initialStartTimeMin: initialMin, initialDuration: initialDur, date, startDate, numDays, initialDayOffset });
-    previewDataRef.current = { startTimeMin: initialMin, duration: initialDur, date };
+
+    // 檢查是否為雙擊
+    if (isDoubleClick.current) {
+      isDoubleClick.current = false;
+      return;
+    }
+
+    // 延遲啟動拖動，給雙擊事件時間觸發
+    if (doubleClickTimer.current) {
+      clearTimeout(doubleClickTimer.current);
+    }
+
+    doubleClickTimer.current = setTimeout(() => {
+      if (!isDoubleClick.current) {
+        hasMoved.current = false;
+        bubbleRef.current = (e.currentTarget.classList.contains('task-bubble') ? e.currentTarget : e.currentTarget.closest('.task-bubble')) as HTMLDivElement;
+        const initialMin = timeToMinutes(task.start_time);
+        const initialDur = task.duration || 60;
+        setInteraction({ type, taskId: task.id, initialMouseY: e.clientY, initialStartTimeMin: initialMin, initialDuration: initialDur, date, startDate, numDays, initialDayOffset });
+        previewDataRef.current = { startTimeMin: initialMin, duration: initialDur, date };
+      }
+    }, 200); // 200ms 延遲
   };
-
-
   const handlePrev = () => {
     if (viewMode === 'month') setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
     else { const d = new Date(calendarDate); d.setDate(d.getDate() - (viewMode === 'week' ? 7 : customDays)); setCalendarDate(d); }
@@ -435,7 +467,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
             const newId = await addTask({ title: '', start_date: date.toISOString(), is_all_day: true, status: 'inbox' });
             setEditingTaskId(newId);
           }}
-          className={`h-32 border-b border-r border-gray-100 p-2 overflow-y-auto hover:bg-gray-50 transition-colors cursor-default relative ${isTodayDate ? 'bg-indigo-50/30' : ''}`}>
+          className={`h-32 border-b border-r border-gray-100 p-2 overflow-y-auto hover:bg-gray-50 transition-all cursor-default relative ${isTodayDate ? 'bg-indigo-50/30' : ''} ${placedDateFlash === date.toDateString() ? 'ring-4 ring-green-400 bg-green-50 animate-pulse' : ''}`}>
           <div className="flex items-start justify-between mb-1">
             <div className={`text-xs font-bold ${isTodayDate ? 'text-indigo-600' : 'text-gray-400'}`}>{d} {isTodayDate && '(Today)'}</div>
             <div className="flex flex-col items-end">
@@ -451,6 +483,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
               onClick={async (e) => {
                 e.stopPropagation();
                 const ids = [...selectedTaskIds];
+                const dateKey = date.toDateString();
                 // Check for Stamp Mode (Alt Key)
                 if (e.altKey) {
                   // Clone/Stamp Mode
@@ -465,10 +498,16 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                       });
                     }
                   }
+                  // 觸發閃光動畫
+                  setPlacedDateFlash(dateKey);
+                  setTimeout(() => setPlacedDateFlash(null), 600);
                   // Do NOT clear selection in stamp mode, allowing repeated stamping
                 } else {
                   // Move Mode (Default)
                   ids.forEach(id => updateTask(id, { start_date: date.toISOString() }));
+                  // 觸發閃光動畫
+                  setPlacedDateFlash(dateKey);
+                  setTimeout(() => setPlacedDateFlash(null), 600);
                   setSelectedTaskIds([]);
                   setSelectionPreview(null);
                 }
@@ -487,7 +526,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
       );
     }
     return (
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden" onWheel={handleMonthWheel}>
         <div className="grid grid-cols-7 border-b border-gray-200">{headers}</div>
         <div className="grid grid-cols-7 flex-1 overflow-y-auto">{days}</div>
       </div>
@@ -633,7 +672,15 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                         return (
                           <React.Fragment key={task.id}>
                             {isInteracting && <div className="absolute rounded-lg border-2 border-dashed border-gray-300 z-0 pointer-events-none opacity-40" style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%` }} />}
-                            <div onMouseDown={(e) => handleInteractionStart(e, task, 'move', date, startDate, numDays, dayIndex)} onClick={(e) => { e.stopPropagation(); if (!hasMoved.current) handleSelection(e, task.id); }} onDoubleClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }} className={`task-bubble absolute rounded-lg border-l-4 shadow-sm p-1.5 transition-all overflow-hidden group/box ${isInteracting ? 'z-50 opacity-70 shadow-xl scale-[1.02] cursor-move' : 'z-10 hover:shadow-md cursor-pointer'}`} style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%`, backgroundColor: isSelected ? theme.color + '4D' : theme.color + '1A', borderColor: theme.color, userSelect: 'none' }}>
+                            <div onMouseDown={(e) => handleInteractionStart(e, task, 'move', date, startDate, numDays, dayIndex)} onClick={(e) => { e.stopPropagation(); if (!hasMoved.current) handleSelection(e, task.id); }} onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              isDoubleClick.current = true;
+                              if (doubleClickTimer.current) {
+                                clearTimeout(doubleClickTimer.current);
+                                doubleClickTimer.current = null;
+                              }
+                              setEditingTaskId(task.id);
+                            }} className={`task-bubble absolute rounded-lg border-l-4 shadow-sm p-1.5 transition-all overflow-hidden group/box ${isInteracting ? 'z-50 opacity-70 shadow-xl scale-[1.02] cursor-move' : 'z-10 hover:shadow-md cursor-pointer'}`} style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%`, backgroundColor: isSelected ? theme.color + '4D' : theme.color + '1A', borderColor: theme.color, userSelect: 'none' }}>
                               {isInteracting && <div className="task-tooltip absolute left-1/2 -translate-x-1/2 -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded shadow-2xl z-[100] whitespace-nowrap border border-slate-700">{formatTimeRange(startMin, dur)}</div>}
                               <div className="flex flex-col h-full pointer-events-none">
                                 {breadcrumbs && <div className="text-[9px] font-medium opacity-60 truncate leading-tight mb-0.5" style={{ color: theme.color }}>{breadcrumbs}</div>}

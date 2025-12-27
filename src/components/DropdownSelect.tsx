@@ -63,7 +63,9 @@ export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect
             setActiveIndex(prev => (prev <= 0 ? totalOptions - 1 : prev - 1));
         } else if (e.key === 'Enter') {
             e.preventDefault();
-            e.stopPropagation();
+            if (!(e.metaKey || e.ctrlKey)) {
+                e.stopPropagation();
+            }
             if (!isOpen) {
                 setIsOpen(true);
             } else {

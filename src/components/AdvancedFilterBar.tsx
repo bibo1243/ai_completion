@@ -1,11 +1,10 @@
 import { useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DropdownSelect } from './DropdownSelect';
-import { SmartDateInput } from './SmartDateInput';
 import { Tag, X } from 'lucide-react';
 
 export const AdvancedFilterBar = () => {
-    const { advancedFilters, setAdvancedFilters, tags, tagFilter, tasks } = useContext(AppContext);
+    const { advancedFilters, setAdvancedFilters, tags, tagFilter } = useContext(AppContext);
 
     if (!tagFilter) return null;
 
@@ -28,19 +27,11 @@ export const AdvancedFilterBar = () => {
         }));
     };
 
-    const handleStartDateChange = (date: string | null) => {
-        setAdvancedFilters(prev => ({ ...prev, startDate: date }));
-    };
-
-    const handleDueDateChange = (date: string | null) => {
-        setAdvancedFilters(prev => ({ ...prev, dueDate: date }));
-    };
-
     const clearFilters = () => {
         setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
     };
 
-    const hasFilters = advancedFilters.additionalTags.length > 0 || advancedFilters.startDate || advancedFilters.dueDate;
+    const hasFilters = advancedFilters.additionalTags.length > 0;
 
     return (
         <div className="px-8 py-3 border-b border-gray-50 bg-gray-50/30 flex items-center gap-4 relative z-20">
@@ -57,22 +48,6 @@ export const AdvancedFilterBar = () => {
                 onSelect={handleTagSelect}
                 multiSelect={true}
                 placeholder="Filter by sub-tags..."
-            />
-
-            {/* Start Date Filter */}
-            <SmartDateInput
-                label="Start Date"
-                value={advancedFilters.startDate}
-                onChange={handleStartDateChange}
-                tasks={tasks}
-            />
-
-            {/* Due Date Filter */}
-            <SmartDateInput
-                label="Due Date"
-                value={advancedFilters.dueDate}
-                onChange={handleDueDateChange}
-                tasks={tasks}
             />
 
             {hasFilters && (

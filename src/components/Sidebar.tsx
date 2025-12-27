@@ -1,6 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layout, Hash, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Star, Calendar, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal } from 'lucide-react';
+import { Layout, Hash, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Star, Calendar, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -25,8 +26,20 @@ interface TagTreeItem {
 }
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage } = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter } = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
+    const [isAltPressed, setIsAltPressed] = useState(false);
+    const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
+    useEffect(() => {
+        const down = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(true);
+        const up = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(false);
+        window.addEventListener('keydown', down);
+        window.addEventListener('keyup', up);
+        return () => {
+            window.removeEventListener('keydown', down);
+            window.removeEventListener('keyup', up);
+        }
+    }, []);
     const [isAddingTag, setIsAddingTag] = useState(false);
     const [addingSubTagTo, setAddingSubTagTo] = useState<string | null>(null);
     const [newTagName, setNewTagName] = useState('');
@@ -45,6 +58,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [editingTagId, setEditingTagId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
     const [popoverId, setPopoverId] = useState<string | null>(null);
+    const [popoverPosition, setPopoverPosition] = useState<{ top: number, left: number } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const settingsRef = useRef<HTMLDivElement>(null);
@@ -130,16 +144,49 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     };
 
     const sidebarTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
+    // Tag text now uses same size as sidebar text (previously was too small)
+    const tagTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
     const sidebarFontClass = themeSettings.fontWeight === 'thin' ? 'font-light' : '';
-    const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon }: any) => (
-        <button onClick={() => { setView(id); setTagFilter(null); }} className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-1.5 rounded-lg mb-0.5 transition-colors ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`} title={sidebarCollapsed ? label : ''}>
-            <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
-                {Icon && <Icon size={16} className={active ? 'text-indigo-600' : 'text-gray-400'} />}
-                {!sidebarCollapsed && <span>{label}</span>}
+    const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon }: any) => {
+        const allowSettings = ['focus', 'waiting', 'journal', 'prompt'].includes(id);
+        const [isHovered, setIsHovered] = useState(false);
+        const filter = viewTagFilters[id] || { include: [] as string[], exclude: [] as string[] };
+        // Handle legacy
+        const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+        const hasActiveFilters = include.length > 0 || exclude.length > 0;
+
+        return (
+            <div
+                className="relative group/nav-wrapper"
+                onMouseEnter={() => setIsHovered(true)}
+                onMouseLeave={() => setIsHovered(false)}
+            >
+                <button onClick={() => { setView(id); setTagFilter(null); }} className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-1.5 rounded-lg mb-0.5 transition-colors ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`} title={sidebarCollapsed ? label : ''}>
+                    <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
+                        {Icon && <Icon size={16} className={active ? 'text-indigo-600' : 'text-gray-400'} />}
+                        {!sidebarCollapsed && <span>{label}</span>}
+                        {!sidebarCollapsed && hasActiveFilters && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
+                        )}
+                    </div>
+                    {!sidebarCollapsed && <div className="flex gap-1.5 items-center"> {overdueCount > 0 && <span className="text-[10px] font-bold text-red-500">{overdueCount}</span>} {normalCount > 0 && <span className="text-[10px] text-gray-400">{normalCount}</span>} </div>}
+                </button>
+
+                {!sidebarCollapsed && allowSettings && isAltPressed && isHovered && (
+                    <button
+                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 shadow-sm rounded-full border border-gray-200 z-10"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingFilterView(id);
+                        }}
+                        title="設置標籤過濾"
+                    >
+                        <Settings size={10} />
+                    </button>
+                )}
             </div>
-            {!sidebarCollapsed && <div className="flex gap-1.5 items-center"> {overdueCount > 0 && <span className="text-[10px] font-bold text-red-500">{overdueCount}</span>} {normalCount > 0 && <span className="text-[10px] text-gray-400">{normalCount}</span>} </div>}
-        </button>
-    );
+        );
+    };
 
     const tagTree = useMemo(() => {
         const buildTree = (parentId: string | null, depth: number): TagTreeItem[] => {
@@ -347,17 +394,23 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onDragOver={(e) => handleDragOver(e, tag.id)}
                     onDrop={(e) => handleDrop(e, tag.id)}
                     onDragLeave={() => setDropTarget(null)}
-                    className={`relative group flex items-center gap-1 py-1 rounded pr-2 transition-all ${sidebarTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-gray-100 text-indigo-600 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
-                    style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 12 + 12}px` }}
-                    onClick={() => !isEditing && setTagFilter(tag.id)}
+                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-gray-100 text-indigo-600 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
+                    style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 6 + 6}px` }}
+                    onClick={() => {
+                        if (!isEditing) {
+                            setTagFilter(tag.id);
+                            setView('all');
+                            setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
+                        }
+                    }}
                     tabIndex={0}
                     onKeyDown={(e) => handleTagKeyDown(e, tag.id)}
                 >
                     {tag.children.length > 0 ? (
-                        <button onClick={(e) => toggleExpand(tag.id, e)} className="p-0.5 hover:bg-gray-200 rounded text-gray-400">
-                            {tag.isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        <button onClick={(e) => toggleExpand(tag.id, e)} className="p-0 hover:bg-gray-200 rounded text-gray-400">
+                            {tag.isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                         </button>
-                    ) : <div className="w-[16px]" />}
+                    ) : <div className="w-[10px]" />}
 
                     {isEditing ? (
                         <div className="flex items-center flex-1 gap-1">
@@ -374,7 +427,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         </div>
                     ) : (
                         <>
-                            <Hash size={12} style={{ color: tagsWithResolvedColors[tag.id] || '#94a3b8' }} />
+                            <Hash size={10} style={{ color: tagsWithResolvedColors[tag.id] || '#94a3b8' }} />
                             {!sidebarCollapsed && <span className="truncate flex-1 text-left">{tag.name}</span>}
                             {!sidebarCollapsed && (
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -385,10 +438,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             setNewTagName('');
                                             if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
                                         }}
-                                        className="p-1 hover:bg-gray-200 rounded text-gray-400"
+                                        className="p-0.5 hover:bg-gray-200 rounded text-gray-400"
                                         title={t('addSubTag')}
                                     >
-                                        <Plus size={12} />
+                                        <Plus size={10} />
                                     </button>
                                     <button
                                         onMouseDown={(e) => {
@@ -396,23 +449,27 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                         }}
                                         onClick={(e) => {
                                             e.stopPropagation();
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            setPopoverPosition({ top: rect.bottom + 4, left: rect.right - 208 }); // 208 = w-52 (13rem = 208px)
                                             setPopoverId(popoverId === tag.id ? null : tag.id);
                                         }}
-                                        className="p-1 hover:bg-gray-200 rounded text-gray-400"
+                                        className="p-0.5 hover:bg-gray-200 rounded text-gray-400"
                                     >
-                                        <MoreHorizontal size={12} />
+                                        <MoreHorizontal size={10} />
                                     </button>
                                 </div>
                             )}
 
-                            {popoverId === tag.id && (
+                            {/* Tag popover - rendered via portal to avoid sidebar clipping */}
+                            {popoverId === tag.id && popoverPosition && createPortal(
                                 <div
                                     ref={popoverRef}
-                                    className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-2xl border border-slate-200 p-3 z-[100] w-48 animate-in fade-in slide-in-from-top-1 duration-200"
+                                    className="fixed bg-white rounded-xl shadow-2xl border border-slate-200 p-3 w-52 animate-in fade-in slide-in-from-top-1 duration-200"
+                                    style={{ top: popoverPosition.top, left: Math.max(8, popoverPosition.left), zIndex: 99999 }}
                                     onClick={e => e.stopPropagation()}
                                 >
                                     <div className="mb-3">
-                                        <p className="text-[10px] font-bold text-gray-400 mb-2 uppercase">{t('tagStyle')}</p>
+                                        <p className="text-[9px] font-bold text-gray-400 mb-2 uppercase">{t('tagStyle')}</p>
                                         <div className="grid grid-cols-5 gap-1.5 focus:outline-none">
                                             {TAG_COLORS.map(c => (
                                                 <button
@@ -429,30 +486,31 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="space-y-1">
+                                    <div className="space-y-0.5">
                                         <button onClick={() => {
                                             setAddingSubTagTo(tag.id);
                                             setNewTagName('');
                                             setPopoverId(null);
                                             if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
-                                        }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-slate-600 font-medium">
-                                            <Plus size={12} /> {t('addSubTag')}
+                                        }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-gray-100 rounded text-[11px] text-slate-600 font-medium">
+                                            <Plus size={11} /> {t('addSubTag')}
                                         </button>
-                                        <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-slate-600 font-medium">
-                                            <Edit2 size={12} /> {t('rename')}
+                                        <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-gray-100 rounded text-[11px] text-slate-600 font-medium">
+                                            <Edit2 size={11} /> {t('rename')}
                                         </button>
-                                        <button onClick={() => { if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-red-50 rounded text-xs text-red-600 font-medium">
-                                            <Trash2 size={12} /> {t('deleteTag')}
+                                        <button onClick={() => { if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-red-50 rounded text-[11px] text-red-600 font-medium">
+                                            <Trash2 size={11} /> {t('deleteTag')}
                                         </button>
                                     </div>
-                                </div>
+                                </div>,
+                                document.body
                             )}
                         </>
                     )}
                 </div>
 
                 {addingSubTagTo === tag.id && (
-                    <div className="px-3 mb-1" style={{ paddingLeft: `${(tag.depth + 1) * 12 + 12}px` }}>
+                    <div className="px-1 mb-0.5" style={{ paddingLeft: `${(tag.depth + 1) * 6 + 6}px` }}>
                         <form onSubmit={(e) => handleAddTagAction(e, tag.id)} className="relative">
                             <input
                                 autoFocus
@@ -492,20 +550,20 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ARRANGE</p>}
-                    <NavItem id="focus" label="Focus" active={view === 'focus'} icon={Target} />
+                    <NavItem id="focus" label={t('focus')} active={view === 'focus'} icon={Target} />
                     <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today'} icon={Star} />
                     <NavItem id="schedule" label={t('upcoming')} active={view === 'schedule'} icon={Calendar} />
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ORGANIZE</p>}
                     <NavItem id="waiting" label={t('someday')} normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} />
-                    <NavItem id="journal" label="Journal" active={view === 'journal' && !tagFilter} icon={Book} />
-                    <NavItem id="prompt" label="Prompt" normalCount={counts.prompt} active={view === 'prompt'} icon={Sparkles} />
+                    <NavItem id="journal" label={t('journal')} active={view === 'journal' && !tagFilter} icon={Book} />
+                    <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Sparkles} />
                     <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} />
                     <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} />
                 </div>
-                <div className="mt-2">
-                    {!sidebarCollapsed && (
+                {!sidebarCollapsed && (
+                    <div className="mt-2">
                         <div className="flex items-center justify-between px-3 mb-2 group/tagheader">
                             <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">TAGS</p>
                             <button
@@ -516,58 +574,58 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 <Plus size={10} />
                             </button>
                         </div>
-                    )}
 
-                    <AnimatePresence>
-                        {isAddingTag && !sidebarCollapsed && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0, scale: 0.95 }}
-                                animate={{ height: 'auto', opacity: 1, scale: 1 }}
-                                exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                                className="px-3 overflow-hidden mb-2"
-                            >
-                                <form onSubmit={handleAddTagAction} className="relative">
-                                    <input
-                                        ref={newTagInputRef}
-                                        value={newTagName}
-                                        onChange={(e) => setNewTagName(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Escape') setIsAddingTag(false);
-                                            e.stopPropagation();
-                                        }}
-                                        onBlur={() => {
-                                            if (!newTagName.trim()) setIsAddingTag(false);
-                                        }}
-                                        placeholder="輸入標籤名稱..."
-                                        className="w-full text-xs py-1.5 px-2 bg-indigo-50/50 border border-indigo-100 rounded-md outline-none focus:ring-1 focus:ring-indigo-300 transition-all font-medium text-gray-700 placeholder:text-gray-300"
-                                    />
-                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                                        {newTagName.trim() && (
-                                            <button type="submit" className="text-indigo-500 hover:text-indigo-600">
-                                                <Check size={12} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </form>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                        <AnimatePresence>
+                            {isAddingTag && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0, scale: 0.95 }}
+                                    animate={{ height: 'auto', opacity: 1, scale: 1 }}
+                                    exit={{ height: 0, opacity: 0, scale: 0.95 }}
+                                    className="px-3 overflow-hidden mb-2"
+                                >
+                                    <form onSubmit={handleAddTagAction} className="relative">
+                                        <input
+                                            ref={newTagInputRef}
+                                            value={newTagName}
+                                            onChange={(e) => setNewTagName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Escape') setIsAddingTag(false);
+                                                e.stopPropagation();
+                                            }}
+                                            onBlur={() => {
+                                                if (!newTagName.trim()) setIsAddingTag(false);
+                                            }}
+                                            placeholder="輸入標籤名稱..."
+                                            className="w-full text-xs py-1.5 px-2 bg-indigo-50/50 border border-indigo-100 rounded-md outline-none focus:ring-1 focus:ring-indigo-300 transition-all font-medium text-gray-700 placeholder:text-gray-300"
+                                        />
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                            {newTagName.trim() && (
+                                                <button type="submit" className="text-indigo-500 hover:text-indigo-600">
+                                                    <Check size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </form>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
-                    <div className="space-y-0.5">
-                        {tagTree.map(tag => renderTag(tag))}
+                        <div className="space-y-0">
+                            {tagTree.map(tag => renderTag(tag))}
 
-                        {/* Ghost Tag Integration */}
-                        {!sidebarCollapsed && !isAddingTag && (
-                            <button
-                                onClick={() => setIsAddingTag(true)}
-                                className="w-full group flex items-center gap-1.5 px-3 py-1 text-gray-300 hover:text-gray-400 text-xs transition-colors transition-opacity opacity-0 hover:opacity-100"
-                            >
-                                <Plus size={10} />
-                                <span className="font-medium">{t('addTagPlaceholder')}</span>
-                            </button>
-                        )}
+                            {/* Ghost Tag Integration */}
+                            {!isAddingTag && (
+                                <button
+                                    onClick={() => setIsAddingTag(true)}
+                                    className="w-full group flex items-center gap-1.5 px-3 py-1 text-gray-300 hover:text-gray-400 text-xs transition-colors transition-opacity opacity-0 hover:opacity-100"
+                                >
+                                    <Plus size={10} />
+                                    <span className="font-medium">{t('addTagPlaceholder')}</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
+                )}
             </nav>
             <div className="mt-auto pt-4 border-t border-gray-200 relative">
                 <div className={`flex ${sidebarCollapsed ? 'justify-center flex-col gap-2' : 'justify-between'} items-center`}>
@@ -575,152 +633,205 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     <button onClick={() => setShowSettings(!showSettings)} aria-label="Settings" className="text-gray-400 hover:text-gray-600 p-1 rounded hover:bg-gray-100 transition-colors"><Settings size={14} /></button>
                 </div>
                 {showSettings && (
-                    <div ref={settingsRef} className="absolute bottom-full left-0 mb-2 w-full bg-white rounded-lg shadow-xl border border-gray-200 p-3 z-50 animate-in fade-in zoom-in duration-100">
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">{t('appearance')}</h3>
-                        <div className="space-y-3 mb-4">
-                            <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('language')}</span> </div>
-                                <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setLanguage('zh')} className={`flex-1 text-[10px] py-1 rounded ${language === 'zh' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '中文' : 'Chinese'}</button>
-                                    <button onClick={() => setLanguage('en')} className={`flex-1 text-[10px] py-1 rounded ${language === 'en' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '英文' : 'English'}</button>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontWeight')}</span> </div>
-                                <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontNormal')}</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontWeight: 'thin' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontWeight === 'thin' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontThin')}</button>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontSize')}</span> </div>
-                                <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeNormal')}</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeLarge')}</button>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontFamily')}</span> </div>
-                                <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'system' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'system' || !themeSettings.fontFamily ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontSystem')}</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'things' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'things' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontThings')}</button>
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('timeFormat')}</span> </div>
-                                <div className="flex bg-gray-100 rounded p-0.5">
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
-                                    <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '12h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '12h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>12H</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('calendarSettings')}</h3>
-                        <div className="mb-4 space-y-2">
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={themeSettings.showLunar}
-                                    onChange={(e) => setThemeSettings({ ...themeSettings, showLunar: e.target.checked })}
-                                    className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                />
-                                <span className="text-xs font-medium text-gray-600">{t('showLunar')}</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={themeSettings.showTaiwanHolidays}
-                                    onChange={(e) => setThemeSettings({ ...themeSettings, showTaiwanHolidays: e.target.checked })}
-                                    className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
-                                />
-                                <span className="text-xs font-medium text-gray-600">{t('showTaiwanHolidays')}</span>
-                            </label>
-                        </div>
-
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('aiSettings')}</h3>
-                        <div className="mb-4 space-y-3">
-                            {/* Provider Selector */}
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{t('provider')}</label>
-                                <select
-                                    value={aiSettings.provider}
-                                    onChange={(e) => setAiSettings(p => ({ ...p, provider: e.target.value }))}
-                                    className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
-                                >
-                                    <option value="gemini">Google Gemini</option>
-                                    <option value="openai">OpenAI Compatible (DeepSeek/Moonshot)</option>
-                                </select>
-                            </div>
-
-                            {aiSettings.provider === 'gemini' ? (
+                    <div ref={settingsRef} className="absolute bottom-full left-0 mb-2 w-full bg-white rounded-lg shadow-xl border border-gray-200 z-50 animate-in fade-in zoom-in duration-100 max-h-[60vh] overflow-y-auto">
+                        <div className="p-3">
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider">{t('appearance')}</h3>
+                            <div className="space-y-3 mb-4">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-gray-600">Gemini API Key</span>
-                                        <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-500 hover:underline">Get Key</a>
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('language')}</span> </div>
+                                    <div className="flex bg-gray-100 rounded p-0.5">
+                                        <button onClick={() => setLanguage('zh')} className={`flex-1 text-[10px] py-1 rounded ${language === 'zh' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '中文' : 'Chinese'}</button>
+                                        <button onClick={() => setLanguage('en')} className={`flex-1 text-[10px] py-1 rounded ${language === 'en' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '英文' : 'English'}</button>
                                     </div>
-                                    <input
-                                        type="password"
-                                        className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
-                                        placeholder="AIza..."
-                                        value={aiSettings.googleKey}
-                                        onChange={(e) => setAiSettings(p => ({ ...p, googleKey: e.target.value }))}
-                                    />
                                 </div>
-                            ) : (
-                                <>
-                                    <div>
-                                        <label className="block text-[10px] text-gray-600 mb-1">Base URL</label>
-                                        <input
-                                            type="text"
-                                            className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
-                                            placeholder="https://api.deepseek.com"
-                                            value={aiSettings.baseUrl}
-                                            onChange={(e) => setAiSettings(p => ({ ...p, baseUrl: e.target.value }))}
-                                        />
+                                <div>
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontSize')}</span> </div>
+                                    <div className="flex bg-gray-100 rounded p-0.5">
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeNormal')}</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeLarge')}</button>
                                     </div>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontFamily')}</span> </div>
+                                    <div className="flex bg-gray-100 rounded p-0.5">
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'system' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'system' || !themeSettings.fontFamily ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontSystem')}</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'things' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'things' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('fontThings')}</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('timeFormat')}</span> </div>
+                                    <div className="flex bg-gray-100 rounded p-0.5">
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '12h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '12h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>12H</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('calendarSettings')}</h3>
+                            <div className="mb-4 space-y-2">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={themeSettings.showLunar}
+                                        onChange={(e) => setThemeSettings({ ...themeSettings, showLunar: e.target.checked })}
+                                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                    />
+                                    <span className="text-xs font-medium text-gray-600">{t('showLunar')}</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={themeSettings.showTaiwanHolidays}
+                                        onChange={(e) => setThemeSettings({ ...themeSettings, showTaiwanHolidays: e.target.checked })}
+                                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                    />
+                                    <span className="text-xs font-medium text-gray-600">{t('showTaiwanHolidays')}</span>
+                                </label>
+                            </div>
+
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('aiSettings')}</h3>
+                            <div className="mb-4 space-y-3">
+                                {/* Provider Selector */}
+                                <div>
+                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">{t('provider')}</label>
+                                    <select
+                                        value={aiSettings.provider}
+                                        onChange={(e) => setAiSettings(p => ({ ...p, provider: e.target.value }))}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                    >
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="openai">OpenAI Compatible (DeepSeek/Moonshot)</option>
+                                    </select>
+                                </div>
+
+                                {aiSettings.provider === 'gemini' ? (
                                     <div>
-                                        <label className="block text-[10px] text-gray-600 mb-1">API Key</label>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-xs text-gray-600">Gemini API Key</span>
+                                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-500 hover:underline">Get Key</a>
+                                        </div>
                                         <input
                                             type="password"
                                             className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
-                                            placeholder="sk-..."
-                                            value={aiSettings.openaiKey}
-                                            onChange={(e) => setAiSettings(p => ({ ...p, openaiKey: e.target.value }))}
+                                            placeholder="AIza..."
+                                            value={aiSettings.googleKey}
+                                            onChange={(e) => setAiSettings(p => ({ ...p, googleKey: e.target.value }))}
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] text-gray-600 mb-1">Model Name</label>
-                                        <input
-                                            type="text"
-                                            className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
-                                            placeholder="e.g. deepseek-chat"
-                                            value={aiSettings.modelName}
-                                            onChange={(e) => setAiSettings(p => ({ ...p, modelName: e.target.value }))}
-                                        />
-                                    </div>
-                                </>
-                            )}
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-600 mb-1">Base URL</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                                placeholder="https://api.deepseek.com"
+                                                value={aiSettings.baseUrl}
+                                                onChange={(e) => setAiSettings(p => ({ ...p, baseUrl: e.target.value }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-600 mb-1">API Key</label>
+                                            <input
+                                                type="password"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                                placeholder="sk-..."
+                                                value={aiSettings.openaiKey}
+                                                onChange={(e) => setAiSettings(p => ({ ...p, openaiKey: e.target.value }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] text-gray-600 mb-1">Model Name</label>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                                placeholder="e.g. deepseek-chat"
+                                                value={aiSettings.modelName}
+                                                onChange={(e) => setAiSettings(p => ({ ...p, modelName: e.target.value }))}
+                                            />
+                                        </div>
+                                    </>
+                                )}
 
-                            <button onClick={saveAiSettings} className="w-full bg-indigo-600 text-white px-2 py-1.5 rounded text-xs hover:bg-indigo-700 transition-colors font-medium">Save Settings</button>
-                        </div>
+                                <button onClick={saveAiSettings} className="w-full bg-indigo-600 text-white px-2 py-1.5 rounded text-xs hover:bg-indigo-700 transition-colors font-medium">Save Settings</button>
+                            </div>
 
-                        <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">Data</h3>
-                        <div className="space-y-1">
-                            <button onClick={() => { if (confirm(language === 'zh' ? "確定要刪除所有任務嗎？此動作將會先自動下載備份。" : "Are you sure you want to delete all tasks? A backup will be downloaded first.")) clearAllTasks(); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Trash2 size={12} /> {language === 'zh' ? '刪除所有任務' : 'Delete All Tasks'}
-                            </button>
-                            <button onClick={exportData} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Download size={12} /> {language === 'zh' ? '備份資料' : 'Backup Data'}
-                            </button>
-                            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                <Upload size={12} /> {language === 'zh' ? '導匯入資料' : 'Import Data'}
-                            </button>
-                            <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">Data</h3>
+                            <div className="space-y-1">
+                                <button onClick={() => { if (confirm(language === 'zh' ? "確定要刪除所有任務嗎？此動作將會先自動下載備份。" : "Are you sure you want to delete all tasks? A backup will be downloaded first.")) clearAllTasks(); }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Trash2 size={12} /> {language === 'zh' ? '刪除所有任務' : 'Delete All Tasks'}
+                                </button>
+                                <button onClick={exportData} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Download size={12} /> {language === 'zh' ? '備份資料' : 'Backup Data'}
+                                </button>
+                                <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Upload size={12} /> {language === 'zh' ? '導匯入資料' : 'Import Data'}
+                                </button>
+                                <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
+                            </div>
                         </div>
                     </div>
                 )}
             </div>
+
+            {/* Filter Configuration Modal */}
+            {editingFilterView && createPortal(
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999] flex items-center justify-center" onClick={() => setEditingFilterView(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-80 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                            <h3 className="font-bold text-gray-700">自定義顯示標籤</h3>
+                            <button onClick={() => setEditingFilterView(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                        </div>
+                        <div className="p-2 overflow-y-auto flex-1 text-sm">
+                            <p className="px-2 py-2 text-xs text-gray-500 mb-2 bg-yellow-50 rounded border border-yellow-100">
+                                點擊切換：包含 (綠色) / 排除 (紅色) / 無。
+                            </p>
+                            <div className="space-y-1">
+                                {tags.map((tag: any) => {
+                                    const current = viewTagFilters[editingFilterView] || { include: [] as string[], exclude: [] as string[] };
+                                    const { include, exclude } = Array.isArray(current) ? { include: current, exclude: [] as string[] } : current;
+
+                                    const isIncluded = include.includes(tag.id);
+                                    const isExcluded = exclude.includes(tag.id);
+
+                                    return (
+                                        <div key={tag.id} className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded cursor-pointer select-none" onClick={() => {
+                                            let nextInclude = [...include];
+                                            let nextExclude = [...exclude];
+
+                                            if (isIncluded) {
+                                                // Included -> Excluded
+                                                nextInclude = nextInclude.filter(id => id !== tag.id);
+                                                nextExclude.push(tag.id);
+                                            } else if (isExcluded) {
+                                                // Excluded -> None
+                                                nextExclude = nextExclude.filter(id => id !== tag.id);
+                                            } else {
+                                                // None -> Included
+                                                nextInclude.push(tag.id);
+                                            }
+                                            updateViewTagFilter(editingFilterView, { include: nextInclude, exclude: nextExclude });
+                                        }}>
+                                            <div className="w-5 h-5 flex items-center justify-center">
+                                                {isIncluded && <CheckCircle2 size={16} className="text-green-500" />}
+                                                {isExcluded && <XCircle size={16} className="text-red-500" />}
+                                                {!isIncluded && !isExcluded && <div className="w-4 h-4 rounded-full border border-gray-300"></div>}
+                                            </div>
+                                            <span style={{ color: tagsWithResolvedColors[tag.id] }}>#</span>
+                                            <span>{tag.name}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className="p-3 border-t border-gray-100 flex justify-end">
+                            <button onClick={() => setEditingFilterView(null)} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">完成</button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </aside>
     );
 };

@@ -192,10 +192,32 @@ const executeOpenAIRequest = async (prompt: string, expectJson: boolean = true):
 
 const executeGeminiSimpleRequest = async (prompt: string): Promise<string> => {
   const genAI = getGenAIModel();
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-  const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text().trim();
+  const modelsToTry = [
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-001",
+    "gemini-2.0-flash-lite-preview-02-05",
+    "gemini-1.5-pro",
+    "gemini-pro"
+  ];
+
+  let lastError;
+
+  for (const modelName of modelsToTry) {
+    try {
+      console.log(`[SimpleAI] Attempting to use model: ${modelName}`);
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      if (text) return text.trim();
+    } catch (e) {
+      console.warn(`[SimpleAI] Model ${modelName} failed:`, e);
+      lastError = e;
+      continue;
+    }
+  }
+
+  throw lastError || new Error("All AI models failed to respond");
 };
 
 const executeSimpleAIRequest = async (prompt: string): Promise<string> => {
@@ -215,8 +237,8 @@ const executeAIRequest = async (prompt: string): Promise<any> => {
   return await executeGeminiRequest(prompt);
 };
 
-export const polishContent = async (content: string, currentTitle: string): Promise<AIResponse> => {
-  const prompt = `
+export const polishContent = async (content: string, currentTitle: string, customPrompt?: string): Promise<AIResponse> => {
+  const defaultPrompt = `
     You are a professional editor with a gentle, helpful personality (similar to Things 3's design language). 
     Please review the following text (which is a journal entry or task description) and the current title.
     
@@ -241,6 +263,35 @@ export const polishContent = async (content: string, currentTitle: string): Prom
     ENSURE ALL OUTPUT IS IN TRADITIONAL CHINESE (繁體中文).
   `;
 
+  const customInstructionPrompt = `
+    You are a professional editor. Please review the following text and current title according to the custom instruction provided.
+    
+    Current Title: "${currentTitle}"
+    Content:
+    "${content}"
+    
+    Custom Instruction:
+    "${customPrompt}"
+    
+    Tasks:
+    1. Follow the custom instruction to improve the title in Traditional Chinese (繁體中文).
+    2. Follow the custom instruction to improve the content in Traditional Chinese (繁體中文).
+    3. Provide a brief summary of what you changed in Traditional Chinese (繁體中文).
+    
+    Output JSON format ONLY:
+    {
+      "newTitle": "Improved Title (Traditional Chinese)",
+      "newContent": "Improved Content (Traditional Chinese)",
+      "summary": "Summary of changes (Traditional Chinese)"
+    }
+    
+    If the content is HTML, preserve the HTML structure/tags in "newContent" but improve the text inside.
+    If the content is plain text, keep it plain text.
+    ENSURE ALL OUTPUT IS IN TRADITIONAL CHINESE (繁體中文).
+  `;
+
+  const prompt = customPrompt && customPrompt.trim() ? customInstructionPrompt : defaultPrompt;
+
   try {
     if (!content.trim()) throw new Error("Content is empty");
     return await executeAIRequest(prompt);
@@ -264,18 +315,22 @@ export const askAIAssistant = async (content: string, currentTitle: string, cust
 
   const finalInstruction = (customPrompt && customPrompt.trim()) ? customPrompt : defaultBasePrompt;
 
+  const isStrictPolish = customPrompt?.includes("請僅提供潤飾後的文字") || customPrompt?.includes("嚴格限制純粹潤飾文字");
+
+  // Only include title section if title is provided
+  const titleSection = currentTitle.trim()
+    ? `【目標內容標題】：\n"${currentTitle}"\n\n`
+    : '';
+
   const finalPrompt = `【系統指令】：
 ${finalInstruction}
 
-【目標內容標題】：
-"${currentTitle}"
-
-【目標內容備註】：
+${titleSection}【目標內容備註】：
 "${content}"
 
 要求：
-1. 請提供詳盡、完整且具備實質價值的回答。
-2. 針對內容中的細節進行具體展開與深度分析。
+1. ${isStrictPolish ? '請嚴格遵守指令，僅輸出潤飾、校對後的內文正文（務必檢查並修正內容中的錯別字與標點符號），絕對不要包含任何「以下是潤飾後的內容」、「好的」、「沒問題」等開場白或感想、說明。' : '請提供詳盡、完整且具備實質價值的回答。'}
+2. ${isStrictPolish ? '確保輸出的內容必須僅有正文本身，且語氣自然流暢。' : '針對內容中的細節進行具體展開與深度分析。'}
 3. 語氣專業、同理且具啟發性。
 4. 使用繁體中文（Traditional Chinese）。
 5. 回應必須封裝在 JSON 格式中：
@@ -304,5 +359,67 @@ export const generatePromptTitle = async (promptText: string): Promise<string> =
   } catch (error) {
     console.error("Generate Prompt Title Error:", error);
     return promptText.slice(0, 15) + (promptText.length > 15 ? "..." : "");
+  }
+};
+
+export const generateSEOTitle = async (noteContent: string, customInstruction?: string): Promise<string> => {
+  // Truncate content if too long (avoid token limits)
+  const truncatedContent = noteContent.length > 3000
+    ? noteContent.slice(0, 3000) + '...'
+    : noteContent;
+
+  let prompt: string;
+
+  if (customInstruction) {
+    prompt = `${customInstruction}
+
+以下是需要處理的文章內容：
+---
+${truncatedContent}
+---
+
+請依據上述指令直接輸出結果（只輸出標題本身，不要加引號）：`;
+  } else {
+    prompt = `你是一位SEO和內容行銷專家。請仔細閱讀以下文章內容，深入理解其主旨和核心觀點，然後生成一個SEO優化的標題。
+
+重要要求：
+1. 你必須「總結」整篇文章的核心主題，而不是直接複製文章開頭的文字
+2. 標題長度控制在15-30個中文字之間
+3. 標題要包含文章的核心關鍵字
+4. 標題要吸引眼球、引發讀者好奇心和點擊欲望
+5. 可以使用數字、問句、或情感詞彙來增加吸引力
+6. 使用繁體中文
+7. 只輸出標題本身，不要加引號、編號或任何說明
+
+範例格式（僅供參考風格，請根據實際內容生成）：
+- "5個提升工作效率的必備技巧"
+- "為什麼90%的人都做錯了這件事？"
+- "一次搞懂：專家教你掌握核心要點"
+
+以下是需要總結的文章內容：
+---
+${truncatedContent}
+---
+
+請直接輸出SEO優化標題：`;
+  }
+
+  console.log("Generating SEO title for content length:", noteContent.length);
+
+  try {
+    const result = await executeSimpleAIRequest(prompt);
+    console.log("SEO Title AI result:", result);
+    // Clean up the result - remove quotes, numbers, extra whitespace
+    const cleanedResult = result
+      .trim()
+      .replace(/^["「『]/g, '')
+      .replace(/["」』]$/g, '')
+      .replace(/^\d+[\.\、\s]+/, '')
+      .replace(/^標題[:：]\s*/i, '')
+      .trim();
+    return cleanedResult || result.trim();
+  } catch (error) {
+    console.error("Generate SEO Title Error:", error);
+    throw error; // Let the UI handle the error instead of returning a bad fallback
   }
 };

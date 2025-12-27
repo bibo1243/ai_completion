@@ -92,6 +92,9 @@ export const AppContext = createContext<{
     language: 'zh' | 'en';
     setLanguage: (lang: 'zh' | 'en') => void;
     t: (key: string) => string;
+
+    viewTagFilters: Record<string, { include: string[], exclude: string[] }>;
+    updateViewTagFilter: (view: string, filter: { include: string[], exclude: string[] }) => void;
 }>({} as any);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
@@ -110,6 +113,35 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const saved = localStorage.getItem(`expanded_tasks_${user?.id}`);
         return saved ? JSON.parse(saved) : [];
     });
+    const [viewTagFilters, setViewTagFilters] = useState<Record<string, { include: string[], exclude: string[] }>>({});
+
+    // Load viewTagFilters
+    useEffect(() => {
+        const stored = localStorage.getItem('viewTagFilters');
+        if (stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                // Migration logic: convert array to object
+                const migrated: Record<string, { include: string[], exclude: string[] }> = {};
+                Object.keys(parsed).forEach(key => {
+                    if (Array.isArray(parsed[key])) {
+                        migrated[key] = { include: parsed[key], exclude: [] };
+                    } else {
+                        migrated[key] = parsed[key];
+                    }
+                });
+                setViewTagFilters(migrated);
+            } catch (e) { console.error('Failed to parse viewTagFilters', e); }
+        }
+    }, []);
+
+    const updateViewTagFilter = (view: string, filter: { include: string[], exclude: string[] }) => {
+        setViewTagFilters(prev => {
+            const next = { ...prev, [view]: filter };
+            localStorage.setItem('viewTagFilters', JSON.stringify(next));
+            return next;
+        });
+    };
 
     // Helper to get resolved tag color with inheritance
     const tagsWithResolvedColors = useMemo(() => {
@@ -344,6 +376,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                             ...t,
                             tags: t.tags || [],
                             images: t.images || [],
+                            attachments: t.attachments || [],
+                            attachment_links: t.attachment_links || [],
                             view_orders: t.view_orders || {}
                         }));
                         setTasks(normalizedTasks);
@@ -366,6 +400,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     ...payload.new,
                     tags: payload.new.tags || [],
                     images: payload.new.images || [],
+                    attachments: payload.new.attachments || [],
+                    attachment_links: payload.new.attachment_links || [],
                     view_orders: payload.new.view_orders || {}
                 };
                 setTasks(prev => {
@@ -378,6 +414,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     ...payload.new,
                     tags: payload.new.tags || [],
                     images: payload.new.images || [],
+                    attachments: payload.new.attachments || [],
+                    attachment_links: payload.new.attachment_links || [],
                     view_orders: payload.new.view_orders || {}
                 };
                 setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t).sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at)));
@@ -575,7 +613,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const navigateToTask = (targetId: string) => { setNavStack(prev => [...prev, { view, focusedId: focusedTaskId }]); setView('all'); setFocusedTaskId(targetId); let curr = tasks.find(t => t.id === targetId); while (curr && curr.parent_id) { if (!expandedTaskIds.includes(curr.parent_id)) toggleExpansion(curr.parent_id, true); curr = tasks.find(t => t.id === curr?.parent_id); } };
     const navigateBack = () => { if (navStack.length === 0) return; const last = navStack[navStack.length - 1]; if (['next', 'projects', 'all'].includes(last.view)) { setNavStack(prev => prev.slice(0, -1)); setView('all'); return; } setNavStack(prev => prev.slice(0, -1)); setView(last.view); setFocusedTaskId(last.focusedId); };
 
-    const calculateVisibleTasks = useCallback((currentTasks: TaskData[], currentView: string, currentFilter: string | null, currentExpanded: string[], currentAdvancedFilters: { additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }) => {
+    const calculateVisibleTasks = useCallback((currentTasks: TaskData[], currentView: string, currentFilter: string | null, currentExpanded: string[], currentAdvancedFilters: { additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }, currentViewTagFilters: Record<string, { include: string[], exclude: string[] }>) => {
         const promptTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt')?.id;
         const journalTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'journal')?.id;
         const inspirationTagId = tags.find(tg => tg.name.includes('靈感'))?.id;
@@ -693,6 +731,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     return true;
                 };
                 case 'waiting': return (t: TaskData) => {
+                    // View Tag Filters
+                    const filter = currentViewTagFilters['waiting'] || { include: [] as string[], exclude: [] as string[] };
+                    // Handle legacy
+                    const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+
+                    if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+                    if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
+
                     if (t.status === 'deleted' || t.status === 'logged') return false;
                     const isWaitingStatus = t.status === 'waiting';
                     const isInspiration = inspirationTagId && t.tags.includes(inspirationTagId);
@@ -701,6 +747,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 case 'prompt': return (t: TaskData) => {
                     const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
                     if (!promptTag) return false;
+
+                    // View Tag Filters
+                    const filter = currentViewTagFilters['prompt'] || { include: [] as string[], exclude: [] as string[] };
+                    // Handle legacy
+                    const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+
+                    if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+                    if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
+
                     return t.status !== 'deleted' && t.status !== 'logged' && t.tags.includes(promptTag.id);
                 };
                 case 'log': return (t: TaskData) => t.status === 'logged';
@@ -740,7 +795,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return flatten(roots);
     }, [tags]);
 
-    const visibleTasks = useMemo(() => { return calculateVisibleTasks(tasks, view, tagFilter, expandedTaskIds, advancedFilters); }, [tasks, view, tagFilter, expandedTaskIds, advancedFilters, calculateVisibleTasks]);
+    const visibleTasks = useMemo(() => { return calculateVisibleTasks(tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters); }, [tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters, calculateVisibleTasks]);
 
 
     const handleSelection = (e: React.MouseEvent | React.KeyboardEvent, id: string) => {
@@ -874,23 +929,35 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
         }
         else if (direction === 'right') {
-            // Find the current task in the visible list
-            const currentVisibleIndex = visibleTasks.findIndex(vt => vt.data.id === id);
-            if (currentVisibleIndex <= 0) return; // Can't indent if it's the first visible task
+            // Find the current task in the visible list to get its depth
+            const currentFlatIdx = visibleTasks.findIndex(vt => vt.data.id === id);
+            if (currentFlatIdx <= 0) return;
+            const currentFlat = visibleTasks[currentFlatIdx];
 
-            // Find the previous visible task (this is the visual predecessor)
-            const prevVisibleTask = visibleTasks[currentVisibleIndex - 1];
-            const newParentId = prevVisibleTask.data.id;
+            // Correct Indent Logic: New parent should be the closest preceding task at the SAME depth
+            let newParentId = null;
+            for (let i = currentFlatIdx - 1; i >= 0; i--) {
+                if (visibleTasks[i].depth === currentFlat.depth) {
+                    newParentId = visibleTasks[i].data.id;
+                    break;
+                }
+                // If we hit a shallower depth before finding a same-depth sibling, we can't indent at this level
+                if (visibleTasks[i].depth < currentFlat.depth) break;
+            }
 
-            // Get existing children of the new parent
-            const newSiblings = currentTasks.filter(t => t.parent_id === newParentId && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+            if (!newParentId) return;
+
+            // Get existing children of the new parent to determine order
+            const newSiblings = currentTasks.filter(t => t.parent_id === newParentId && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => getSortValue(a) - getSortValue(b));
             const lastChild = newSiblings[newSiblings.length - 1];
-            const newOrder = lastChild ? lastChild.order_index + 10000 : 10000;
+            const newOrder = lastChild ? getSortValue(lastChild) + 10000 : 10000;
 
             // Expand the new parent if it's not already expanded
             if (!expandedTaskIds.includes(newParentId)) { toggleExpansion(newParentId, true); }
 
-            applyBatchUpdates([{ id: movingTask.id, parent_id: newParentId, order_index: newOrder }]);
+            // Update both order_index and current view's order to prevent "ghost" state
+            const newViewOrders = { ...(movingTask.view_orders || {}), [view]: newOrder };
+            applyBatchUpdates([{ id: movingTask.id, parent_id: newParentId, order_index: newOrder, view_orders: newViewOrders }]);
             setToast({ msg: "已縮排", type: 'info' });
         }
         else if (direction === 'left') {
@@ -898,12 +965,21 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             const currentParent = currentTasks.find(t => t.id === movingTask.parent_id);
             if (!currentParent) return;
             const newParentId = currentParent.parent_id;
-            const parentSiblings = currentTasks.filter(t => t.parent_id === newParentId && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-            const parentIndex = parentSiblings.findIndex(t => t.id === currentParent.id);
-            const nextSibling = parentSiblings[parentIndex + 1];
+
+            // Place it after its former parent
+            const parentLevelSiblings = currentTasks.filter(t => t.parent_id === newParentId && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => getSortValue(a) - getSortValue(b));
+            const parentIndex = parentLevelSiblings.findIndex(t => t.id === currentParent.id);
+            const nextSibling = parentLevelSiblings[parentIndex + 1];
+
             let newOrder;
-            if (nextSibling) { newOrder = (currentParent.order_index + nextSibling.order_index) / 2; } else { newOrder = currentParent.order_index + 10000; }
-            applyBatchUpdates([{ id: movingTask.id, parent_id: newParentId, order_index: newOrder }]);
+            if (nextSibling) {
+                newOrder = (getSortValue(currentParent) + getSortValue(nextSibling)) / 2;
+            } else {
+                newOrder = getSortValue(currentParent) + 10000;
+            }
+
+            const newViewOrders = { ...(movingTask.view_orders || {}), [view]: newOrder };
+            applyBatchUpdates([{ id: movingTask.id, parent_id: newParentId, order_index: newOrder, view_orders: newViewOrders }]);
             setToast({ msg: "已升級", type: 'info' });
         }
     };
@@ -1165,7 +1241,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             focusSplitWidth, setFocusSplitWidth,
             reviewTask, restoreTask, emptyTrash,
             isCmdPressed, tagsWithResolvedColors,
-            language, setLanguage, t
+            language,
+            setLanguage,
+            t,
+            viewTagFilters,
+            updateViewTagFilter,
         }}>
             {children}
         </AppContext.Provider>
