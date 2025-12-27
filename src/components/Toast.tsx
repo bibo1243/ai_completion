@@ -21,7 +21,7 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
             if (isAutoCollapsing) {
                 setCollapsed(true);
             }
-        }, 3000); // Collapse after 3 seconds
+        }, 10000); // Collapse after 10 seconds
 
         return () => clearTimeout(timer);
     }, [toast, isAutoCollapsing]);
@@ -46,18 +46,17 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
         return (
             <div
                 onClick={handleExpand}
-                className="fixed bottom-8 right-8 z-50 cursor-pointer animate-in slide-in-from-bottom-4 duration-300"
+                className="fixed bottom-0 left-8 z-50 cursor-pointer transition-transform duration-300 hover:-translate-y-2 translate-y-[60%]"
+                title="Show Notification"
             >
                 <div className={`
-                    h-10 w-10 md:w-auto md:px-4 rounded-full shadow-lg flex items-center justify-center gap-2 border border-white/20 backdrop-blur-md
-                    ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-gray-900 text-white'}
-                    hover:scale-105 transition-all
+                    h-10 px-4 rounded-t-lg shadow-lg flex items-center justify-center gap-2 border-t border-x border-white/20 backdrop-blur-md
+                    ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'}
                 `}>
                     {getIcon()}
-                    <span className="hidden md:inline text-xs font-medium max-w-[150px] truncate">
-                        {toast.msg}
+                    <span className="text-xs font-bold">
+                        {toast.type === 'error' ? '錯誤' : '通知'}
                     </span>
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full border-2 border-white animate-pulse"></div>
                 </div>
             </div>
         );

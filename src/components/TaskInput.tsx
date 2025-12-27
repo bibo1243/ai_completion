@@ -429,6 +429,13 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                 deleteTask(initialData.id);
                 onClose(prevTask ? prevTask.data.id : null);
             }
+        } else if (onClose) {
+            // Quick Add Mode: Auto-save if has content, otherwise just close
+            if (title.trim() || desc.replace(/<[^>]*>/g, '').trim()) {
+                handleSubmit();
+            } else {
+                onClose(null);
+            }
         }
     });
 
@@ -479,9 +486,18 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     }, [initialData]);
 
     const handleSubmit = async () => {
-        if (!title.trim()) return;
+        // Allow saving if title is empty BUT description has content
+        let finalTitle = title.trim();
+        const plainDesc = desc.replace(/<[^>]*>/g, '').trim();
+
+        if (!finalTitle && plainDesc) {
+            finalTitle = plainDesc.split('\n')[0].substring(0, 30) || 'Untitled Note';
+        }
+
+        if (!finalTitle) return;
+
         const data = {
-            title, description: desc, due_date: dueDate, start_date: startDate,
+            title: finalTitle, description: desc, due_date: dueDate, start_date: startDate,
             parent_id: parentId, is_project: isProject || childIds.length > 0,
             tags: selectedTags, status: initialData?.status || 'inbox',
             color: effectiveColor,

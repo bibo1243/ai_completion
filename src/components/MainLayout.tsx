@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User, LogOut } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User, LogOut, Plus } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
@@ -160,6 +160,15 @@ export const MainLayout = () => {
             </div>
           </div>
         )}
+
+        {/* Floating Add Button */}
+        <button
+          onClick={() => setLocalQuickAdd(true)}
+          className="fixed bottom-8 right-8 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
+          title="Create New Task"
+        >
+          <Plus size={28} className="group-hover:rotate-90 transition-transform duration-200" />
+        </button>
 
         {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-16 p-4 md:pt-32 md:p-6 overflow-y-auto"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 md:p-6 mb-16"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
