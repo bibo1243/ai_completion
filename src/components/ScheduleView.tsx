@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback, useLayoutEffect } from 'react';
+import { useState, useEffect, useRef, useContext, useLayoutEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { isSameDay } from '../utils';
 import { Clock } from 'lucide-react';
@@ -11,7 +11,7 @@ const LOAD_THRESHOLD = 500; // Pixels from edge to trigger load
 export const ScheduleView = () => {
     const {
         calendarDate,
-        setCalendarDate,
+
     } = useContext(AppContext);
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -145,7 +145,7 @@ export const ScheduleView = () => {
                 </div>
 
                 {/* Day Columns */}
-                {days.map((day, i) => {
+                {days.map((day) => {
                     const isToday = isSameDay(day, now);
 
                     return (

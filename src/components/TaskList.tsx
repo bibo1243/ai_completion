@@ -227,7 +227,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     // Focus management after delete?
                     // Similar to TaskItem delete logic, we might want to focus next.
                     // But simpler is to just delete. List will update. focusedTaskId might need update if it was deleted.
-                    if (idsToDelete.includes(focusedTaskId)) {
+                    if (focusedTaskId && idsToDelete.includes(focusedTaskId)) {
                         // Find next task.
                         // Logic from TaskItem lines 67-84 is robust.
                         // For now, let's just delete. Focus might be lost or reset.
