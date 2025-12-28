@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2 } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
-import { TaskData, TaskColor } from '../types';
+import { TaskData, TaskColor, AIHistoryEntry } from '../types';
 import { COLOR_THEMES, ThemeColor } from '../constants';
 import { isDescendant } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
@@ -13,8 +13,86 @@ import { TagChip } from './TagChip';
 import { supabase } from '../supabaseClient';
 import imageCompression from 'browser-image-compression';
 import NoteEditor from './NoteEditor';
-import { askAIAssistant, AIAssistantResponse, generatePromptTitle, generateSEOTitle } from '../services/ai';
+import { askAIAssistant, generatePromptTitle, generateSEOTitle } from '../services/ai';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Helper to format AI response (Markdown) to HTML for Tiptap
+const formatAIResponseToHtml = (text: string): string => {
+    if (!text) return '';
+
+    let html = text;
+
+    // Bold: **text** -> <strong>text</strong>
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic: *text* -> <em>$1</em>
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Headers (simple)
+    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+
+    // Handle Lists - convert lines starting with "- " or "* " to bullet points
+    const lines = html.split('\n');
+    let inList = false;
+    let processedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const isListItem = /^[*-] /.test(line) || /^\d+\. /.test(line);
+
+        if (isListItem) {
+            if (!inList) {
+                processedLines.push('<ul>');
+                inList = true;
+            }
+            // Remove bullet marker
+            const content = line.replace(/^[*-] |^\d+\. /, '');
+            processedLines.push(`<li>${content}</li>`);
+        } else {
+            if (inList) {
+                processedLines.push('</ul>');
+                inList = false;
+            }
+            // Empty lines treated as paragraph breaks or spacers
+            if (line.trim() === '') {
+                // skip
+            } else if (!line.startsWith('<h')) {
+                processedLines.push(`<p>${line}</p>`);
+            } else {
+                processedLines.push(line);
+            }
+        }
+    }
+    if (inList) processedLines.push('</ul>');
+
+    return processedLines.join('');
+};
+
+// Helper to clean HTML for prompt preview (strip tags, keep newlines)
+const cleanHtml = (html: string): string => {
+    if (!html) return '';
+    // If doesn't look like HTML, return as is
+    if (!html.includes('<') || !html.includes('>')) return html;
+
+    let text = html;
+    // Replace block closers with newlines
+    text = text.replace(/<\/p>/gi, '\n');
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+    text = text.replace(/<\/div>/gi, '\n');
+
+    // Strip all tags
+    text = text.replace(/<[^>]+>/g, '');
+
+    // Decode common entities
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&amp;/g, '&');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+
+    return text.trim();
+};
 import ReactMarkdown from 'react-markdown';
 import { PresentationView } from './PresentationView';
 import { ParagraphAttachmentLinker } from './ParagraphAttachmentLinker';
@@ -49,6 +127,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const attachmentBtnRef = useRef<HTMLButtonElement>(null);
     const [focusedAttachmentUrl, setFocusedAttachmentUrl] = useState<string | null>(null);
     const editorRef = useRef<any>(null);
+    const lastFocusedRef = useRef<HTMLElement | null>(null);
     const [polishRange, setPolishRange] = useState<{ from: number, to: number } | null>(null);
     const [polishPosition, setPolishPosition] = useState<{ top: number, left: number } | null>(null);
     const [highlightRange, setHighlightRange] = useState<{ from: number, to: number } | null>(null);
@@ -64,7 +143,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const [searchResultsCount, setSearchResultsCount] = useState(0);
     const [saveToLibrary, setSaveToLibrary] = useState(false);
     const [polishModal, setPolishModal] = useState<{ isOpen: boolean, title: string, content: string, history: { title: string, content: string }[], historyIndex: number }>({ isOpen: false, title: '', content: '', history: [], historyIndex: -1 });
-    const [assistantResponse, setAssistantResponse] = useState<AIAssistantResponse | null>(null);
+
+    const [aiHistory, setAiHistory] = useState<AIHistoryEntry[]>(initialData?.ai_history || []);
+    const [historyIndex, setHistoryIndex] = useState<number>(initialData?.ai_history ? initialData.ai_history.length - 1 : -1);
+
     const [editableAssistantResponse, setEditableAssistantResponse] = useState<string>('');
     const [isEditingAssistant, setIsEditingAssistant] = useState(false);
     const [showAnalysis, setShowAnalysis] = useState(false);
@@ -278,9 +360,28 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             // When polishing selected text, don't include task title to prevent it from being modified
             const titleForAI = polishRange ? '' : title;
             const result = await askAIAssistant(contentToProcess, titleForAI, prompt);
-            setAssistantResponse(result);
+
+            const newEntry: AIHistoryEntry = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: result.fullResponse,
+                created_at: new Date().toISOString(),
+                prompt: prompt || 'AI Analysis',
+                model: 'gemini'
+            };
+
+            const newHistory = [...aiHistory, newEntry];
+            setAiHistory(newHistory);
+            setHistoryIndex(newHistory.length - 1);
+
+
             setEditableAssistantResponse(result.fullResponse);
             setIsEditingAssistant(false);
+            setCustomPrompt(''); // Clear prompt after success
+
+            if (initialData) {
+                updateTask(initialData.id, { ai_history: newHistory }, [], { skipHistory: true });
+            }
         } catch (error: any) {
             console.error(error);
             let errorMsg = error.message || "發生未知錯誤";
@@ -295,14 +396,28 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     };
 
     const handleAiAssistant = () => {
+        if (document.activeElement instanceof HTMLElement) {
+            lastFocusedRef.current = document.activeElement;
+        }
+
         if (!desc || !desc.trim()) {
             setToast?.({ msg: "Please enter some content first.", type: 'error' });
             return;
         }
-        if (showAnalysis && assistantResponse) {
+
+        // If already showing, toggle off
+        if (showAnalysis) {
             setShowAnalysis(false);
             return;
         }
+
+        // If has history, just show it (user can ask new Q via button in panel)
+        if (aiHistory.length > 0) {
+            setShowAnalysis(true);
+            return;
+        }
+
+        setCustomPrompt('');
         setIsPromptModalOpen(true);
     };
 
@@ -326,6 +441,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     }, [tasks, tags]);
 
     const executeTitleGeneration = async (customInstruction?: string) => {
+        if (document.activeElement instanceof HTMLElement) {
+            lastFocusedRef.current = document.activeElement;
+        }
+
         // Get note content as plain text
         let noteContent: string;
         if (editorRef.current) {
@@ -415,6 +534,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const theme: ThemeColor = COLOR_THEMES[effectiveColor] || COLOR_THEMES.blue;
 
     useClickOutside(containerRef, () => {
+        // Disable click outside for quick add (draggable modal)
+        if (isQuickAdd) return;
+
         // Don't close when AI prompt modal, analysis panel, or title preview is open (they're rendered via portal)
         if (isPromptModalOpen) return;
         if (showAnalysis && polishPosition) return;
@@ -507,7 +629,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             end_time: isAllDay ? null : endTime,
             duration: duration ? Number(duration) : null,
             attachments: attachments,
-            attachment_links: attachmentLinks
+            attachment_links: attachmentLinks,
+            ai_history: aiHistory
         };
 
         if (onClose) {
@@ -518,7 +641,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
         }
         else { resetForm(); }
 
-        if (initialData) { await updateTask(initialData.id, data, childIds, { skipHistory: true }); }
+        if (initialData) { await updateTask(initialData.id, data, childIds); }
         else { const newId = await addTask(data, childIds); setFocusedTaskId(newId); setSelectedTaskIds([newId]); }
     };
 
@@ -910,11 +1033,62 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             return;
         }
 
+        // Cmd/Win + Enter in NoteEditor -> Focus Title
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isInEditor) {
+            e.preventDefault();
+            e.stopPropagation();
+            titleRef.current?.focus();
+            return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
             // Allow Enter for newlines in textarea/contenteditable
             if ((e.target as HTMLElement).tagName === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
 
             e.preventDefault(); e.stopPropagation(); handleSubmit();
+        }
+
+        if (e.key === 'Escape') {
+            if (showAnalysis) {
+                e.preventDefault(); e.stopPropagation();
+                setShowAnalysis(false);
+                lastFocusedRef.current?.focus();
+                return;
+            }
+            if (showTitlePreview) {
+                e.preventDefault(); e.stopPropagation();
+                setShowTitlePreview(false);
+                lastFocusedRef.current?.focus();
+                return;
+            }
+            if (showSuggestions) {
+                e.preventDefault(); e.stopPropagation();
+                setShowSuggestions(false);
+                return;
+            }
+            if (isPromptModalOpen) {
+                e.preventDefault(); e.stopPropagation();
+                setIsPromptModalOpen(false);
+                lastFocusedRef.current?.focus();
+                return;
+            }
+            if (polishModal.isOpen) {
+                e.preventDefault(); e.stopPropagation();
+                setPolishModal((prev: any) => ({ ...prev, isOpen: false }));
+                return;
+            }
+            if (showDatePicker) {
+                e.preventDefault(); e.stopPropagation();
+                setShowDatePicker(false);
+                return;
+            }
+
+            // If in Note Editor, Esc should focus Title
+            if (isInEditor) {
+                e.preventDefault(); e.stopPropagation();
+                titleRef.current?.focus();
+                return;
+            }
         }
 
         if (e.key === 'Escape' && onClose) {
@@ -1129,6 +1303,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                             }}
                         >
                             {filteredPrompts.map((p, promptIndex) => {
+                                const cleanDesc = cleanHtml(p.description || '');
+
                                 const highlightText = (text: string, query: string, isTitle: boolean) => {
                                     if (!query.trim()) return text;
                                     const parts = text.split(new RegExp(`(${query})`, 'gi'));
@@ -1137,9 +1313,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                     // 計算這個提示詞之前有多少個匹配
                                     for (let i = 0; i < promptIndex; i++) {
                                         const prevPrompt = filteredPrompts[i];
+                                        const prevCleanDesc = cleanHtml(prevPrompt.description || '');
                                         const titleMatches = (prevPrompt.title.match(new RegExp(query, 'gi')) || []).length;
-                                        const descMatches = prevPrompt.description
-                                            ? (prevPrompt.description.match(new RegExp(query, 'gi')) || []).length
+                                        const descMatches = prevCleanDesc
+                                            ? (prevCleanDesc.match(new RegExp(query, 'gi')) || []).length
                                             : 0;
                                         globalMatchIndex += titleMatches + descMatches;
                                     }
@@ -1181,19 +1358,19 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                         key={p.id}
                                         type="button"
                                         onClick={() => {
-                                            setCustomPrompt(p.description || p.title);
+                                            setCustomPrompt(cleanDesc || p.title);
                                             setPromptSearchQuery('');
                                             setCurrentSearchIndex(0);
                                         }}
                                         className="flex-shrink-0 text-left text-[11px] p-2 rounded-xl hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 transition-all border border-slate-100 hover:border-indigo-100 shadow-sm bg-white active:scale-[0.98]"
-                                        title={p.description || p.title}
+                                        title={cleanDesc || p.title}
                                     >
                                         <div className="font-medium">
                                             {highlightText(p.title, promptSearchQuery, true)}
                                         </div>
-                                        {p.description && p.description !== p.title && (
-                                            <div className="text-[10px] text-gray-400 mt-0.5">
-                                                {highlightText(p.description, promptSearchQuery, false)}
+                                        {cleanDesc && cleanDesc !== p.title && (
+                                            <div className="text-[10px] text-gray-400 mt-0.5 whitespace-pre-wrap line-clamp-3">
+                                                {highlightText(cleanDesc, promptSearchQuery, false)}
                                             </div>
                                         )}
                                     </button>
@@ -1483,7 +1660,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                 zIndex: 99998
                                             } : {}}
                                         >
-                                            {!assistantResponse ? (
+                                            {isAssistantLoading ? (
                                                 <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                                                     <div className="relative">
                                                         <Brain size={32} className="text-indigo-400 animate-pulse" />
@@ -1498,106 +1675,194 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                         </div>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                                <div className="flex flex-col gap-4 h-full overflow-y-auto pr-1 pb-12 custom-scrollbar">
+                                            ) : aiHistory.length > 0 ? (
+                                                <div className="flex flex-col gap-2 h-full">
+                                                    {/* History Navigation */}
+                                                    <div className="flex items-center justify-between px-2 pt-2">
+                                                        <span className="text-xs font-bold text-slate-400 ml-1">
+                                                            紀錄 {historyIndex + 1} / {aiHistory.length}
+                                                        </span>
+                                                        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newIndex = Math.max(0, historyIndex - 1);
+                                                                    setHistoryIndex(newIndex);
+                                                                    setEditableAssistantResponse(aiHistory[newIndex].content);
+                                                                }}
+                                                                disabled={historyIndex === 0}
+                                                                className="p-1 hover:bg-white rounded-md disabled:opacity-30 transition-all text-slate-600"
+                                                                title="上一則"
+                                                            >
+                                                                <ChevronLeft size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newIndex = Math.min(aiHistory.length - 1, historyIndex + 1);
+                                                                    setHistoryIndex(newIndex);
+                                                                    setEditableAssistantResponse(aiHistory[newIndex].content);
+                                                                }}
+                                                                disabled={historyIndex === aiHistory.length - 1}
+                                                                className="p-1 hover:bg-white rounded-md disabled:opacity-30 transition-all text-slate-600"
+                                                                title="下一則"
+                                                            >
+                                                                <ChevronRight size={12} />
+                                                            </button>
+                                                            <div className="w-px h-3 bg-slate-300 mx-0.5"></div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newHistory = aiHistory.filter((_, i) => i !== historyIndex);
+                                                                    setAiHistory(newHistory);
+                                                                    if (newHistory.length === 0) {
+                                                                        // Do nothing, no entries left
+                                                                    } else {
+                                                                        const newIdx = Math.min(historyIndex, newHistory.length - 1);
+                                                                        setHistoryIndex(newIdx);
+                                                                        setEditableAssistantResponse(newHistory[newIdx].content);
+                                                                    }
+                                                                    if (initialData) {
+                                                                        updateTask(initialData.id, { ai_history: newHistory }, [], { skipHistory: true });
+                                                                    }
+                                                                }}
+                                                                className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-md transition-all"
+                                                                title="刪除此紀錄"
+                                                            >
+                                                                <Trash2 size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
                                                     {/* Assistant Insight Card */}
-                                                    <div className="bg-white rounded-2xl shadow-xl shadow-indigo-100/20 border border-indigo-50 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                                                    <div className="bg-white rounded-2xl shadow-xl shadow-indigo-100/20 border border-indigo-50 overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 flex-1">
                                                         {/* Card Header */}
-                                                        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4">
+                                                        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-3 shrink-0">
                                                             <div className="flex items-center justify-between">
                                                                 <div className="flex items-center gap-2 text-white">
                                                                     <Brain size={16} className="animate-pulse" />
-                                                                    <span className="text-xs font-bold tracking-wider">AI 靈感洞察</span>
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold tracking-wider">AI 靈感洞察</span>
+                                                                        <span className="text-[10px] text-indigo-100 opacity-80 truncate max-w-[200px]">
+                                                                            {aiHistory[historyIndex]?.prompt}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setShowAnalysis(false);
-                                                                        setPolishRange(null);
-                                                                    }}
-                                                                    className="text-white/60 hover:text-white transition-colors"
-                                                                >
-                                                                    <X size={14} />
-                                                                </button>
+                                                                <div className="flex items-center gap-1">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setCustomPrompt('');
+                                                                            setIsPromptModalOpen(true);
+                                                                        }}
+                                                                        className="p-1 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                                                                        title="新對話"
+                                                                    >
+                                                                        <Sparkles size={14} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setShowAnalysis(false);
+                                                                            setPolishRange(null);
+                                                                        }}
+                                                                        className="p-1 text-white/60 hover:text-white transition-colors"
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         </div>
 
-                                                        {/* Card Body */}
-                                                        <div className="p-5 flex flex-col gap-4">
+                                                        {/* Card Body - max-h set here */}
+                                                        <div className="p-4 flex flex-col gap-3 overflow-hidden flex-1">
                                                             {isEditingAssistant ? (
                                                                 <textarea
                                                                     value={editableAssistantResponse}
                                                                     onChange={(e) => setEditableAssistantResponse(e.target.value)}
-                                                                    className="w-full h-64 p-3 text-[13px] text-slate-700 leading-relaxed border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none"
+                                                                    className="w-full h-full min-h-[200px] p-3 text-[13px] text-slate-700 leading-relaxed border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none resize-none"
                                                                 />
                                                             ) : (
-                                                                <div className="markdown-content text-[13px] text-slate-700 leading-relaxed prose prose-sm prose-indigo max-w-none">
-                                                                    <ReactMarkdown>
-                                                                        {editableAssistantResponse}
-                                                                    </ReactMarkdown>
+                                                                <div className="max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                                                                    <div className="markdown-content text-[13px] text-slate-700 leading-relaxed prose prose-sm prose-indigo max-w-none">
+                                                                        <ReactMarkdown>
+                                                                            {aiHistory[historyIndex]?.content || ''}
+                                                                        </ReactMarkdown>
+                                                                    </div>
                                                                 </div>
                                                             )}
 
                                                             {/* Actions */}
-                                                            <div className="flex flex-col gap-2 pt-2 border-t border-slate-50">
+                                                            <div className="flex flex-col gap-2 pt-2 border-t border-slate-50 shrink-0">
                                                                 {isEditingAssistant ? (
                                                                     <div className="flex gap-2">
                                                                         <button
                                                                             onClick={() => {
+                                                                                // Update the history content with edits
+                                                                                const newHistory = [...aiHistory];
+                                                                                newHistory[historyIndex] = { ...newHistory[historyIndex], content: editableAssistantResponse };
+                                                                                setAiHistory(newHistory);
+                                                                                if (initialData) {
+                                                                                    updateTask(initialData.id, { ai_history: newHistory }, [], { skipHistory: true });
+                                                                                }
                                                                                 setIsEditingAssistant(false);
                                                                             }}
-                                                                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
+                                                                            className="flex-1 flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
                                                                         >
                                                                             <Check size={14} />
-                                                                            完成編輯
+                                                                            完成
                                                                         </button>
                                                                         <button
                                                                             onClick={() => {
-                                                                                setEditableAssistantResponse(assistantResponse?.fullResponse || '');
+                                                                                setEditableAssistantResponse(aiHistory[historyIndex]?.content || '');
                                                                                 setIsEditingAssistant(false);
                                                                             }}
-                                                                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all active:scale-95"
+                                                                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all active:scale-95"
                                                                         >
                                                                             取消
                                                                         </button>
                                                                     </div>
                                                                 ) : (
                                                                     <>
-                                                                        <button
-                                                                            onClick={() => setIsEditingAssistant(true)}
-                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
-                                                                        >
-                                                                            <Edit3 size={14} />
-                                                                            編輯內容
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={async () => {
-                                                                                const inspirationTag = tags.find(t => t.name.includes('靈感'))?.id || await addTag('靈感');
-                                                                                if (inspirationTag) {
-                                                                                    await addTask({
-                                                                                        title: `💡 靈感：${title || '未命名'}`,
-                                                                                        description: editableAssistantResponse,
-                                                                                        tags: [inspirationTag],
-                                                                                        status: 'active',
-                                                                                        color: 'purple'
-                                                                                    });
-                                                                                    setToast?.({ msg: '已儲存為靈感卡', type: 'info' });
-                                                                                }
-                                                                            }}
-                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
-                                                                        >
-                                                                            <Download size={14} />
-                                                                            儲存為靈感卡
-                                                                        </button>
+                                                                        <div className="grid grid-cols-2 gap-2">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditableAssistantResponse(aiHistory[historyIndex]?.content || '');
+                                                                                    setIsEditingAssistant(true);
+                                                                                }}
+                                                                                className="flex items-center justify-center gap-1.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[11px] font-bold transition-all border border-slate-200 active:scale-95"
+                                                                            >
+                                                                                <Edit3 size={13} />
+                                                                                編輯
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    const inspirationTag = tags.find(t => t.name.includes('靈感'))?.id || await addTag('靈感');
+                                                                                    if (inspirationTag) {
+                                                                                        await addTask({
+                                                                                            title: `💡 靈感：${title || '未命名'}`,
+                                                                                            description: aiHistory[historyIndex]?.content || '',
+                                                                                            tags: [inspirationTag],
+                                                                                            status: 'active',
+                                                                                            color: 'purple'
+                                                                                        });
+                                                                                        setToast?.({ msg: '已儲存為靈感卡', type: 'info' });
+                                                                                    }
+                                                                                }}
+                                                                                className="flex items-center justify-center gap-1.5 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-[11px] font-bold transition-all border border-purple-200 shadow-sm active:scale-95"
+                                                                            >
+                                                                                <Download size={13} />
+                                                                                存為靈感
+                                                                            </button>
+                                                                        </div>
                                                                         <button
                                                                             onClick={() => {
-                                                                                setDesc((prev: string) => prev + "\n\n--- AI 建議 ---\n" + editableAssistantResponse);
+                                                                                const newContent = aiHistory[historyIndex]?.content || '';
+                                                                                const formattedContent = formatAIResponseToHtml(newContent);
+                                                                                // Append as HTML
+                                                                                setDesc((prev: string) => prev + "<p><br><strong>--- AI 建議 ---</strong></p>" + formattedContent);
                                                                                 setToast?.({ msg: '內容已插入備註', type: 'info' });
                                                                                 setShowAnalysis(false);
                                                                             }}
-                                                                            className="flex items-center justify-center gap-2 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-bold transition-all border border-slate-200 active:scale-95"
+                                                                            className="flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-200 active:scale-95"
                                                                         >
                                                                             <ArrowRight size={14} />
-                                                                            插入到備註底部
+                                                                            插入到備註
                                                                         </button>
 
                                                                         {polishRange && (
@@ -1606,31 +1871,32 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                                                     if (editorRef.current) {
                                                                                         const editor = editorRef.current;
                                                                                         const from = polishRange.from;
-                                                                                        const to = from + editableAssistantResponse.length;
+                                                                                        const content = aiHistory[historyIndex]?.content || '';
+                                                                                        const formattedContent = formatAIResponseToHtml(content);
+                                                                                        const to = from; // We are inserting/replacing
 
                                                                                         // Insert the new content
-                                                                                        editor.commands.insertContentAt(polishRange, editableAssistantResponse);
+                                                                                        editor.commands.insertContentAt(polishRange, formattedContent);
 
-                                                                                        // Apply yellow highlight and position cursor at end
+                                                                                        // Apply yellow highlight
                                                                                         setTimeout(() => {
                                                                                             editor.chain()
                                                                                                 .setTextSelection({ from, to })
-                                                                                                .setHighlight({ color: '#fef08a' }) // Yellow highlighter
-                                                                                                .setTextSelection(to) // Position cursor at end
+                                                                                                .setHighlight({ color: '#fef08a' })
+                                                                                                .setTextSelection(to)
                                                                                                 .focus()
                                                                                                 .run();
 
-                                                                                            // Store the highlight range for removal on click outside
                                                                                             setHighlightRange({ from, to });
                                                                                         }, 50);
 
                                                                                         setPolishRange(null);
                                                                                         setPolishPosition(null);
                                                                                         setShowAnalysis(false);
-                                                                                        setToast?.({ msg: '已取代選中內容（黃色標註處，點擊其他處可移除標註）', type: 'info' });
+                                                                                        setToast?.({ msg: '已取代選中內容', type: 'info' });
                                                                                     }
                                                                                 }}
-                                                                                className="flex items-center justify-center gap-2 py-2.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl text-xs font-bold transition-all border border-green-200 shadow-sm active:scale-95"
+                                                                                className="flex items-center justify-center gap-2 py-2 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl text-xs font-bold transition-all border border-green-200 shadow-sm active:scale-95"
                                                                             >
                                                                                 <Check size={14} />
                                                                                 取代選中內容
@@ -1641,6 +1907,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                             </div>
                                                         </div>
                                                     </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                                                    {/* Default "Start" state if nothing loaded yet */}
+                                                    <Brain size={32} className="text-slate-300" />
+                                                    <span className="text-xs text-slate-400">點擊上方按鈕開始 AI 分析</span>
                                                 </div>
                                             )}
                                         </div>
@@ -2038,7 +2310,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                                 if (newPid) {
                                                     toggleExpansion(newPid, true);
                                                 }
-                                                await updateTask(initialData.id, { parent_id: newPid }, [], { skipHistory: true });
+                                                await updateTask(initialData.id, { parent_id: newPid }, []);
                                             }
                                         }}
                                     />
@@ -2065,42 +2337,46 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
             </div>
 
             {/* Full Screen Image Preview Modal */}
-            {previewImage && (
-                <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
-                    <div className="relative max-w-full max-h-full" onClick={e => e.stopPropagation()}>
-                        <img src={previewImage} alt="Preview" className="max-w-full max-h-[90vh] rounded-lg shadow-2xl" />
-                        <div className="absolute top-4 right-4 flex gap-2">
-                            <a href={previewImage} download={`attachment-${Date.now()}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-colors" title="Download"><Download size={20} /></a>
-                            <button onClick={() => setPreviewImage(null)} className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-colors"><X size={20} /></button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* AI Polish Review Modal */}
-            {polishModal.isOpen && (
-                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setPolishModal({ ...polishModal, isOpen: false })}>
-                    <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-bold text-gray-800 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /><span>{t('aiPolishSuggestions')}</span></h3>
-                            <div className="flex gap-1">
-                                <button onClick={undoPolish} disabled={polishModal.historyIndex <= 0} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('undo')}><Undo size={16} /></button>
-                                <button onClick={redoPolish} disabled={polishModal.historyIndex >= polishModal.history.length - 1} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('redo')}><Redo size={16} /></button>
+            {
+                previewImage && (
+                    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" onClick={() => setPreviewImage(null)}>
+                        <div className="relative max-w-full max-h-full" onClick={e => e.stopPropagation()}>
+                            <img src={previewImage} alt="Preview" className="max-w-full max-h-[90vh] rounded-lg shadow-2xl" />
+                            <div className="absolute top-4 right-4 flex gap-2">
+                                <a href={previewImage} download={`attachment-${Date.now()}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-colors" title="Download"><Download size={20} /></a>
+                                <button onClick={() => setPreviewImage(null)} className="p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm transition-colors"><X size={20} /></button>
                             </div>
                         </div>
-                        <div className="mb-4">
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedTitle')}</label>
-                            <input className="w-full p-2 mb-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none shadow-sm transition-all font-medium" value={polishModal.title} onChange={(e) => updatePolishTitle(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
-                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedContent')}</label>
-                            <textarea className="w-full h-40 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none leading-relaxed shadow-sm transition-all" value={polishModal.content} onChange={(e) => updatePolishContent(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
-                        </div>
-                        <div className="flex gap-3 justify-end">
-                            <button onClick={() => setPolishModal({ ...polishModal, isOpen: false })} className="px-4 py-1.5 text-gray-600 hover:bg-gray-100 rounded text-sm font-medium transition-colors">{t('cancel')}</button>
-                            <button onClick={() => { setTitle(polishModal.title); setDesc(polishModal.content); setPolishModal({ ...polishModal, isOpen: false, history: [], historyIndex: -1 }); setToast({ msg: t('aiPolishApplied'), type: 'info' }); }} className="px-4 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5"><Check size={14} strokeWidth={3} />{t('confirmReplace')}</button>
+                    </div>
+                )
+            }
+
+            {/* AI Polish Review Modal */}
+            {
+                polishModal.isOpen && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm" onClick={() => setPolishModal({ ...polishModal, isOpen: false })}>
+                        <div className="bg-white rounded-xl shadow-2xl p-6 max-w-lg w-full animate-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Sparkles size={18} className="text-indigo-500" /><span>{t('aiPolishSuggestions')}</span></h3>
+                                <div className="flex gap-1">
+                                    <button onClick={undoPolish} disabled={polishModal.historyIndex <= 0} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('undo')}><Undo size={16} /></button>
+                                    <button onClick={redoPolish} disabled={polishModal.historyIndex >= polishModal.history.length - 1} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500" title={t('redo')}><Redo size={16} /></button>
+                                </div>
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedTitle')}</label>
+                                <input className="w-full p-2 mb-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none shadow-sm transition-all font-medium" value={polishModal.title} onChange={(e) => updatePolishTitle(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{t('suggestedContent')}</label>
+                                <textarea className="w-full h-40 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none leading-relaxed shadow-sm transition-all" value={polishModal.content} onChange={(e) => updatePolishContent(e.target.value)} onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); e.stopPropagation(); if (e.shiftKey) redoPolish(); else undoPolish(); } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); e.stopPropagation(); redoPolish(); } }} />
+                            </div>
+                            <div className="flex gap-3 justify-end">
+                                <button onClick={() => setPolishModal({ ...polishModal, isOpen: false })} className="px-4 py-1.5 text-gray-600 hover:bg-gray-100 rounded text-sm font-medium transition-colors">{t('cancel')}</button>
+                                <button onClick={() => { setTitle(polishModal.title); setDesc(polishModal.content); setPolishModal({ ...polishModal, isOpen: false, history: [], historyIndex: -1 }); setToast({ msg: t('aiPolishApplied'), type: 'info' }); }} className="px-4 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] text-white rounded text-sm font-medium shadow-sm transition-colors flex items-center gap-1.5"><Check size={14} strokeWidth={3} />{t('confirmReplace')}</button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };

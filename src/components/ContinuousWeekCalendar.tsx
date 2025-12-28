@@ -24,21 +24,25 @@ interface WeekData {
 export const ContinuousWeekCalendar = () => {
     const {
         tasks,
-        updateTask,
+        batchUpdateTasks,
         addTask,
         setEditingTaskId,
         selectedTaskIds,
         setSelectedTaskIds,
-
+        constructionModeEnabled,
+        setConstructionModeEnabled,
         setCalendarDate,
         view,
-        viewTagFilters
+        viewTagFilters,
+        themeSettings
     } = useContext(AppContext);
 
     const containerRef = useRef<HTMLDivElement>(null);
+    const dragImageRef = useRef<HTMLDivElement>(null);
     const isPrependingRef = useRef(false);
     const [weeks, setWeeks] = useState<WeekData[]>([]);
     const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null);
+    const [dragOverDate, setDragOverDate] = useState<string | null>(null);
     const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
 
     const filteredTasks = React.useMemo(() => {
@@ -188,9 +192,11 @@ export const ContinuousWeekCalendar = () => {
     // 處理點擊
     const handleDateClick = async (date: Date, e: React.MouseEvent) => {
         const dateKey = date.toDateString();
-        if (selectedTaskIds.length > 0) {
+        // 只有在施工模式啟動時才能放置任務
+        if (constructionModeEnabled && selectedTaskIds.length > 0) {
             const ids = [...selectedTaskIds];
             if (e.altKey) {
+                // Alt+點擊：複製任務到該日期
                 for (const id of ids) {
                     const original = tasks.find((t: any) => t.id === id);
                     if (original) {
@@ -198,8 +204,14 @@ export const ContinuousWeekCalendar = () => {
                     }
                 }
             } else {
-                ids.forEach(id => updateTask(id, { start_date: date.toISOString() }));
+                // 使用 batchUpdateTasks 實現批量更新，支援統一還原
+                const updates = ids.map(id => ({
+                    id,
+                    data: { start_date: date.toISOString() }
+                }));
+                await batchUpdateTasks(updates);
                 setSelectedTaskIds([]);
+                setConstructionModeEnabled(false); // 放置後關閉施工模式
             }
             setPlacedDateFlash(dateKey);
             setTimeout(() => setPlacedDateFlash(null), 600);
@@ -267,7 +279,7 @@ export const ContinuousWeekCalendar = () => {
 
                                     const dayTasks = getTasksForDate(day.date);
                                     const isFlashing = placedDateFlash === day.date.toDateString();
-                                    const isHovered = selectedTaskIds.length > 0;
+                                    const isHovered = constructionModeEnabled && selectedTaskIds.length > 0;
 
                                     // 節假日資訊
                                     const holiday = getTaiwanHoliday(day.date);
@@ -284,14 +296,39 @@ export const ContinuousWeekCalendar = () => {
                                                 ${day.isToday
                                                     ? 'bg-indigo-50/40'
                                                     : (isWeekend
-                                                        ? 'bg-gray-50/60' // 週末背景稍微深一點
-                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-white' : 'bg-slate-50/30') // 平日奇偶月區分
+                                                        ? 'bg-gray-50/60'
+                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-white' : 'bg-slate-50/30')
                                                     )
                                                 }
                                                 ${isFlashing ? 'ring-4 ring-green-400 bg-green-50 animate-pulse z-20' : ''}
+                                                ${dragOverDate === day.date.toDateString() ? 'bg-indigo-100/60 ring-inset ring-2 ring-indigo-400 z-10 transition-colors duration-150' : ''}
                                                 ${isHovered ? 'cursor-pointer hover:ring-[1.5px] hover:ring-indigo-500 hover:shadow-sm hover:z-30 z-10' : ''}
-                                                ${!day.isToday && !isFlashing ? 'hover:bg-gray-100/50' : ''}
+                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() ? 'hover:bg-gray-100/50' : ''}
                                             `}
+                                            onDragEnter={() => setDragOverDate(day.date.toDateString())}
+                                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                setDragOverDate(null);
+                                                try {
+                                                    const data = e.dataTransfer.getData('application/json');
+                                                    const taskIds = JSON.parse(data);
+
+                                                    if (Array.isArray(taskIds) && taskIds.length > 0) {
+                                                        const newDate = new Date(day.date);
+                                                        newDate.setHours(9, 0, 0, 0);
+
+                                                        const updates = taskIds.map((id: string) => ({
+                                                            id,
+                                                            data: { start_date: newDate.toISOString() }
+                                                        }));
+
+                                                        batchUpdateTasks(updates);
+                                                    }
+                                                } catch (err) {
+                                                    console.error('Failed to parse drag data', err);
+                                                }
+                                            }}
                                             onClick={(e) => handleDateClick(day.date, e)}
                                             onDoubleClick={(e) => {
                                                 e.stopPropagation();
@@ -316,14 +353,16 @@ export const ContinuousWeekCalendar = () => {
                                                 <div className="flex items-start justify-between min-w-0">
                                                     {/* 農曆與節假日顯示 */}
                                                     <div className="flex flex-col leading-none pt-0.5 pl-0.5 max-w-[70%] text-left">
-                                                        {holiday && (
+                                                        {themeSettings.showTaiwanHolidays && holiday && (
                                                             <span className="text-[9px] font-bold truncate text-red-500">
                                                                 {holiday}
                                                             </span>
                                                         )}
-                                                        <span className={`text-[8px] truncate ${holiday ? 'text-gray-400' : 'text-gray-300'}`}>
-                                                            {lunar}
-                                                        </span>
+                                                        {themeSettings.showLunar && (
+                                                            <span className={`text-[8px] truncate ${holiday ? 'text-gray-400' : 'text-gray-300'}`}>
+                                                                {lunar}
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     <div className={`
@@ -355,6 +394,37 @@ export const ContinuousWeekCalendar = () => {
                                                         return (
                                                             <div
                                                                 key={task.id}
+                                                                draggable
+                                                                onDragStart={(e) => {
+                                                                    // Determine which tasks are being dragged
+                                                                    let idsToDrag = [task.id];
+                                                                    if (selectedTaskIds.includes(task.id)) {
+                                                                        idsToDrag = selectedTaskIds;
+                                                                    }
+
+                                                                    e.dataTransfer.setData('application/json', JSON.stringify(idsToDrag));
+                                                                    e.dataTransfer.effectAllowed = 'move';
+
+                                                                    // Visual Feedback: Custom Drag Image
+                                                                    if (dragImageRef.current) {
+                                                                        const countEl = dragImageRef.current.querySelector('#drag-ghost-count');
+                                                                        const titleEl = dragImageRef.current.querySelector('#drag-ghost-title');
+                                                                        const stack1 = dragImageRef.current.querySelector('#drag-ghost-stack-1') as HTMLElement;
+                                                                        const stack2 = dragImageRef.current.querySelector('#drag-ghost-stack-2') as HTMLElement;
+
+                                                                        if (countEl) countEl.textContent = idsToDrag.length.toString();
+                                                                        if (titleEl) titleEl.textContent = idsToDrag.length > 1
+                                                                            ? `${idsToDrag.length} Tasks Selected`
+                                                                            : task.title;
+
+                                                                        // Toggle stack visual
+                                                                        if (stack1) stack1.style.opacity = idsToDrag.length > 1 ? '1' : '0';
+                                                                        if (stack2) stack2.style.opacity = idsToDrag.length > 2 ? '1' : '0';
+
+                                                                        e.dataTransfer.setDragImage(dragImageRef.current, 0, 0);
+                                                                    }
+                                                                }}
+                                                                onDragEnd={() => setDragOverDate(null)}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     // 支援多選與單選
@@ -428,6 +498,30 @@ export const ContinuousWeekCalendar = () => {
             >
                 Today
             </button>
+
+            {/* Hidden Drag Ghost Image Template */}
+            <div
+                ref={dragImageRef}
+                className="fixed top-[-1000px] left-[-1000px] z-50 pointer-events-none"
+            >
+                <div className="bg-white/90 backdrop-blur-xl border border-indigo-200/50 p-3 rounded-xl shadow-2xl flex items-center gap-3 w-48 relative overflow-hidden ring-1 ring-black/5">
+                    {/* Decorative background gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 -z-10"></div>
+                    <div className="absolute right-0 top-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-2xl -mr-8 -mt-8"></div>
+
+                    <div id="drag-ghost-count" className="flex-shrink-0 w-8 h-8 bg-indigo-600 text-white rounded-lg flex items-center justify-center font-black text-sm shadow-indigo-200 shadow-lg transform rotate-[-6deg]">
+                        1
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-[10px] uppercase tracking-wider text-indigo-500 font-bold">Moving</span>
+                        <span id="drag-ghost-title" className="text-sm font-bold text-gray-700 truncate leading-tight">Task Title</span>
+                    </div>
+
+                    {/* Stack effect hints */}
+                    <div id="drag-ghost-stack-1" className="absolute top-1 left-1 w-full h-full bg-white/50 border border-gray-200/50 rounded-xl -z-20 transform rotate-2 scale-95 origin-center transition-opacity"></div>
+                    <div id="drag-ghost-stack-2" className="absolute top-2 left-2 w-full h-full bg-white/30 border border-gray-200/30 rounded-xl -z-30 transform rotate-4 scale-90 origin-center transition-opacity"></div>
+                </div>
+            </div>
         </div>
     );
 };

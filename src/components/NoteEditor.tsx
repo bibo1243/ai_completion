@@ -11,6 +11,9 @@ import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import { Sparkles } from 'lucide-react';
+import Details from '@tiptap/extension-details';
+import DetailsSummary from '@tiptap/extension-details-summary';
+import DetailsContent from '@tiptap/extension-details-content';
 
 
 // Custom extension to handle internal tab and Cmd+Enter exit
@@ -82,58 +85,17 @@ const KeyboardNavigation = (onExit?: () => void) => Extension.create({
                 // Stay false to let parent handle saving if needed
                 return false;
             },
-            'Backspace': ({ editor }) => {
-                const { state } = editor;
-                const { selection } = state;
-                const { $from } = selection;
-
-                // Check if we're in a list item
-                const isInList = $from.node(-1)?.type.name === 'listItem';
-
-                if (isInList) {
-                    // Check if cursor is at the start of the list item
-                    const isAtStart = $from.parentOffset === 0;
-
-                    if (isAtStart) {
-                        // Get the list item content
-                        const listItemNode = $from.node(-1);
-                        const listItemContent = listItemNode.textContent;
-
-                        // Get parent list type
-                        const parentList = $from.node(-2);
-                        const isOrderedList = parentList?.type.name === 'orderedList';
-
-                        // Lift the list item to convert it back to a paragraph
-                        const lifted = editor.commands.liftListItem('listItem');
-
-                        if (lifted) {
-                            // After lifting, insert the marker as plain text
-                            setTimeout(() => {
-                                if (isOrderedList) {
-                                    // Find the order number by counting previous siblings
-                                    let orderNumber = 1;
-                                    for (let i = 0; i < $from.index(-2); i++) {
-                                        orderNumber++;
-                                    }
-                                    editor.commands.insertContentAt(
-                                        editor.state.selection.from - listItemContent.length,
-                                        `${orderNumber}. `
-                                    );
-                                } else {
-                                    // Bullet list
-                                    editor.commands.insertContentAt(
-                                        editor.state.selection.from - listItemContent.length,
-                                        '- '
-                                    );
-                                }
-                            }, 0);
-
-                            return true;
-                        }
-                    }
+            'Mod-Alt-5': ({ editor }) => {
+                return editor.chain().focus().toggleBulletList().run();
+            },
+            'Mod-Alt-6': ({ editor }) => {
+                return editor.chain().focus().toggleOrderedList().run();
+            },
+            'Mod-Alt-7': ({ editor }) => {
+                if (editor.isActive('details')) {
+                    return editor.chain().focus().unsetDetails().run();
                 }
-
-                return false; // Let default backspace behavior continue
+                return editor.chain().focus().setDetails().run();
             },
         };
     },
@@ -232,10 +194,19 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 placeholder: placeholder || t('addNotePlaceholder'),
                 emptyEditorClass: 'is-editor-empty before:content-[attr(data-placeholder)] before:text-slate-300 before:float-left before:pointer-events-none before:h-0',
             }),
+
             TaskList,
             TaskItem.configure({
                 nested: true,
             }),
+            Details.configure({
+                persist: true,
+                HTMLAttributes: {
+                    class: 'details',
+                },
+            }),
+            DetailsSummary,
+            DetailsContent,
             KeyboardNavigation(onExit),
         ],
         content: initialContent,

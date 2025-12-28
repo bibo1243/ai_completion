@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useContext } from 'react';
-import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Clock } from 'lucide-react';
+import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
 import { INDENT_SIZE, COLOR_THEMES } from '../constants';
@@ -8,7 +8,7 @@ import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
 export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
-    const { updateTask, deleteTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, isCmdPressed, restoreTask, t, language } = useContext(AppContext);
+    const { updateTask, deleteTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, restoreTask, t, language } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +41,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.altKey && !e.ctrlKey && !e.metaKey) {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); }
-            if (view === 'focus' || isInReviewZone) return;
+            if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
             if (e.key === 'ArrowUp') { keyboardMove(task.id, 'up'); return; }
             if (e.key === 'ArrowDown') { keyboardMove(task.id, 'down'); return; }
             if (e.key === 'ArrowRight') { keyboardMove(task.id, 'right'); return; }
@@ -50,7 +50,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
 
         if (e.key === 'Tab') {
             e.preventDefault(); e.stopPropagation();
-            if (view === 'focus' || isInReviewZone) return;
+            if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
             if (e.shiftKey) {
                 if (canNavigateBack) { navigateBack(); }
                 else { keyboardMove(task.id, 'left'); }
@@ -165,14 +165,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
 
     const renderDateBadge = () => {
         if (!task.start_date && !task.start_time) return null;
-        if (isCmdPressed) {
-            if (task.start_time) {
-                const timeDisplay = task.end_time ? `${task.start_time} → ${task.end_time}` : task.start_time;
-                return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent bg-slate-50 text-indigo-500 font-bold flex items-center gap-1`}> <Clock size={10} /> {timeDisplay} </span>);
-            } else if (task.is_all_day) {
-                return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent bg-slate-50 text-indigo-500 font-bold flex items-center gap-1`}> <Clock size={10} /> 全天 </span>);
-            }
-        }
+        // if (isCmdPressed) block removed per user request
         if (!task.start_date) return null;
         const is_Today = isToday(task.start_date);
         const is_Overdue = isOverdue(task.start_date) && !isDone;
@@ -182,7 +175,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}> <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day, language)} </span>);
     };
 
-    const titleFontClass = themeSettings.fontWeight === 'thin' ? 'font-extralight' : 'font-medium';
+    const titleFontClass = isFocusView ? 'font-extralight' : (themeSettings.fontWeight === 'thin' ? 'font-extralight' : 'font-medium');
     const textSizeClass = { small: 'text-sm', normal: 'text-base', large: 'text-lg' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-base';
 
     // Generate breadcrumb path for Focus and Today views
@@ -207,11 +200,13 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         }
 
         if (pathParts.length === 0) return null;
-        return { path: pathParts.join(' / '), color: rootColor };
+        return { path: pathParts.join(' > '), color: rootColor };
     };
 
     const breadcrumbData = getBreadcrumbData();
-    const fontSizeClass = isFocusView ? 'text-xs' : textSizeClass;
+
+    // Dynamically set font size for Focus view (smaller) vs Standard
+    const fontSizeClass = isFocusView ? 'text-[10px]' : textSizeClass;
     const checkboxSize = isFocusView ? 12 : 14;
     const iconSize = isFocusView ? 12 : 16;
     const tagTextSize = isFocusView ? 'text-[8px]' : 'text-[10px]';
@@ -223,8 +218,8 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             ref={itemRef}
             data-task-id={task.id}
             data-task-index={flatTask.index}
-            draggable={view !== 'schedule' && view !== 'focus' && !isInReviewZone}
-            onDragStart={(e: any) => { if (view === 'focus' || isInReviewZone) { e.preventDefault(); return; } startDrag(e, flatTask); }}
+            draggable={view !== 'schedule' && view !== 'focus' && view !== 'upcoming' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
+            onDragStart={(e: any) => { if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) { e.preventDefault(); return; } startDrag(e, flatTask); }}
             className={finalClass}
             style={{ marginLeft: `${view === 'today' ? 0 : flatTask.depth * INDENT_SIZE}px` }}
             tabIndex={0}

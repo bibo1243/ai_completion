@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
 import { isSameDay } from '../utils';
 import { COLOR_THEMES } from '../constants';
@@ -10,7 +11,23 @@ const HOUR_HEIGHT = 60;
 type ViewMode = 'month' | 'week' | 'custom';
 
 export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode?: ViewMode, forcedNumDays?: number }) => {
-  const { user, tasks, updateTask, addTask, setEditingTaskId, themeSettings, selectedTaskIds, setSelectedTaskIds, handleSelection, calendarDate, setCalendarDate, dragState } = useContext(AppContext);
+  const { user, tasks, updateTask, addTask, setEditingTaskId, themeSettings, selectedTaskIds, setSelectedTaskIds, handleSelection, calendarDate, setCalendarDate, dragState, deleteTask, editingTaskId } = useContext(AppContext);
+
+  // Global key handler for Delete in Calendar View
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTaskId) {
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
+
+        if (selectedTaskIds.length > 0) {
+          e.preventDefault();
+          selectedTaskIds.forEach(id => deleteTask(id, false));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTaskIds, editingTaskId, deleteTask]);
 
   const bubbleRef = useRef<HTMLDivElement | null>(null);
   const phantomRef = useRef<HTMLDivElement | null>(null);
@@ -141,7 +158,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
 
   const [crossPanePreview, setCrossPanePreview] = useState<{ date: Date; startTimeMin: number; taskId: string } | null>(null);
   const [selectionPreview, setSelectionPreview] = useState<{ date: Date; startTimeMin?: number } | null>(null); // Holographic placement state
-  const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null); // 閃光動畫狀態：儲存日期字串
+  const [_placedDateFlash, setPlacedDateFlash] = useState<string | null>(null); // 閃光動畫狀態：儲存日期字串
 
   // 月曆滾輪切換月份
   const handleMonthWheel = (e: React.WheelEvent) => {
@@ -403,9 +420,25 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
   const renderTaskItem = (task: TaskData) => {
     const theme = COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES];
     return (
-      <div key={task.id} draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)} onClick={(e) => { e.stopPropagation(); handleSelection(e, task.id); }} onDoubleClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }} className={`text-[10px] px-1.5 py-1 rounded border ${theme.badge} cursor-grab active:cursor-grabbing truncate shadow-sm hover:shadow-md transition-all mb-1 ${selectedTaskIds.includes(task.id) ? 'ring-2 ring-offset-1 ' + theme.border : ''}`} title={task.title} style={{ opacity: selectedTaskIds.includes(task.id) ? 1 : 0.9, backgroundColor: selectedTaskIds.includes(task.id) ? theme.color + '33' : undefined }}>
+      <motion.div
+        layoutId={`task-${task.id}`}
+        initial={{ opacity: 0, scale: 0.8, y: -10, rotate: -3 }}
+        animate={{ opacity: 1, scale: 1, y: 0, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 400, damping: 20 }}
+        key={task.id}
+        draggable
+        onDragStart={(e) => {
+          // Framer Motion onDragStart types conflict with React's DragEvent. Cast to any to access dataTransfer for HTML5 drag.
+          (e as any).dataTransfer.setData('text/plain', task.id);
+        }}
+        onClick={(e) => { e.stopPropagation(); handleSelection(e, task.id); }}
+        onDoubleClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }}
+        className={`text-[10px] px-1.5 py-1 rounded border ${theme.badge} cursor-grab active:cursor-grabbing truncate shadow-sm hover:shadow-md transition-shadow mb-1 ${selectedTaskIds.includes(task.id) ? 'ring-2 ring-offset-1 ' + theme.border : ''}`}
+        title={task.title}
+        style={{ opacity: selectedTaskIds.includes(task.id) ? 1 : 0.9, backgroundColor: selectedTaskIds.includes(task.id) ? theme.color + '33' : undefined }}
+      >
         {task.title}
-      </div>
+      </motion.div>
     );
   };
 
@@ -467,7 +500,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
             const newId = await addTask({ title: '', start_date: date.toISOString(), is_all_day: true, status: 'inbox' });
             setEditingTaskId(newId);
           }}
-          className={`h-32 border-b border-r border-gray-100 p-2 overflow-y-auto hover:bg-gray-50 transition-all cursor-default relative ${isTodayDate ? 'bg-indigo-50/30' : ''} ${placedDateFlash === date.toDateString() ? 'ring-4 ring-green-400 bg-green-50 animate-pulse' : ''}`}>
+          className={`h-32 border-b border-r border-gray-100 p-2 overflow-y-auto hover:bg-gray-50 transition-all cursor-default relative ${isTodayDate ? 'bg-indigo-50/30' : ''}`}>
           <div className="flex items-start justify-between mb-1">
             <div className={`text-xs font-bold ${isTodayDate ? 'text-indigo-600' : 'text-gray-400'}`}>{d} {isTodayDate && '(Today)'}</div>
             <div className="flex flex-col items-end">

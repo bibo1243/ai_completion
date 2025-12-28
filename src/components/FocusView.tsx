@@ -1,27 +1,46 @@
 import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ContinuousWeekCalendar } from './ContinuousWeekCalendar';
-import { GripVertical, CheckCircle2 } from 'lucide-react';
+import { ScheduleView } from './ScheduleView';
+import { GripVertical, CheckCircle2, Hammer, Calendar, Clock } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 
 export const FocusView = () => {
     const {
         tasks, updateTask, selectedTaskIds,
         viewTagFilters, setEditingTaskId,
-        focusSplitWidth, setFocusSplitWidth, themeSettings, setSelectedTaskIds
+        focusSplitWidth, setFocusSplitWidth, themeSettings, setSelectedTaskIds,
+        constructionModeEnabled, setConstructionModeEnabled,
+        deleteTask, editingTaskId
     } = useContext(AppContext);
 
     const containerRef = useRef<HTMLDivElement>(null);
     const [isResizing, setIsResizing] = useState(false);
 
-    // 施工模式：當有未排程任務被選中時
-    const isConstructionMode = selectedTaskIds.length > 0 && selectedTaskIds.some(id => {
+    // Calendar mode: 'calendar' for week view, 'schedule' for timed schedule view
+    const [calendarMode, setCalendarMode] = useState<'calendar' | 'schedule'>(() => {
+        const saved = localStorage.getItem('focus_calendar_mode');
+        return (saved as 'calendar' | 'schedule') || 'calendar';
+    });
+
+    // Persist calendar mode
+    useEffect(() => {
+        localStorage.setItem('focus_calendar_mode', calendarMode);
+    }, [calendarMode]);
+
+    // 施工模式：手動啟動 + 有未排程任務被選中時
+    const hasUnscheduledSelected = selectedTaskIds.length > 0 && selectedTaskIds.some(id => {
         const task = tasks.find(t => t.id === id);
         return task && !task.start_date;
     });
+    const isConstructionMode = constructionModeEnabled && hasUnscheduledSelected;
 
-    // 重新排程模式：當有已排程任務被選中時
-    const isReschedulingMode = selectedTaskIds.length > 0 && !isConstructionMode;
+    // 重新排程模式：當有已排程任務被選中且施工模式啟動時
+    const hasScheduledSelected = selectedTaskIds.length > 0 && selectedTaskIds.some(id => {
+        const task = tasks.find(t => t.id === id);
+        return task && task.start_date;
+    });
+    const isReschedulingMode = constructionModeEnabled && hasScheduledSelected && !hasUnscheduledSelected;
 
     // Unscheduled Tasks with Filter
     const unscheduledTasks = useMemo(() => {
@@ -43,16 +62,36 @@ export const FocusView = () => {
         return filtered.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     }, [tasks, viewTagFilters]);
 
-    // ESC 鍵取消施工模式
+    // Global Key Handling (ESC & Delete)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // ESC 鍵取消施工模式
             if (e.key === 'Escape' && (isConstructionMode || isReschedulingMode)) {
+                setConstructionModeEnabled(false);
                 setSelectedTaskIds([]);
+            }
+            // Delete Key
+            if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTaskId) {
+                if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
+                if (selectedTaskIds.length > 0) {
+                    e.preventDefault();
+                    selectedTaskIds.forEach(id => deleteTask(id, false));
+                    // If deleted, we might want to clear selection or mode?
+                    // Let's clear selection to avoid weird states
+                    setSelectedTaskIds([]);
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isConstructionMode, isReschedulingMode, setSelectedTaskIds]);
+    }, [isConstructionMode, isReschedulingMode, setSelectedTaskIds, setConstructionModeEnabled, selectedTaskIds, deleteTask, editingTaskId]);
+
+    // 當選擇清空時，關閉施工模式
+    useEffect(() => {
+        if (selectedTaskIds.length === 0) {
+            setConstructionModeEnabled(false);
+        }
+    }, [selectedTaskIds]);
 
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
@@ -60,8 +99,10 @@ export const FocusView = () => {
             if (!containerRef.current) return;
             const containerRect = containerRef.current.getBoundingClientRect();
             let newWidth = e.clientX - containerRect.left;
-            if (newWidth < 250) newWidth = 250;
-            if (newWidth > 800) newWidth = 800;
+            // Expanded range: minimum 100px, maximum 90% of container width
+            const maxWidth = containerRect.width * 0.9;
+            if (newWidth < 100) newWidth = 100;
+            if (newWidth > maxWidth) newWidth = maxWidth;
             setFocusSplitWidth(newWidth);
         };
 
@@ -170,10 +211,24 @@ export const FocusView = () => {
                     {/* 日程待安排 */}
                     {unscheduledTasks.length > 0 && (
                         <div>
-                            <div className="flex items-center gap-2 px-2 mb-1">
+                            <div className="flex items-center justify-between px-2 mb-1">
                                 <span className={`text-[9px] text-gray-400 ${themeSettings.fontFamily === 'things' ? 'font-things' : 'font-sans'}`}>
                                     日程待安排 ({unscheduledTasks.length})
                                 </span>
+                                {/* 施工模式按鈕 */}
+                                {selectedTaskIds.length > 0 && (
+                                    <button
+                                        onClick={() => setConstructionModeEnabled(!constructionModeEnabled)}
+                                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium transition-all ${constructionModeEnabled
+                                            ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300'
+                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                            }`}
+                                        title={constructionModeEnabled ? '關閉施工模式' : '開啟施工模式以放置到行事曆'}
+                                    >
+                                        <Hammer size={10} />
+                                        {constructionModeEnabled ? '施工中' : '放置'}
+                                    </button>
+                                )}
                             </div>
                             <div className="space-y-1">
                                 {unscheduledTasks.slice(0, 50).map((task, index) => renderTaskItem(task, index))}
@@ -203,10 +258,37 @@ export const FocusView = () => {
                 </div>
             </div>
 
-            {/* Right Pane: Timebox (Calendar) - Creative Continuous Week Flow */}
+            {/* Right Pane: Timebox (Calendar/Schedule) */}
             <div className="flex-1 h-full min-w-0 relative overflow-hidden flex flex-col">
+                {/* Tab Header */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex-shrink-0">
+                    <div className="flex items-center gap-1 bg-gray-200/70 p-0.5 rounded-lg">
+                        <button
+                            onClick={() => setCalendarMode('calendar')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'calendar' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <Calendar size={14} />
+                            行事曆
+                        </button>
+                        <button
+                            onClick={() => setCalendarMode('schedule')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <Clock size={14} />
+                            日程表
+                        </button>
+                    </div>
+                    <div className="text-[10px] text-gray-400">
+                        {calendarMode === 'schedule' ? '按數字鍵 1-9 切換天數' : '滾動查看更多週'}
+                    </div>
+                </div>
+
                 <div className="flex-1 relative z-10 h-full overflow-hidden">
-                    <ContinuousWeekCalendar />
+                    {calendarMode === 'calendar' ? (
+                        <ContinuousWeekCalendar />
+                    ) : (
+                        <ScheduleView />
+                    )}
                 </div>
 
                 {/* 施工/移動模式底部提示條 */}

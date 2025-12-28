@@ -63,3 +63,27 @@ supabase db execute -f supabase/migrations/20250125_add_attachments.sql
 - 此列使用 JSONB 類型，可以高效存儲和查詢 JSON 數據
 - 默認值為空數組 `[]`
 - 現有的任務會自動獲得空數組作為默認值
+- 現有的任務會自動獲得空數組作為默認值
+
+# 添加 AI History 功能到數據庫
+
+## 問題
+需要記錄 AI 助理的歷史問答紀錄，並支援分頁切換。
+
+## 解決方案
+需要在 `tasks` 表中添加 `ai_history` 列 (JSONB)。
+
+## 執行步驟
+
+### SQL Command
+
+```sql
+-- Add ai_history column to tasks table
+ALTER TABLE tasks 
+ADD COLUMN IF NOT EXISTS ai_history JSONB DEFAULT '[]'::jsonb;
+
+-- Add comment
+COMMENT ON COLUMN tasks.ai_history IS 'Array of AI interaction history: [{ id, role, content, prompt, created_at }]';
+```
+
+請在 Supabase SQL Editor 中執行上述指令。

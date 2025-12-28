@@ -322,6 +322,26 @@ export const askAIAssistant = async (content: string, currentTitle: string, cust
     ? `【目標內容標題】：\n"${currentTitle}"\n\n`
     : '';
 
+  const isCustom = !!(customPrompt && customPrompt.trim());
+
+  const requirements = [
+    "1. 使用繁體中文（Traditional Chinese）。",
+    "2. 直接輸出內容即可，不需要任何 JSON 格式或其他包裝。"
+  ];
+
+  if (isStrictPolish) {
+    requirements.push("3. 請嚴格遵守指令，僅輸出潤飾、校對後的內文正文（務必檢查並修正內容中的錯別字與標點符號），絕對不要包含任何「以下是潤飾後的內容」、「好的」、「沒問題」等開場白或感想、說明。");
+    requirements.push("4. 確保輸出的內容必須僅有正文本身，且語氣自然流暢。");
+  } else if (isCustom) {
+    requirements.push("3. 請嚴格按照【系統指令】的要求進行回答。回答的長度與深度應完全取決於指令的要求，不要自動過度展開或添加未被要求的內容。");
+    requirements.push("4. 請勿包含「好的，這是您的...」或「根據您的要求...」等無關的開場白或結尾。");
+    requirements.push("5. 若內容適合，請使用 Markdown 格式（如粗體標題、清單）以利閱讀。");
+  } else {
+    requirements.push("3. 請提供詳盡、完整且具備實質價值的回答。");
+    requirements.push("4. 針對內容中的細節進行具體展開與深度分析。請務必使用 Markdown 格式，針對不同分析主題使用粗體標題（**標題**）並換行分段，確保閱讀清晰。");
+    requirements.push("5. 語氣專業、同理且具啟發性。");
+  }
+
   const finalPrompt = `【系統指令】：
 ${finalInstruction}
 
@@ -329,18 +349,13 @@ ${titleSection}【目標內容備註】：
 "${content}"
 
 要求：
-1. ${isStrictPolish ? '請嚴格遵守指令，僅輸出潤飾、校對後的內文正文（務必檢查並修正內容中的錯別字與標點符號），絕對不要包含任何「以下是潤飾後的內容」、「好的」、「沒問題」等開場白或感想、說明。' : '請提供詳盡、完整且具備實質價值的回答。'}
-2. ${isStrictPolish ? '確保輸出的內容必須僅有正文本身，且語氣自然流暢。' : '針對內容中的細節進行具體展開與深度分析。'}
-3. 語氣專業、同理且具啟發性。
-4. 使用繁體中文（Traditional Chinese）。
-5. 回應必須封裝在 JSON 格式中：
-{
-  "fullResponse": "您的詳細回應內容（支援 Markdown 格式）"
-}`;
+${requirements.join('\n')}`;
 
   try {
     if (!content.trim()) throw new Error("內容為空，無法分析");
-    return await executeAIRequest(finalPrompt);
+    // Use simple request to get plain text, avoiding JSON parsing issues
+    const result = await executeSimpleAIRequest(finalPrompt);
+    return { fullResponse: result };
   } catch (error) {
     console.error("AI Assistant Error:", error);
     throw error;
@@ -349,7 +364,7 @@ ${titleSection}【目標內容備註】：
 
 export const generatePromptTitle = async (promptText: string): Promise<string> => {
   const prompt = `請為以下 AI 指令（Prompt）擬定一個極簡短的標題（不超過 10 個字），用於指令庫中方便辨識。輸出標題文字即可，不要包含任何引用符號。
-  
+
   指令內容：
   "${promptText}"`;
 
@@ -373,35 +388,35 @@ export const generateSEOTitle = async (noteContent: string, customInstruction?: 
   if (customInstruction) {
     prompt = `${customInstruction}
 
-以下是需要處理的文章內容：
----
-${truncatedContent}
----
+  以下是需要處理的文章內容：
+  ---
+    ${truncatedContent}
+  ---
 
-請依據上述指令直接輸出結果（只輸出標題本身，不要加引號）：`;
+    請依據上述指令直接輸出結果（只輸出標題本身，不要加引號）：`;
   } else {
     prompt = `你是一位SEO和內容行銷專家。請仔細閱讀以下文章內容，深入理解其主旨和核心觀點，然後生成一個SEO優化的標題。
 
-重要要求：
-1. 你必須「總結」整篇文章的核心主題，而不是直接複製文章開頭的文字
-2. 標題長度控制在15-30個中文字之間
-3. 標題要包含文章的核心關鍵字
-4. 標題要吸引眼球、引發讀者好奇心和點擊欲望
-5. 可以使用數字、問句、或情感詞彙來增加吸引力
-6. 使用繁體中文
-7. 只輸出標題本身，不要加引號、編號或任何說明
+  重要要求：
+  1. 你必須「總結」整篇文章的核心主題，而不是直接複製文章開頭的文字
+  2. 標題長度控制在15 - 30個中文字之間
+  3. 標題要包含文章的核心關鍵字
+  4. 標題要吸引眼球、引發讀者好奇心和點擊欲望
+  5. 可以使用數字、問句、或情感詞彙來增加吸引力
+  6. 使用繁體中文
+  7. 只輸出標題本身，不要加引號、編號或任何說明
 
-範例格式（僅供參考風格，請根據實際內容生成）：
-- "5個提升工作效率的必備技巧"
-- "為什麼90%的人都做錯了這件事？"
-- "一次搞懂：專家教你掌握核心要點"
+  範例格式（僅供參考風格，請根據實際內容生成）：
+  - "5個提升工作效率的必備技巧"
+    - "為什麼90%的人都做錯了這件事？"
+    - "一次搞懂：專家教你掌握核心要點"
 
-以下是需要總結的文章內容：
----
-${truncatedContent}
----
+  以下是需要總結的文章內容：
+  ---
+    ${truncatedContent}
+  ---
 
-請直接輸出SEO優化標題：`;
+    請直接輸出SEO優化標題：`;
   }
 
   console.log("Generating SEO title for content length:", noteContent.length);
@@ -421,5 +436,80 @@ ${truncatedContent}
   } catch (error) {
     console.error("Generate SEO Title Error:", error);
     throw error; // Let the UI handle the error instead of returning a bad fallback
+  }
+};
+
+export interface TaskPlan {
+  title: string;
+  description?: string;
+  start_date?: string | null;
+  due_date?: string | null;
+  subtasks?: TaskPlan[];
+}
+
+export const planTaskBreakdown = async (
+  taskTitle: string,
+  taskNote: string,
+  taskStartDate: string | null,
+  taskDueDate: string | null,
+  context: { today: string },
+  customInstruction?: string
+): Promise<TaskPlan[]> => {
+  const prompt = `
+Role: 行政總管 AI (Chief Administrative Officer)。你是一位經驗豐富、觀察入微的行政總管。你的任務是將一個大型任務拆解成可執行的子任務，並為每個子任務提供詳盡的執行說明與注意事項。
+
+Source Task:
+- 標題: "${taskTitle}"
+- 備註/描述: "${taskNote || '(無備註)'}"
+- 開始日期: ${taskStartDate || '未指定'}
+- 到期日期: ${taskDueDate || '未指定'}
+- 今日日期: ${context.today}
+${customInstruction ? `\n使用者指令: "${customInstruction}"` : ''}
+
+Instructions:
+1. 仔細研讀標題與備註，識別需要執行的主題、步驟、細節需求。
+2. 將任務拆解成邏輯清晰的階層式子任務。
+3. 對於每個子任務：
+   - "title": 簡潔、動作導向的標題（例如「確認機票預算」而非「機票」）。
+   - "description": 【重要】必須提供與該子任務相關的「具體執行說明」或「注意事項」。不可與標題重複，也不可簡單複製原始備註。請以行政總管的角度，補充可能遺漏的細節、常見問題、或提醒事項。例如：「請確認是否需要特殊餐食、提前辦理線上報到可節省時間」。
+   - "start_date": YYYY-MM-DD 格式。若原文提及相對日期（如「三天後」），請依據開始日期或今日推算。若無法判斷則留空。
+   - "due_date": YYYY-MM-DD 格式。
+4. "subtasks": 若該子任務可進一步細分，則提供巢狀子任務陣列；否則為空陣列。
+
+Output Rules:
+- 輸出必須是嚴格有效的 JSON 陣列。
+- 不要輸出任何 Markdown、說明文字、或「以下是...」等開場白。只輸出 JSON。
+- 所有文字使用繁體中文。
+- description 欄位絕對不能與 title 相同或為空。
+
+JSON Format:
+[
+  {
+    "title": "子任務標題",
+    "description": "針對此子任務的具體執行說明與注意事項...",
+    "start_date": "YYYY-MM-DD",
+    "due_date": "YYYY-MM-DD",
+    "subtasks": []
+  }
+]
+`;
+
+  try {
+    const rawResult = await executeSimpleAIRequest(prompt);
+    console.log("Mission 72 Raw Output:", rawResult);
+
+    // Clean JSON
+    let jsonStr = rawResult;
+    // Find array structure
+    const jsonMatch = rawResult.match(/\[[\s\S]*\]/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
+
+    // Remove markdown code blocks if any
+    jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Mission 72 Planning Error:", error);
+    throw new Error("AI 無法生成任務計畫，請稍後再試。");
   }
 };

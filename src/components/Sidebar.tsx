@@ -1,11 +1,12 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layout, Hash, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Star, Calendar, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle } from 'lucide-react';
+import { Layout, Hash, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { isOverdue, isToday } from '../utils';
+import { SearchModal } from './SearchModal';
 
 const TAG_COLORS = [
     '#6366f1', // indigo
@@ -30,6 +31,13 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [showSettings, setShowSettings] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
+    const [editingViewId, setEditingViewId] = useState<string | null>(null);
+    const [editingViewName, setEditingViewName] = useState('');
+    const [viewNames, setViewNames] = useState<Record<string, string>>(() => {
+        try {
+            return JSON.parse(localStorage.getItem('custom_view_names') || '{}');
+        } catch { return {}; }
+    });
     useEffect(() => {
         const down = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(true);
         const up = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(false);
@@ -59,6 +67,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [editName, setEditName] = useState('');
     const [popoverId, setPopoverId] = useState<string | null>(null);
     const [popoverPosition, setPopoverPosition] = useState<{ top: number, left: number } | null>(null);
+    const [searchOpen, setSearchOpen] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const settingsRef = useRef<HTMLDivElement>(null);
@@ -67,6 +76,21 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
     useClickOutside(settingsRef, () => setShowSettings(false));
     useClickOutside(popoverRef, () => setPopoverId(null));
+
+    // Keyboard shortcut for search (Cmd+K)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+                e.preventDefault();
+                setSearchOpen(true);
+            }
+            if (e.key === 'Escape' && searchOpen) {
+                setSearchOpen(false);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [searchOpen]);
 
     useEffect(() => {
         if (isAddingTag && newTagInputRef.current) {
@@ -147,6 +171,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     // Tag text now uses same size as sidebar text (previously was too small)
     const tagTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
     const sidebarFontClass = themeSettings.fontWeight === 'thin' ? 'font-light' : '';
+
+    const saveViewName = (id: string, name: string) => {
+        const newNames = { ...viewNames, [id]: name };
+        setViewNames(newNames);
+        localStorage.setItem('custom_view_names', JSON.stringify(newNames));
+        setEditingViewId(null);
+    };
+
     const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon }: any) => {
         const allowSettings = ['focus', 'waiting', 'journal', 'prompt'].includes(id);
         const [isHovered, setIsHovered] = useState(false);
@@ -155,16 +187,46 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
         const hasActiveFilters = include.length > 0 || exclude.length > 0;
 
+        const displayLabel = viewNames[id] || label;
+        const isEditing = editingViewId === id;
+
         return (
             <div
                 className="relative group/nav-wrapper"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >
-                <button onClick={() => { setView(id); setTagFilter(null); }} className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-1.5 rounded-lg mb-0.5 transition-colors ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`} title={sidebarCollapsed ? label : ''}>
+                <button
+                    onClick={() => { if (!isEditing) { setView(id); setTagFilter(null); } }}
+                    onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setEditingViewId(id);
+                        setEditingViewName(displayLabel);
+                    }}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-1.5 rounded-lg mb-0.5 transition-colors ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+                    title={sidebarCollapsed ? displayLabel : ''}
+                >
                     <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
                         {Icon && <Icon size={16} className={active ? 'text-indigo-600' : 'text-gray-400'} />}
-                        {!sidebarCollapsed && <span>{label}</span>}
+                        {!sidebarCollapsed && (
+                            isEditing ? (
+                                <input
+                                    autoFocus
+                                    value={editingViewName}
+                                    onChange={(e) => setEditingViewName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        e.stopPropagation();
+                                        if (e.key === 'Enter') saveViewName(id, editingViewName);
+                                        else if (e.key === 'Escape') setEditingViewId(null);
+                                    }}
+                                    onBlur={() => saveViewName(id, editingViewName)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="bg-white border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-20"
+                                />
+                            ) : (
+                                <span>{displayLabel}</span>
+                            )
+                        )}
                         {!sidebarCollapsed && hasActiveFilters && (
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
                         )}
@@ -539,20 +601,31 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         <aside className="w-full bg-[#fbfbfb] border-r border-gray-100 h-screen flex flex-col p-5 sticky top-0 overflow-hidden">
             <div className={`mb-8 flex items-center ${sidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between px-1'} opacity-60`}>
                 {!sidebarCollapsed && <div className="flex items-center gap-2"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase">{t('appearance')}</span></div>}
-                <button onClick={toggleSidebar} className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500">
-                    {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => setSearchOpen(true)}
+                        className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500"
+                        title="搜尋 (⌘K)"
+                    >
+                        <Search size={18} />
+                    </button>
+                    <button onClick={toggleSidebar} className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500">
+                        {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+                    </button>
+                </div>
             </div>
             <nav className="flex-1 space-y-6 overflow-y-auto no-scrollbar">
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">COLLECT</p>}
                     <NavItem id="all" label={t('inbox')} normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} />
+                    <NavItem id="allview" label="All" active={view === 'allview' && !tagFilter} icon={Layers} />
+                    <NavItem id="newtable" label="新表格" active={view === 'newtable' && !tagFilter} icon={Star} />
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ARRANGE</p>}
                     <NavItem id="focus" label={t('focus')} active={view === 'focus'} icon={Target} />
-                    <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today'} icon={Star} />
-                    <NavItem id="schedule" label={t('upcoming')} active={view === 'schedule'} icon={Calendar} />
+                    <NavItem id="project" label="Projects" active={view === 'project'} icon={FolderKanban} />
+                    <NavItem id="upcoming" label="Upcoming" active={view === 'upcoming' && !tagFilter} icon={CalendarDays} />
                 </div>
                 <div>
                     {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ORGANIZE</p>}
@@ -832,6 +905,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 </div>,
                 document.body
             )}
+            <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
         </aside>
     );
 };

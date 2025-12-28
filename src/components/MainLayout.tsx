@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User, LogOut, Plus } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
@@ -6,14 +6,26 @@ import { TaskList } from './TaskList';
 import { TaskInput } from './TaskInput';
 import { JournalView } from './JournalView';
 import { FocusView } from './FocusView';
+import { ProjectView } from './ProjectView';
 import { AdvancedFilterBar } from './AdvancedFilterBar';
 import { Toast } from './Toast';
+import { Mission72Manager } from './Mission72Manager';
+import { DraggableTaskModal } from './DraggableTaskModal';
 
 export const MainLayout = () => {
-  const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed } = useContext(AppContext);
+  const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds } = useContext(AppContext);
   const [localQuickAdd, setLocalQuickAdd] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showMission72, setShowMission72] = useState(false);
+
+  // Draggable FAB state
+  const [fabPosition, setFabPosition] = useState(() => {
+    const saved = localStorage.getItem('fabPosition');
+    return saved ? JSON.parse(saved) : { x: window.innerWidth - 80, y: window.innerHeight - 80 };
+  });
+  const [isDraggingFab, setIsDraggingFab] = useState(false);
+  const fabDragOffset = useRef({ x: 0, y: 0 });
 
   const textSizeClass = { small: 'text-sm', normal: 'text-base', large: 'text-lg' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-base';
   const fontWeightClass = themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-bold';
@@ -36,6 +48,30 @@ export const MainLayout = () => {
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
   }, [editingTaskId, setEditingTaskId]);
+
+  // FAB drag handling
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingFab) return;
+      const newX = Math.max(20, Math.min(window.innerWidth - 70, e.clientX - fabDragOffset.current.x));
+      const newY = Math.max(20, Math.min(window.innerHeight - 70, e.clientY - fabDragOffset.current.y));
+      setFabPosition({ x: newX, y: newY });
+    };
+    const handleMouseUp = () => {
+      if (isDraggingFab) {
+        setIsDraggingFab(false);
+        localStorage.setItem('fabPosition', JSON.stringify(fabPosition));
+      }
+    };
+    if (isDraggingFab) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingFab, fabPosition]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -105,6 +141,17 @@ export const MainLayout = () => {
           {/* Right: Tools, User, Sync */}
           <div className="flex items-center gap-2 md:gap-4">
             <div className="flex items-center gap-1">
+              {selectedTaskIds.length === 1 && (
+                <button
+                  onClick={() => setShowMission72(true)}
+                  className="p-1.5 rounded hover:bg-indigo-50 text-indigo-600 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
+                  title="任務72變 (Mission 72 Transformations)"
+                >
+                  <span className="text-xl leading-none filter drop-shadow-sm">🐵</span>
+                  <span className="hidden lg:inline text-xs font-bold text-indigo-600">72變</span>
+                </button>
+              )}
+              <div className="w-px h-4 bg-gray-200 mx-1"></div>
               <button onClick={archiveCompletedTasks} className="p-1.5 rounded hover:bg-gray-100 text-slate-500 hover:text-emerald-600 transition-colors" title="歸檔所有已完成任務 (Archive Completed)"> <Archive size={16} /> </button>
               <div className="w-px h-4 bg-gray-200 mx-1"></div>
               <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-gray-100 ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
@@ -134,11 +181,13 @@ export const MainLayout = () => {
           </div>
         </header>
         <AdvancedFilterBar />
-        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar ${view !== 'focus' ? 'p-8' : ''}`}>
+        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar ${view !== 'focus' && view !== 'project' ? 'p-8' : ''}`}>
           {view === 'journal' ? (
             <JournalView />
           ) : view === 'focus' ? (
             <FocusView />
+          ) : view === 'project' ? (
+            <ProjectView />
           ) : (
             <div className="w-[calc(100%-100px)] mx-auto mt-8">
               <TaskList />
@@ -161,16 +210,41 @@ export const MainLayout = () => {
           </div>
         )}
 
-        {/* Floating Add Button */}
+        {/* Floating Add Button - Draggable */}
         <button
-          onClick={() => setLocalQuickAdd(true)}
-          className="fixed bottom-8 right-8 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center group"
-          title="Create New Task"
+          onMouseDown={(e) => {
+            fabDragOffset.current = { x: e.clientX - fabPosition.x, y: e.clientY - fabPosition.y };
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const checkDrag = (moveE: MouseEvent) => {
+              if (Math.abs(moveE.clientX - startX) > 5 || Math.abs(moveE.clientY - startY) > 5) {
+                setIsDraggingFab(true);
+                window.removeEventListener('mousemove', checkDrag);
+              }
+            };
+            window.addEventListener('mousemove', checkDrag);
+            window.addEventListener('mouseup', () => window.removeEventListener('mousemove', checkDrag), { once: true });
+          }}
+          onClick={() => {
+            if (!isDraggingFab) setLocalQuickAdd(true);
+          }}
+          style={{ left: fabPosition.x, top: fabPosition.y }}
+          className={`fixed z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center group ${isDraggingFab ? 'cursor-grabbing scale-110' : 'cursor-grab hover:scale-105 active:scale-95'}`}
+          title="Create New Task (Drag to move)"
         >
           <Plus size={28} className="group-hover:rotate-90 transition-transform duration-200" />
         </button>
 
-        {localQuickAdd && <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-start justify-center pt-16 p-4 md:pt-32 md:p-6 overflow-y-auto"><div className="w-full max-w-3xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 p-4 md:p-6 mb-16"><TaskInput isQuickAdd onClose={() => setLocalQuickAdd(false)} /></div></div>}
+
+
+        {localQuickAdd && (
+          <DraggableTaskModal onClose={() => setLocalQuickAdd(false)} />
+        )}
+
+        {showMission72 && selectedTaskIds.length === 1 && (
+          <Mission72Manager taskId={selectedTaskIds[0]} onClose={() => setShowMission72(false)} />
+        )}
+
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
       </main>
     </div>

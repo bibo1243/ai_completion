@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, RotateCcw, ChevronDown, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { RotateCcw, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 interface ToastProps {
     toast: {
@@ -11,30 +11,20 @@ interface ToastProps {
 }
 
 export const Toast = ({ toast, onClose }: ToastProps) => {
-    const [collapsed, setCollapsed] = useState(false);
-    const [isAutoCollapsing, setIsAutoCollapsing] = useState(true);
+    const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
-        setIsAutoCollapsing(true);
-        setCollapsed(false);
+        // Fade in
+        requestAnimationFrame(() => setIsVisible(true));
+
+        // Auto dismiss after 10 seconds
         const timer = setTimeout(() => {
-            if (isAutoCollapsing) {
-                setCollapsed(true);
-            }
-        }, 10000); // Collapse after 10 seconds
+            setIsVisible(false);
+            setTimeout(onClose, 300); // Wait for fade out animation
+        }, 10000);
 
         return () => clearTimeout(timer);
-    }, [toast, isAutoCollapsing]);
-
-    const handleExpand = () => {
-        setCollapsed(false);
-        setIsAutoCollapsing(false); // Disable auto-collapse once user interacts
-    };
-
-    const handleCollapse = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setCollapsed(true);
-    };
+    }, [toast, onClose]);
 
     const getIcon = () => {
         if (toast.type === 'error') return <AlertCircle size={16} />;
@@ -42,66 +32,38 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
         return <Info size={16} />;
     };
 
-    if (collapsed) {
-        return (
-            <div
-                onClick={handleExpand}
-                className="fixed bottom-0 left-8 z-50 cursor-pointer transition-transform duration-300 hover:-translate-y-2 translate-y-[60%]"
-                title="Show Notification"
-            >
-                <div className={`
-                    h-10 px-4 rounded-t-lg shadow-lg flex items-center justify-center gap-2 border-t border-x border-white/20 backdrop-blur-md
-                    ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white'}
-                `}>
-                    {getIcon()}
-                    <span className="text-xs font-bold">
-                        {toast.type === 'error' ? '錯誤' : '通知'}
-                    </span>
-                </div>
-            </div>
-        );
-    }
-
     return (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-2 duration-200">
+        <div
+            className={`
+                fixed top-4 left-1/2 -translate-x-1/2 z-[9999]
+                transition-all duration-300 ease-out
+                ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}
+            `}
+        >
             <div className={`
-                px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 min-w-[320px] max-w-[90vw]
-                ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-[#1e1e1e] text-white'}
-                border border-white/10
+                px-4 py-2.5 rounded-full shadow-lg flex items-center gap-3 backdrop-blur-md
+                ${toast.type === 'error'
+                    ? 'bg-red-500/90 text-white'
+                    : 'bg-gray-900/90 text-white'
+                }
             `}>
-                <div className="flex items-center gap-3 flex-1">
+                <div className="flex items-center gap-2">
                     {getIcon()}
                     <span className="text-sm font-medium">{toast.msg}</span>
                 </div>
 
-                <div className="flex items-center gap-2 pl-4 border-l border-white/10">
-                    {toast.undo && (
-                        <button
-                            onClick={() => {
-                                toast.undo?.();
-                                onClose();
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold transition-colors"
-                        >
-                            <RotateCcw size={12} />
-                            Undo
-                        </button>
-                    )}
+                {toast.undo && (
                     <button
-                        onClick={handleCollapse}
-                        className="p-1.5 hover:bg-white/10 rounded-md text-white/70 hover:text-white transition-colors"
-                        title="Collapse"
+                        onClick={() => {
+                            toast.undo?.();
+                            onClose();
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-white/20 hover:bg-white/30 rounded-full text-xs font-bold transition-colors"
                     >
-                        <ChevronDown size={14} />
+                        <RotateCcw size={12} />
+                        Undo
                     </button>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 hover:bg-white/10 rounded-md text-white/70 hover:text-white transition-colors"
-                        title="Dismiss"
-                    >
-                        <X size={14} />
-                    </button>
-                </div>
+                )}
             </div>
         </div>
     );

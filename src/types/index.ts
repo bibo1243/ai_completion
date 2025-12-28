@@ -40,7 +40,22 @@ export interface TaskData {
   images?: string[];
   attachments?: Array<{ name: string; url: string; size: number; type: string }>;
   attachment_links?: AttachmentLink[];
+  ai_history?: AIHistoryEntry[];
   reviewed_at: string | null;
+}
+
+export interface AIHistoryEntry {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+  model?: string;
+  prompt?: string; // If role is assistant, what was the prompt?
+}
+
+export interface ArchivedTaskData extends TaskData {
+  original_parent_id: string | null;
+  archived_at: string;
 }
 
 export interface FlatTask {
@@ -66,7 +81,7 @@ export interface DragState {
   ghostPosition: { x: number; y: number };
 }
 
-export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG';
+export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG' | 'ARCHIVE';
 
 export interface BatchUpdateRecord {
   id: string;
@@ -122,5 +137,22 @@ export interface UserProfile {
     language?: string;
     startOfWeek?: 'sunday' | 'monday';
   };
+  updated_at: string;
+}
+
+export interface SearchFilters {
+  tags: string[];
+  startDate: string | null;
+  endDate: string | null;
+  colors: string[];
+}
+
+export interface SearchHistory {
+  id: string;
+  user_id: string;
+  query: string;
+  filters: SearchFilters;
+  name: string | null;
+  created_at: string;
   updated_at: string;
 }
