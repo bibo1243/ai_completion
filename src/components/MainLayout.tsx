@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus, BookOpen } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
@@ -10,6 +10,7 @@ import { AdvancedFilterBar } from './AdvancedFilterBar';
 import { Toast } from './Toast';
 import { Mission72Manager } from './Mission72Manager';
 import { DraggableTaskModal } from './DraggableTaskModal';
+import GTDGuide from './GTDGuide';
 
 export const MainLayout = () => {
   const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds } = useContext(AppContext);
@@ -17,6 +18,7 @@ export const MainLayout = () => {
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMission72, setShowMission72] = useState(false);
+  const [showGTDGuide, setShowGTDGuide] = useState(false);
 
   // Draggable FAB state
   const [fabPosition, setFabPosition] = useState(() => {
@@ -247,6 +249,18 @@ export const MainLayout = () => {
         )}
 
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+
+        {/* GTD Guide Button */}
+        <button
+          onClick={() => setShowGTDGuide(true)}
+          className="fixed bottom-6 right-24 z-40 h-12 w-12 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
+          title="GTD 使用指南"
+        >
+          <BookOpen size={22} />
+        </button>
+
+        {/* GTD Guide Modal */}
+        <GTDGuide isOpen={showGTDGuide} onClose={() => setShowGTDGuide(false)} />
       </main>
     </div>
   );
