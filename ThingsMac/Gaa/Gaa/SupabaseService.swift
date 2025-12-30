@@ -18,11 +18,27 @@ class SupabaseService {
         let loginPayload = ["email": email, "password": password]
         request.httpBody = try JSONEncoder().encode(loginPayload)
         
+        print("🔐 嘗試登入: \(email)")
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw NSError(domain: "SupabaseService", code: 401, userInfo: [NSLocalizedDescriptionKey: "登入失敗"])
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NSError(domain: "SupabaseService", code: -1, userInfo: [NSLocalizedDescriptionKey: "無效的回應"])
+        }
+        
+        print("📡 HTTP 狀態碼: \(httpResponse.statusCode)")
+        
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📝 回應內容: \(responseString)")
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            // Try to parse error message from response
+            if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorMessage = errorData["error_description"] as? String ?? errorData["msg"] as? String ?? errorData["message"] as? String {
+                throw NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: errorMessage])
+            }
+            throw NSError(domain: "SupabaseService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "登入失敗 (狀態碼: \(httpResponse.statusCode))"])
         }
         
         struct LoginResponse: Codable {
@@ -38,6 +54,8 @@ class SupabaseService {
         
         UserDefaults.standard.set(loginResponse.user.id, forKey: "supabase_user_id")
         UserDefaults.standard.set(loginResponse.access_token, forKey: "supabase_access_token")
+        
+        print("✅ 登入成功! User ID: \(loginResponse.user.id)")
         
         return loginResponse.user.id
     }

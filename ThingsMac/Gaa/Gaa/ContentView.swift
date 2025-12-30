@@ -22,11 +22,23 @@ struct ContentView: View {
                 QuickAddView()
                     .environmentObject(appState)
             }
+            .sheet(item: Binding(
+                get: { appState.selectedTaskId.map { SelectedTask(id: $0) } },
+                set: { appState.selectedTaskId = $0?.id }
+            )) { selectedTask in
+                TaskDetailView(taskId: selectedTask.id)
+                    .environmentObject(appState)
+            }
         } else {
             LoginView()
                 .environmentObject(appState)
         }
     }
+}
+
+// Helper for sheet item binding
+struct SelectedTask: Identifiable {
+    let id: String
 }
 
 // MARK: - Sidebar
@@ -487,10 +499,15 @@ struct LoginView: View {
         AsyncTask {
             do {
                 try await appState.login(email: email, password: password)
+            } catch let error as NSError {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
             } catch {
                 await MainActor.run {
                     isLoading = false
-                    errorMessage = "登入失敗"
+                    errorMessage = "登入失敗: \(error.localizedDescription)"
                 }
             }
         }
