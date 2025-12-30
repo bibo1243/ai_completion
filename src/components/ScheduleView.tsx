@@ -19,7 +19,6 @@ export const ScheduleView = () => {
         setCalendarDate,
         setEditingTaskId,
         addTask,
-        updateTask,
         handleSelection,
         selectedTaskIds,
         setSelectedTaskIds,
@@ -550,7 +549,7 @@ export const ScheduleView = () => {
         colWidth = rect.width;
 
         if (!isAllDay) {
-            const clickRelY = e.clientY - rect.top;
+            // clickRelY would be: e.clientY - rect.top (for future offset calculation)
             // Calculate offset in MIN vs Y? 
             // Ideally we want the minute-difference between click-point and task-start.
             // But existing code calculated offset as minutes from top of task (indirectly).

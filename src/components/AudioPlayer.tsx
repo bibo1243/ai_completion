@@ -195,12 +195,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
                     </span>
                 </div>
             </div>
-
-            <style jsx>{`
-                input[type=range] {
-                    height: 100%;
-                }
-            `}</style>
         </div>
     );
 };
