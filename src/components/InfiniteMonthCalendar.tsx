@@ -270,7 +270,6 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
                 <div
                     key={d}
                     onClick={(e) => handleDateClick(date, e)}
-                    onDoubleClick={(e) => handleDateDoubleClick(date, e)}
                     className={`
             h-24 border-b border-r border-gray-100 p-1.5 overflow-hidden
             transition-all duration-150 cursor-pointer relative
@@ -304,13 +303,9 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
                             return (
                                 <div
                                     key={task.id}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingTaskId(task.id);
-                                    }}
                                     className={`
-                    text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer
-                    transition-all hover:scale-[1.02]
+                    text-[10px] px-1.5 py-0.5 rounded truncate
+                    transition-all
                   `}
                                     style={{
                                         backgroundColor: theme.bg,

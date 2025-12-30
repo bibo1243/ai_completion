@@ -81,7 +81,7 @@ export interface DragState {
   ghostPosition: { x: number; y: number };
 }
 
-export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG' | 'ARCHIVE';
+export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG' | 'ARCHIVE' | 'BATCH_DELETE';
 
 export interface BatchUpdateRecord {
   id: string;

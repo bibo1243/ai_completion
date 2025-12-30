@@ -419,6 +419,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
 
   const renderTaskItem = (task: TaskData) => {
     const theme = COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES];
+    const isSelected = selectedTaskIds.includes(task.id);
     return (
       <motion.div
         layoutId={`task-${task.id}`}
@@ -432,10 +433,14 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
           (e as any).dataTransfer.setData('text/plain', task.id);
         }}
         onClick={(e) => { e.stopPropagation(); handleSelection(e, task.id); }}
-        onDoubleClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }}
-        className={`text-[10px] px-1.5 py-1 rounded border ${theme.badge} cursor-grab active:cursor-grabbing truncate shadow-sm hover:shadow-md transition-shadow mb-1 ${selectedTaskIds.includes(task.id) ? 'ring-2 ring-offset-1 ' + theme.border : ''}`}
+        className={`text-[10px] px-1.5 py-1 rounded border cursor-grab active:cursor-grabbing truncate shadow-sm hover:shadow-md transition-shadow mb-1 ${isSelected ? 'ring-2 ring-offset-1' : ''}`}
         title={task.title}
-        style={{ opacity: selectedTaskIds.includes(task.id) ? 1 : 0.9, backgroundColor: selectedTaskIds.includes(task.id) ? theme.color + '33' : undefined }}
+        style={{
+          opacity: isSelected ? 1 : 0.9,
+          backgroundColor: isSelected ? theme.color + '33' : theme.color + '15',
+          borderColor: theme.color + '50',
+          color: theme.color
+        }}
       >
         {task.title}
       </motion.div>
@@ -495,11 +500,6 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
             }
           }}
           onMouseLeave={() => setSelectionPreview(null)}
-          onDoubleClick={async (e) => {
-            e.stopPropagation();
-            const newId = await addTask({ title: '', start_date: date.toISOString(), is_all_day: true, status: 'inbox' });
-            setEditingTaskId(newId);
-          }}
           className={`h-32 border-b border-r border-gray-100 p-2 overflow-y-auto hover:bg-gray-50 transition-all cursor-default relative ${isTodayDate ? 'bg-indigo-50/30' : ''}`}>
           <div className="flex items-start justify-between mb-1">
             <div className={`text-xs font-bold ${isTodayDate ? 'text-indigo-600' : 'text-gray-400'}`}>{d} {isTodayDate && '(Today)'}</div>
@@ -620,7 +620,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                 >
                   <div className="flex flex-col gap-1 h-full">
                     {allDayTasks.map(task => (
-                      <div key={task.id} onClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }} className={`text-[10px] px-2 py-0.5 rounded-sm border leading-tight ${COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES].badge} cursor-pointer truncate shadow-sm hover:brightness-95 transition-all w-full font-bold`}>{task.title}</div>
+                      <div key={task.id} className={`text-[10px] px-2 py-0.5 rounded-sm border leading-tight ${COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES].badge} truncate shadow-sm hover:brightness-95 transition-all w-full font-bold`}>{task.title}</div>
                     ))}
                   </div>
                 </div>
@@ -712,7 +712,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                                 clearTimeout(doubleClickTimer.current);
                                 doubleClickTimer.current = null;
                               }
-                              setEditingTaskId(task.id);
+                              // Removed: setEditingTaskId(task.id) - editing disabled in calendar view
                             }} className={`task-bubble absolute rounded-lg border-l-4 shadow-sm p-1.5 transition-all overflow-hidden group/box ${isInteracting ? 'z-50 opacity-70 shadow-xl scale-[1.02] cursor-move' : 'z-10 hover:shadow-md cursor-pointer'}`} style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%`, backgroundColor: isSelected ? theme.color + '4D' : theme.color + '1A', borderColor: theme.color, userSelect: 'none' }}>
                               {isInteracting && <div className="task-tooltip absolute left-1/2 -translate-x-1/2 -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded shadow-2xl z-[100] whitespace-nowrap border border-slate-700">{formatTimeRange(startMin, dur)}</div>}
                               <div className="flex flex-col h-full pointer-events-none">
@@ -804,7 +804,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
             </div>
           </div>
         </div>
-      </div>
+      </div >
     );
   };
 

@@ -40,10 +40,12 @@ export const ContinuousWeekCalendar = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const dragImageRef = useRef<HTMLDivElement>(null);
     const isPrependingRef = useRef(false);
+    const draftInputRef = useRef<HTMLInputElement>(null);
     const [weeks, setWeeks] = useState<WeekData[]>([]);
     const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null);
     const [dragOverDate, setDragOverDate] = useState<string | null>(null);
     const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
+    const [draftTask, setDraftTask] = useState<{ date: Date; title: string } | null>(null);
 
     const filteredTasks = React.useMemo(() => {
         // 僅在 Focus 視圖下應用 Focus 的標籤過濾
@@ -218,6 +220,29 @@ export const ContinuousWeekCalendar = () => {
         }
     };
 
+    // 雙擊日期格創建新任務（內嵌輸入）
+    const handleDateDoubleClick = (date: Date, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setDraftTask({ date, title: '' });
+        // 聚焦輸入框
+        setTimeout(() => draftInputRef.current?.focus(), 50);
+    };
+
+    // 確認新增任務
+    const confirmDraft = async () => {
+        if (!draftTask) return;
+        if (draftTask.title.trim()) {
+            await addTask({
+                title: draftTask.title.trim(),
+                start_date: draftTask.date.toISOString(),
+                is_all_day: true,
+                status: 'inbox',
+                color: 'gray'
+            });
+        }
+        setDraftTask(null);
+    };
+
     // 渲染月份分隔線標題
 
 
@@ -330,11 +355,7 @@ export const ContinuousWeekCalendar = () => {
                                                 }
                                             }}
                                             onClick={(e) => handleDateClick(day.date, e)}
-                                            onDoubleClick={(e) => {
-                                                e.stopPropagation();
-                                                addTask({ title: '', start_date: day.date.toISOString(), status: 'inbox', is_all_day: true })
-                                                    .then(id => setEditingTaskId(id));
-                                            }}
+                                            onDoubleClick={(e) => handleDateDoubleClick(day.date, e)}
                                         >
                                             {/* 月份分隔線 (如果這一天是1號) */}
                                             {isMonthStart && (
@@ -452,8 +473,8 @@ export const ContinuousWeekCalendar = () => {
                                                                 `}
                                                                 style={{
                                                                     border: borderStyle,
-                                                                    backgroundColor: isAllDay ? undefined : '#ffffff', // 非整日為白底(或透明)
-                                                                    color: isAllDay ? undefined : theme.color,    // 非整日字體顏色跟隨邊框
+                                                                    backgroundColor: isAllDay ? undefined : `${theme.color}20`, // Faint background
+                                                                    color: isAllDay ? undefined : theme.color,    // Text color follows border/theme
                                                                     height: '20px',
                                                                     lineHeight: '18px'
                                                                 }}
@@ -462,6 +483,26 @@ export const ContinuousWeekCalendar = () => {
                                                             </div>
                                                         )
                                                     })}
+
+                                                    {/* Draft Task Input */}
+                                                    {draftTask && draftTask.date.toDateString() === day.date.toDateString() && (
+                                                        <div className="px-1.5 py-0.5 rounded-md border-2 border-dashed border-indigo-400 bg-indigo-50/50">
+                                                            <input
+                                                                ref={draftInputRef}
+                                                                type="text"
+                                                                value={draftTask.title}
+                                                                onChange={(e) => setDraftTask({ ...draftTask, title: e.target.value })}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') confirmDraft();
+                                                                    if (e.key === 'Escape') setDraftTask(null);
+                                                                }}
+                                                                onBlur={confirmDraft}
+                                                                placeholder="新任務..."
+                                                                className="w-full text-[9.5px] bg-transparent outline-none text-indigo-600 font-medium"
+                                                                autoFocus
+                                                            />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

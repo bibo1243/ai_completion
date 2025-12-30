@@ -79,7 +79,7 @@ const DateSeparator = ({ label, isOverdue, count }: { label: string; isOverdue: 
 );
 
 export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
-    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, deleteTask } = useContext(AppContext);
+    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks } = useContext(AppContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollInterval = useRef<any>(null);
 
@@ -169,9 +169,18 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
             if (editingTaskId) return;
-            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+            const activeEl = document.activeElement as HTMLElement;
+            if (activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.isContentEditable) return;
             // Don't handle if search modal is open
             if (document.querySelector('[data-search-modal]')) return;
+
+            // Select All
+            if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+                e.preventDefault();
+                const allIds = effectiveVisibleTasks.map(item => item.data.id);
+                setSelectedTaskIds(allIds);
+                return;
+            }
             const idx = effectiveVisibleTasks.findIndex(item => item.data.id === focusedTaskId);
             if (e.metaKey || e.ctrlKey) {
                 if (e.key === 'ArrowUp') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[0]; setFocusedTaskId(target.data.id); handleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
@@ -223,7 +232,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 const idsToDelete = selectedTaskIds.length > 0 ? selectedTaskIds : (focusedTaskId ? [focusedTaskId] : []);
                 if (idsToDelete.length > 0) {
                     e.preventDefault();
-                    idsToDelete.forEach(id => deleteTask(id, view === 'trash'));
+                    batchDeleteTasks(idsToDelete, view === 'trash');
                     // Focus management after delete?
                     // Similar to TaskItem delete logic, we might want to focus next.
                     // But simpler is to just delete. List will update. focusedTaskId might need update if it was deleted.
@@ -237,7 +246,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, handleSelection, view, tags]);
+    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, handleSelection, view, tags, selectedTaskIds, batchDeleteTasks]);
 
     const isReviewView = view === 'waiting' || view === 'prompt' || view === 'logbook' || view === 'log';
     const pendingReviewCount = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at).length : 0;

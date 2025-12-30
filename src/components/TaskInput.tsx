@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2 } from 'lucide-react';
+import AudioPlayer from './AudioPlayer';
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor, AIHistoryEntry } from '../types';
@@ -101,7 +102,7 @@ import { AttachmentLink } from '../types';
 const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對與標點符號修正），嚴禁任何開場白、結尾、說明或感想。輸出內容必須僅包含潤飾後的正文內容。";
 
 
-export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => {
+export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false }: any) => {
     const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
@@ -109,12 +110,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const [startDate, setStartDate] = useState<string | null>(initialData?.start_date || null);
     const [selectedTags, setSelectedTags] = useState<string[]>(initialData?.tags || []);
     const [images, setImages] = useState<string[]>(initialData?.images || []);
-    const [attachments, setAttachments] = useState<Array<{ name: string; url: string; size: number; type: string }>>(initialData?.attachments || []);
+    const [attachments, setAttachments] = useState<Array<{ name: string; url: string; size: number; type: string; markers?: { time: number, id: string }[] }>>(initialData?.attachments || []);
     const [isDraggingFile, setIsDraggingFile] = useState(false);
     const [parentId, setParentId] = useState(initialData?.parent_id || null);
     const [childIds, setChildIds] = useState<string[]>([]);
     const [isProject, setIsProject] = useState(initialData?.is_project || false);
-    const [color, setColor] = useState<TaskColor>(initialData?.color || 'blue');
+    const [color, setColor] = useState<TaskColor>(initialData?.color || 'gray');
     const [isAllDay, setIsAllDay] = useState(initialData?.is_all_day !== undefined ? initialData.is_all_day : true);
     const [startTime, setStartTime] = useState(initialData?.start_time || '09:00');
     const [endTime, setEndTime] = useState(initialData?.end_time || '10:00');
@@ -131,6 +132,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     const [polishRange, setPolishRange] = useState<{ from: number, to: number } | null>(null);
     const [polishPosition, setPolishPosition] = useState<{ top: number, left: number } | null>(null);
     const [highlightRange, setHighlightRange] = useState<{ from: number, to: number } | null>(null);
+    const [playedAudio, setPlayedAudio] = useState<{ url: string, name: string, markers?: { time: number, id: string }[] } | null>(null);
+    const [audioSeekTime, setAudioSeekTime] = useState<number | null>(null);
 
     const [isAssistantLoading, setIsAssistantLoading] = useState(false);
     const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -1403,7 +1406,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
     return (
         <div
             ref={containerRef}
-            className={`group transition-all w-full relative ${isQuickAdd ? 'bg-transparent' : `mb-3 bg-white rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
+            className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 bg-white rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
             onKeyDown={handleKeyDown}
             onDragOver={(e) => {
                 e.preventDefault();
@@ -1615,8 +1618,26 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                 {renderPromptModal()}
                             </div>
 
-                            <div className={`flex flex-col md:flex-row gap-4 transition-all duration-300 items-stretch ${showAnalysis ? 'min-h-[630px]' : ''}`}>
-                                <div className="flex-1 transition-all duration-300 overflow-hidden flex flex-col">
+                            <div className="flex flex-col md:flex-row gap-4 transition-all duration-300 items-stretch h-full">
+                                <div className="flex-1 transition-all duration-300 overflow-y-auto max-h-[55vh] flex flex-col no-scrollbar">
+
+                                    {/* Audio Player if active */}
+                                    {playedAudio && (
+                                        <AudioPlayer
+                                            url={playedAudio.url}
+                                            fileName={playedAudio.name}
+                                            autoPlay={true}
+                                            markers={playedAudio.markers}
+                                            seekToTime={audioSeekTime}
+                                            onClose={() => { setPlayedAudio(null); setAudioSeekTime(null); }}
+                                            onMarkerClick={(marker) => {
+                                                if (editorRef.current && (editorRef.current as any).scrollToParagraph) {
+                                                    (editorRef.current as any).scrollToParagraph(marker.id);
+                                                }
+                                            }}
+                                        />
+                                    )}
+
                                     {viewMode === 'edit' ? (
                                         <NoteEditor
                                             onEditorReady={(editor) => { editorRef.current = editor; }}
@@ -1632,6 +1653,53 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                             textSizeClass={textSizeClass}
                                             descFontClass={descFontClass}
                                             className="h-full"
+                                            onSaveAudio={async (file, markers) => {
+                                                console.log("TaskInput onSaveAudio called with:", file.name, markers);
+                                                if (!supabase) return;
+                                                // Unique file path
+                                                const fileName = `${Date.now()}_${crypto.randomUUID()}.${file.name.split('.').pop()}`;
+                                                const filePath = `${user.id}/${fileName}`;
+
+                                                try {
+                                                    const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
+                                                        contentType: file.type,
+                                                        upsert: false
+                                                    });
+
+                                                    if (uploadError) {
+                                                        console.error('Upload voice error:', uploadError);
+                                                        setToast?.({ msg: '錄音儲存失敗', type: 'error' });
+                                                        return;
+                                                    }
+
+                                                    const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
+                                                    if (data) {
+                                                        const fileData = {
+                                                            name: `語音記事 ${new Date().toLocaleTimeString()} ...${file.name.split('.').pop()}`,
+                                                            url: data.publicUrl,
+                                                            size: file.size,
+                                                            type: file.type,
+                                                            markers: markers // Save markers here if needed
+                                                        };
+
+                                                        const updatedAttachments = [...attachments, fileData];
+                                                        setAttachments(updatedAttachments);
+
+                                                        if (initialData) {
+                                                            updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
+                                                        }
+                                                        setToast?.({ msg: '錄音已儲存', type: 'info' });
+                                                    }
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    setToast?.({ msg: '錄音儲存發生錯誤', type: 'error' });
+                                                }
+                                            }}
+                                            onAudioMarkerClick={(time) => {
+                                                // Jump the audio player to 4 seconds before this time
+                                                setAudioSeekTime(Math.max(0, time - 4000));
+                                            }}
+                                            activeMarkerIds={playedAudio?.markers?.map(m => m.id) || null}
                                         />
                                     ) : (
                                         <PresentationView
@@ -1970,9 +2038,25 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                     {attachments.map((file) => (
                                         <div
                                             key={file.url}
-                                            className="group flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50 border border-gray-100 hover:border-gray-200 transition-colors"
+                                            className={`group flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors ${playedAudio?.url === file.url
+                                                    ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-300/50'
+                                                    : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                                                }`}
                                         >
-                                            <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                                            {file.type?.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|webm|mp4)$/i) ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        setPlayedAudio({ url: file.url, name: file.name, markers: file.markers });
+                                                    }}
+                                                    className="p-0.5 text-indigo-500 bg-indigo-50 rounded-full hover:bg-indigo-100 mr-1"
+                                                >
+                                                    <Volume2 size={11} />
+                                                </button>
+                                            ) : (
+                                                <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                                            )}
                                             <input
                                                 ref={(el) => {
                                                     if (el && focusedAttachmentUrl === file.url) {
@@ -2286,6 +2370,26 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false }: any) => 
                                     >
                                         {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
                                         <span>{t('attachFiles')}</span>
+                                    </button>
+
+                                    {/* Voice Note Button */}
+                                    <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => {
+                                            // Trigger recording on NoteEditor via ref
+                                            if (editorRef.current && (editorRef.current as any).toggleRecording) {
+                                                (editorRef.current as any).toggleRecording();
+                                            } else {
+                                                setToast?.({ msg: "錄音功能尚未準備就緒", type: "error" });
+                                            }
+                                        }}
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-indigo-600 focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
+                                        title="開始錄音"
+                                    >
+                                        <Mic size={13} />
+                                        <span>語音</span>
                                     </button>
 
                                     {/* Parent/Project Selection */}

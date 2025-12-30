@@ -24,6 +24,7 @@ export const AppContext = createContext<{
     updateTask: (id: string, data: any, childIds?: string[], options?: { skipHistory?: boolean }) => Promise<void>;
     batchUpdateTasks: (updates: { id: string, data: any }[]) => Promise<void>;
     deleteTask: (id: string, permanent?: boolean) => Promise<void>;
+    batchDeleteTasks: (ids: string[], permanent?: boolean) => Promise<void>;
     restoreTask: (id: string) => Promise<void>;
     emptyTrash: () => Promise<void>;
     addTag: (name: string, parentId?: string | null) => Promise<string | null>;
@@ -837,6 +838,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 await supabaseClient.from('tasks').insert(originalTasks);
             }
         }
+        else if (action.type === 'BATCH_DELETE') { const tasksToRestore = action.payload.data as TaskData[]; setTasks(prev => [...prev, ...tasksToRestore].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at))); if (supabaseClient) await supabaseClient.from('tasks').insert(tasksToRestore); }
         setToast({ msg: '已復原', type: 'info' });
     };
 
@@ -893,6 +895,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 await supabaseClient.from('tasks').delete().in('id', ids);
             }
         }
+        else if (action.type === 'BATCH_DELETE') { const tasksToDelete = action.payload.data as TaskData[]; const ids = tasksToDelete.map(t => t.id); setTasks(prev => prev.filter(t => !ids.includes(t.id))); if (supabaseClient) await supabaseClient.from('tasks').delete().in('id', ids); }
         setToast({ msg: '已重做', type: 'info' });
     };
 
@@ -1170,8 +1173,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     const startDrag = (e: React.DragEvent, task: FlatTask) => {
         if (view === 'schedule') { e.preventDefault(); return; }
+        const moveIds = selectedTaskIds.includes(task.data.id) ? selectedTaskIds : [task.data.id];
         if (!selectedTaskIds.includes(task.data.id)) { setSelectedTaskIds([task.data.id]); }
         e.dataTransfer.setData('text/plain', task.data.id);
+        e.dataTransfer.setData('application/json', JSON.stringify(moveIds));
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setDragImage(DRAG_GHOST_IMG, 0, 0);
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -1638,6 +1643,85 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setSyncStatus('synced');
     };
 
+    const batchDeleteTasks = async (ids: string[], permanent: boolean = false) => {
+        if (ids.length === 0) return;
+        setSyncStatus('syncing');
+
+        if (!permanent) {
+            // Soft delete: set status to 'deleted'
+            const updates = ids.map(id => ({ id, data: { status: 'deleted' } }));
+            await batchUpdateTasks(updates);
+            setToast({ msg: `已將 ${ids.length} 個任務移至垃圾桶`, undo: () => undo() });
+            return;
+        }
+
+        // Permanent Delete
+        const tasksToDelete = tasksRef.current.filter(t => ids.includes(t.id));
+        if (tasksToDelete.length === 0) {
+            setSyncStatus('synced');
+            return;
+        }
+
+        // 1. Delete attachments/images from storage
+        if (supabaseClient) {
+            for (const task of tasksToDelete) {
+                // Delete attachments
+                if (task.attachments && task.attachments.length > 0) {
+                    for (const attachment of task.attachments) {
+                        try {
+                            const url = new URL(attachment.url);
+                            const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/attachments\/(.+)$/);
+                            if (pathMatch) {
+                                const filePath = pathMatch[1];
+                                await supabaseClient.storage.from('attachments').remove([filePath]);
+                            }
+                        } catch (err) { console.warn('Failed to delete attachment:', err); }
+                    }
+                }
+                // Delete images
+                if (task.images && task.images.length > 0) {
+                    for (const imageUrl of task.images) {
+                        try {
+                            const url = new URL(imageUrl);
+                            const pathMatch = url.pathname.match(/\/storage\/v1\/object\/public\/attachments\/(.+)$/);
+                            if (pathMatch) {
+                                const filePath = pathMatch[1];
+                                await supabaseClient.storage.from('attachments').remove([filePath]);
+                            }
+                        } catch (err) { console.warn('Failed to delete image:', err); }
+                    }
+                }
+            }
+        }
+
+        // 2. History
+        pushToHistory({ type: 'BATCH_DELETE', payload: { data: tasksToDelete } });
+
+        // 3. Local Update
+        setTasks(prev => {
+            const next = prev.filter(t => !ids.includes(t.id));
+            tasksRef.current = next;
+            return next;
+        });
+
+        // 4. DB Update
+        if (supabaseClient) {
+            const { error } = await supabaseClient.from('tasks').delete().in('id', ids);
+            if (error) {
+                handleError(error);
+                // Restore local
+                setTasks(prev => {
+                    const next = [...prev, ...tasksToDelete].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at));
+                    tasksRef.current = next;
+                    return next;
+                });
+                return;
+            }
+        }
+        setSyncStatus('synced');
+        setToast({ msg: `已永久刪除 ${ids.length} 個任務`, type: 'info' });
+    };
+
     const deleteTask = async (id: string, permanent: boolean = false) => {
         setSyncStatus('syncing');
         markLocalUpdate(id);
@@ -1824,7 +1908,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     return (
         <AppContext.Provider value={{
-            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, updateTask, batchUpdateTasks, deleteTask, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion,
+            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion,
             view, setView: setViewAndPersist,
             tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, initError,
             sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist, sidebarCollapsed, toggleSidebar,

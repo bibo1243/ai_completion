@@ -8,7 +8,7 @@ import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
 export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
-    const { updateTask, deleteTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, restoreTask, t, language } = useContext(AppContext);
+    const { updateTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +83,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                 }
             }
 
-            idsToDelete.forEach(id => deleteTask(id, view === 'trash'));
+            batchDeleteTasks(idsToDelete, view === 'trash');
 
             if (nextFocusTask) {
                 setFocusedTaskId(nextFocusTask.data.id);
@@ -258,7 +258,12 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                             </div>
                             <span className="flex-1 text-gray-400 line-through truncate select-text">{task.title}</span>
                             <button
-                                onClick={(e) => { e.stopPropagation(); restoreTask(task.id); }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const ids = selectedTaskIds.includes(task.id) ? selectedTaskIds : [task.id];
+                                    batchUpdateTasks(ids.map(id => ({ id, data: { status: 'inbox' } })));
+                                    setToast({ msg: "已還原至 Inbox", type: 'info' });
+                                }}
                                 className="px-2 py-1 bg-white border border-gray-200 text-indigo-600 text-[10px] font-medium rounded hover:bg-indigo-50 hover:border-indigo-200 transition-colors shadow-sm whitespace-nowrap"
                             >
                                 {t('putBack')}
@@ -299,7 +304,11 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                 <div className={`ml-auto ${isDone ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
                             </div>
                             <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">
-                                <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id, view === 'trash'); }} className="p-1 hover:text-red-500 text-slate-300 transition-colors"><Trash2 size={iconSize} /></button>
+                                <button onClick={(e) => {
+                                    e.stopPropagation();
+                                    const ids = selectedTaskIds.includes(task.id) ? selectedTaskIds : [task.id];
+                                    batchDeleteTasks(ids, view === 'trash');
+                                }} className="p-1 hover:text-red-500 text-slate-300 transition-colors"><Trash2 size={iconSize} /></button>
                             </div>
                         </>
                     )}

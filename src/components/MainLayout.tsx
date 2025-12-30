@@ -1,9 +1,8 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, X, Menu, User, LogOut, Plus } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
-import { TaskInput } from './TaskInput';
 import { JournalView } from './JournalView';
 import { FocusView } from './FocusView';
 import { ProjectView } from './ProjectView';
@@ -27,6 +26,37 @@ export const MainLayout = () => {
   const [isDraggingFab, setIsDraggingFab] = useState(false);
   const fabDragOffset = useRef({ x: 0, y: 0 });
 
+
+
+
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Handle FAB Dragging
+      if (isDraggingFab) {
+        const newX = Math.max(20, Math.min(window.innerWidth - 70, e.clientX - fabDragOffset.current.x));
+        const newY = Math.max(20, Math.min(window.innerHeight - 70, e.clientY - fabDragOffset.current.y));
+        setFabPosition({ x: newX, y: newY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (isDraggingFab) {
+        setIsDraggingFab(false);
+        localStorage.setItem('fabPosition', JSON.stringify(fabPosition));
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingFab, fabPosition]);
+
+
+
   const textSizeClass = { small: 'text-sm', normal: 'text-base', large: 'text-lg' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-base';
   const fontWeightClass = themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-bold';
   const fontFamilyClass = themeSettings.fontFamily === 'things' ? 'font-things' : 'font-sans';
@@ -49,29 +79,7 @@ export const MainLayout = () => {
     return () => window.removeEventListener('keydown', down);
   }, [editingTaskId, setEditingTaskId]);
 
-  // FAB drag handling
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingFab) return;
-      const newX = Math.max(20, Math.min(window.innerWidth - 70, e.clientX - fabDragOffset.current.x));
-      const newY = Math.max(20, Math.min(window.innerHeight - 70, e.clientY - fabDragOffset.current.y));
-      setFabPosition({ x: newX, y: newY });
-    };
-    const handleMouseUp = () => {
-      if (isDraggingFab) {
-        setIsDraggingFab(false);
-        localStorage.setItem('fabPosition', JSON.stringify(fabPosition));
-      }
-    };
-    if (isDraggingFab) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingFab, fabPosition]);
+
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -197,17 +205,10 @@ export const MainLayout = () => {
 
         {/* Modal for Calendar/Journal Editing if needed */}
         {editingTaskId && (view === 'calendar' || view === 'journal' || view === 'focus') && editingTask && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[200] flex items-center justify-center p-6" onClick={() => setEditingTaskId(null)}>
-            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between items-center px-6 py-4 border-b border-gray-100 flex-shrink-0 bg-white z-10">
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Edit Task</h3>
-                <button onClick={() => setEditingTaskId(null)} className="p-1 hover:bg-gray-100 rounded-full text-gray-400 hover:text-gray-600"><X size={18} /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-                <TaskInput initialData={editingTask} onClose={() => setEditingTaskId(null)} />
-              </div>
-            </div>
-          </div>
+          <DraggableTaskModal
+            initialData={editingTask}
+            onClose={() => setEditingTaskId(null)}
+          />
         )}
 
         {/* Floating Add Button - Draggable */}

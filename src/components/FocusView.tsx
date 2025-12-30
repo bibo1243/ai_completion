@@ -11,7 +11,7 @@ export const FocusView = () => {
         viewTagFilters, setEditingTaskId,
         focusSplitWidth, setFocusSplitWidth, themeSettings, setSelectedTaskIds,
         constructionModeEnabled, setConstructionModeEnabled,
-        deleteTask, editingTaskId
+        deleteTask, editingTaskId, batchDeleteTasks
     } = useContext(AppContext);
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -75,7 +75,7 @@ export const FocusView = () => {
                 if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
                 if (selectedTaskIds.length > 0) {
                     e.preventDefault();
-                    selectedTaskIds.forEach(id => deleteTask(id, false));
+                    batchDeleteTasks(selectedTaskIds, false);
                     // If deleted, we might want to clear selection or mode?
                     // Let's clear selection to avoid weird states
                     setSelectedTaskIds([]);
@@ -190,7 +190,7 @@ export const FocusView = () => {
 
                 {/* 任務內容 */}
                 <div className="flex-1 min-w-0">
-                    <div className={`${textSizeClass} ${fontFamilyClass} font-medium text-gray-800 truncate leading-tight`}>
+                    <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-gray-800 truncate leading-tight`}>
                         {task.title || <span className="text-gray-400 italic">無標題</span>}
                     </div>
                 </div>

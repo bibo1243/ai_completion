@@ -1,6 +1,6 @@
 import React, { useEffect, useContext, useState, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
-import { useEditor, EditorContent, Extension } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
 import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -10,17 +10,23 @@ import TaskItem from '@tiptap/extension-task-item';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Mic, Square } from 'lucide-react';
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
 
 
-// Custom extension to handle internal tab and Cmd+Enter exit
-const KeyboardNavigation = (onExit?: () => void) => Extension.create({
+// Custom extension to handle internal tab and Cmd+Enter exit, and now Enter tracking for recording
+const KeyboardNavigation = (onExit?: () => void, onEnter?: () => void) => Extension.create({
     name: 'keyboardNavigation',
     addKeyboardShortcuts() {
         return {
+            'Enter': () => {
+                if (onEnter) {
+                    onEnter();
+                }
+                return false; // Propagate to default handler (create new line/paragraph)
+            },
             'Tab': ({ editor }) => {
                 // If editor is empty, let the event bubble up for form navigation
                 if (editor.isEmpty) {
@@ -122,15 +128,108 @@ const ParagraphWithId = Node.create({
                 default: null,
                 parseHTML: element => element.getAttribute('data-paragraph-id'),
                 renderHTML: attributes => {
+                    // Only render if exists. We strictly manage IDs via state to ensure consistency.
                     if (!attributes['data-paragraph-id']) {
-                        // Generate a unique ID if it doesn't exist
-                        const id = `p-${Math.random().toString(36).substr(2, 9)}`;
-                        return { 'data-paragraph-id': id };
+                        return {};
                     }
                     return { 'data-paragraph-id': attributes['data-paragraph-id'] };
                 },
             },
         };
+    },
+});
+
+// React Component for the Audio Marker
+const AudioMarkerComponent = ({ node }: any) => {
+    const [isVisible, setIsVisible] = React.useState(true);
+
+    React.useEffect(() => {
+        const handleActiveMarkersChange = (e: CustomEvent) => {
+            const activeIds = e.detail?.ids as string[] | null;
+            // If no active IDs (no audio playing), show all markers
+            // If there are active IDs, only show if this marker is in the list
+            if (activeIds === null || activeIds === undefined) {
+                setIsVisible(true);
+            } else {
+                setIsVisible(activeIds.includes(node.attrs.id));
+            }
+        };
+        window.addEventListener('active-markers-change', handleActiveMarkersChange as EventListener);
+
+        // Check initial state
+        const currentActiveIds = (window as any).__activeMarkerIds;
+        if (currentActiveIds === null || currentActiveIds === undefined) {
+            setIsVisible(true);
+        } else {
+            setIsVisible(currentActiveIds.includes(node.attrs.id));
+        }
+
+        return () => {
+            window.removeEventListener('active-markers-change', handleActiveMarkersChange as EventListener);
+        };
+    }, [node.attrs.id]);
+
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // Parse start time from label (format: "00:00-00:15")
+        const label = node.attrs.label || '00:00-00:00';
+        const startTimeStr = label.split('-')[0]; // "00:00"
+        const [min, sec] = startTimeStr.split(':').map(Number);
+        const startTimeMs = (min * 60 + sec) * 1000;
+
+        // Dispatch custom event for NoteEditor to catch
+        window.dispatchEvent(new CustomEvent('audio-marker-click', {
+            detail: { time: startTimeMs, id: node.attrs.id }
+        }));
+    };
+
+    if (!isVisible) {
+        return null;
+    }
+
+    return (
+        <NodeViewWrapper as="span" className="inline-flex items-baseline align-middle mx-0.5 select-none">
+            <span
+                className="inline-flex items-center justify-center bg-slate-100 text-slate-400 border border-slate-200 px-1 py-0 rounded text-[7px] font-mono hover:bg-indigo-100 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer whitespace-nowrap"
+                contentEditable={false}
+                data-id={node.attrs.id}
+                title="點擊播放此段落"
+                onClick={handleClick}
+                onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+            >
+                {node.attrs.label || '00:00'}
+            </span>
+        </NodeViewWrapper>
+    );
+};
+
+// Custom Inline Marker Node for Audio
+const AudioMarkerNode = Node.create({
+    name: 'audioMarker',
+    group: 'inline',
+    inline: true,
+    atom: true, // Treated as a single unit
+
+    addAttributes() {
+        return {
+            id: { default: null },
+            time: { default: null },
+            label: { default: '0:00' },
+        };
+    },
+
+    parseHTML() {
+        return [{ tag: 'span[data-type="audio-marker"]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'audio-marker' })];
+    },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(AudioMarkerComponent);
     },
 });
 
@@ -146,6 +245,9 @@ interface NoteEditorProps {
     textSizeClass?: string;
     descFontClass?: string;
     autoFocus?: boolean;
+    onSaveAudio?: (file: File, markers: any[]) => Promise<void>;
+    onAudioMarkerClick?: (time: number) => void;
+    activeMarkerIds?: string[] | null; // IDs of markers from the currently playing audio
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -160,11 +262,179 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     textSizeClass = "text-base",
     descFontClass = "font-normal",
     autoFocus = false,
+    onSaveAudio,
+    onAudioMarkerClick,
+    activeMarkerIds
 }) => {
     const { t } = useContext(AppContext);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [colorPickerPosition, setColorPickerPosition] = useState({ top: 0, left: 0 });
     const colorPickerTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // --- Audio Recording State ---
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordingTime, setRecordingTime] = useState(0); // ms
+    const [audioMarkers, setAudioMarkers] = useState<{ id: string, time: number }[]>([]);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
+    const [showRecorder, setShowRecorder] = useState(false);
+    const editorRef = useRef<any>(null); // Ref to hold editor instance for callbacks
+
+    // Refs to solve closure staleness in callbacks (TipTap onSelectionUpdate & MediaRecorder onstop)
+    const isRecordingRef = useRef(isRecording);
+    const recordingTimeRef = useRef(recordingTime);
+    const audioMarkersRef = useRef(audioMarkers);
+    const onSaveAudioRef = useRef(onSaveAudio);
+
+    useEffect(() => {
+        isRecordingRef.current = isRecording;
+        recordingTimeRef.current = recordingTime;
+        audioMarkersRef.current = audioMarkers;
+        onSaveAudioRef.current = onSaveAudio;
+    }, [isRecording, recordingTime, audioMarkers, onSaveAudio]);
+
+    // Update active marker IDs for visibility control
+    useEffect(() => {
+        (window as any).__activeMarkerIds = activeMarkerIds;
+        window.dispatchEvent(new CustomEvent('active-markers-change', {
+            detail: { ids: activeMarkerIds }
+        }));
+    }, [activeMarkerIds]);
+
+    // Listen for audio marker clicks from the custom event
+    useEffect(() => {
+        const handleMarkerClick = (e: CustomEvent) => {
+            if (onAudioMarkerClick && e.detail?.time !== undefined) {
+                onAudioMarkerClick(e.detail.time);
+            }
+        };
+        window.addEventListener('audio-marker-click', handleMarkerClick as EventListener);
+        return () => {
+            window.removeEventListener('audio-marker-click', handleMarkerClick as EventListener);
+        };
+    }, [onAudioMarkerClick]);
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Prioritize MP4 for compatibility (Safari/Mac), fallback to WebM (Chrome)
+            const mimeType = MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : 'audio/webm';
+
+            // Optimize for voice: 32kbps is sufficient for speech and produces very small files (~240KB/min)
+            const recorder = new MediaRecorder(stream, {
+                mimeType,
+                audioBitsPerSecond: 32000
+            });
+
+            mediaRecorderRef.current = recorder;
+            chunksRef.current = [];
+
+            recorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunksRef.current.push(e.data);
+            };
+
+            recorder.onstop = () => {
+                const blob = new Blob(chunksRef.current, { type: mimeType });
+                const ext = mimeType.split('/')[1];
+                const fileName = `voice-note-${Date.now()}.${ext}`;
+                const file = new File([blob], fileName, { type: mimeType });
+
+                // Stop tracks
+                stream.getTracks().forEach(track => track.stop());
+
+                console.log("Recording stopped. Markers:", audioMarkersRef.current);
+
+                if (onSaveAudioRef.current) {
+                    onSaveAudioRef.current(file, [...audioMarkersRef.current]);
+                }
+            };
+
+            recorder.start(100);
+            setIsRecording(true);
+            setRecordingTime(0);
+            setAudioMarkers([]);
+            setShowRecorder(true);
+
+            // Start the timer
+            timerRef.current = setInterval(() => {
+                setRecordingTime(prev => prev + 100);
+            }, 100);
+        } catch (err) {
+            console.error("Failed to start recording", err);
+            alert("Microphone access denied or not available.");
+        }
+    };
+
+    const stopRecording = () => {
+        // Insert final marker if we have recorded something and editor is available
+        if (isRecordingRef.current && editorRef.current && recordingTimeRef.current > 0) {
+            const time = recordingTimeRef.current;
+            const id = `rec-end-${Date.now()}`;
+
+            const prevMarkers = audioMarkersRef.current;
+            const prevTime = prevMarkers.length > 0 ? prevMarkers[prevMarkers.length - 1].time : 0;
+            const label = `${formatTime(prevTime)}-${formatTime(time)}`;
+
+            const newMarker = { id, time };
+            setAudioMarkers(prev => [...prev, newMarker]);
+            audioMarkersRef.current = [...audioMarkersRef.current, newMarker];
+
+            editorRef.current.chain()
+                .insertContent({
+                    type: 'audioMarker',
+                    attrs: { id, time, label }
+                })
+                .insertContent(' ')
+                .run();
+        }
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        }
+        if (timerRef.current) clearInterval(timerRef.current);
+        setIsRecording(false);
+    };
+
+    const formatTime = (ms: number) => {
+        const seconds = Math.floor(ms / 1000);
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const handleEnter = () => {
+        if (isRecordingRef.current && editorRef.current) {
+            // Immediately capture time
+            const time = recordingTimeRef.current;
+            console.log("Enter pressed during recording at:", time);
+
+            // Create a unique ID for this segment
+            const id = `rec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+            // Get previous marker time (or 0 if first marker)
+            const prevMarkers = audioMarkersRef.current;
+            const prevTime = prevMarkers.length > 0 ? prevMarkers[prevMarkers.length - 1].time : 0;
+
+            // Create range label: "prevTime-currentTime"
+            const label = `${formatTime(prevTime)}-${formatTime(time)}`;
+
+            // Add marker state immediately for UI feedback (purple dots)
+            const newMarker = { id, time };
+            setAudioMarkers(prev => [...prev, newMarker]);
+            audioMarkersRef.current = [...audioMarkersRef.current, newMarker];
+
+            // Insert Visual Marker at current cursor position using editorRef
+            console.log("Inserting audioMarker node with label:", label);
+            editorRef.current.chain()
+                .insertContent({
+                    type: 'audioMarker',
+                    attrs: { id, time, label }
+                })
+                .insertContent(' ') // Add a space after
+                .run();
+        }
+    };
 
     const editor = useEditor({
         extensions: [
@@ -183,6 +453,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 },
             }),
             ParagraphWithId, // Add custom paragraph with IDs
+            AudioMarkerNode, // Add custom audio marker
             TextStyle,
             Color,
             Highlight.configure({ multicolor: true }),
@@ -207,7 +478,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             }),
             DetailsSummary,
             DetailsContent,
-            KeyboardNavigation(onExit),
+            KeyboardNavigation(onExit, handleEnter),
         ],
         content: initialContent,
         editable: editable,
@@ -226,6 +497,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             }
         },
         onSelectionUpdate: ({ editor }) => {
+            // --- Color Picker Logic ---
             // 清除之前的定時器
             if (colorPickerTimeout.current) {
                 clearTimeout(colorPickerTimeout.current);
@@ -275,6 +547,86 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             }
         }
     }, [initialContent, editor]);
+
+    // Expose toggleRecording to parent
+    useEffect(() => {
+        if (editor) {
+            editorRef.current = editor; // Update editorRef for use in callbacks like handleEnter
+            (editor as any).toggleRecording = () => {
+                if (showRecorder) {
+                    stopRecording(); // ensure stopRecording is stable or accessible
+                    setShowRecorder(false);
+                } else {
+                    startRecording();
+                    setShowRecorder(true);
+                }
+            };
+            (editor as any).isRecording = isRecording;
+
+            // Expose scrollToParagraph for audio marker jumping - highlights the NEXT marker
+            (editor as any).scrollToParagraph = (id: string) => {
+                if (!id) return;
+                let currentMarkerPos: number | null = null;
+                let nextMarkerPos: number | null = null;
+                let nextMarkerId: string | null = null;
+
+                // First pass: Find the current marker position
+                editor.state.doc.descendants((node, pos) => {
+                    if (node.type.name === 'audioMarker' && node.attrs.id === id) {
+                        currentMarkerPos = pos;
+                        return false;
+                    }
+                });
+
+                // Second pass: Find the NEXT marker after the current one
+                if (currentMarkerPos !== null) {
+                    editor.state.doc.descendants((node, pos) => {
+                        if (node.type.name === 'audioMarker' && pos > currentMarkerPos!) {
+                            if (nextMarkerPos === null) {
+                                nextMarkerPos = pos;
+                                nextMarkerId = node.attrs.id;
+                                return false;
+                            }
+                        }
+                    });
+                }
+
+                // Use next marker if found, otherwise fall back to current
+                const targetPos = nextMarkerPos !== null ? nextMarkerPos : currentMarkerPos;
+                const targetId = nextMarkerId !== null ? nextMarkerId : id;
+
+                if (targetPos !== null) {
+                    editor.chain()
+                        .setTextSelection(targetPos)
+                        .scrollIntoView()
+                        .focus()
+                        .run();
+
+                    // Find and highlight the marker element in DOM
+                    setTimeout(() => {
+                        const markerEl = document.querySelector(`[data-id="${targetId}"]`) as HTMLElement;
+                        if (markerEl) {
+                            // Add highlight effect
+                            markerEl.style.transition = 'all 0.3s ease';
+                            markerEl.style.backgroundColor = '#fef08a'; // Yellow highlight
+                            markerEl.style.color = '#854d0e'; // Dark amber text
+                            markerEl.style.borderColor = '#fbbf24';
+                            markerEl.style.transform = 'scale(1.2)';
+
+                            // Fade out after 2 seconds
+                            setTimeout(() => {
+                                markerEl.style.transition = 'all 1s ease';
+                                markerEl.style.backgroundColor = '';
+                                markerEl.style.color = '';
+                                markerEl.style.borderColor = '';
+                                markerEl.style.transform = '';
+                            }, 2000);
+                        }
+                    }, 50);
+                }
+            };
+        }
+    }, [editor, showRecorder, isRecording]); // Add dependencies if needed
 
     useEffect(() => {
         if (editor && autoFocus) {
@@ -364,6 +716,93 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     </button>
                 </div>
             )}
+
+            {/* Dynamic Audio Capsule */}
+            <div className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 transition-all duration-500 ease-spring z-[99999] ${showRecorder ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+                <div className="bg-black/90 backdrop-blur-xl text-white rounded-full flex items-center p-2 pl-4 pr-4 shadow-2xl border border-white/10 gap-4 min-w-[300px]">
+
+                    {/* Status & Controls */}
+                    <div className="flex items-center gap-2">
+                        {isRecording ? (
+                            <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={stopRecording}
+                                className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
+                            >
+                                <Square size={14} fill="currentColor" />
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={startRecording}
+                                className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center hover:bg-indigo-500 hover:text-white transition-all"
+                            >
+                                <Mic size={16} />
+                            </button>
+                        )}
+                        <span className="font-mono text-sm tabular-nums tracking-wider text-gray-200">
+                            {formatTime(recordingTime)}
+                        </span>
+                    </div>
+
+                    {/* Visualizer / Timeline */}
+                    <div className="flex-1 h-8 rounded-lg bg-white/5 relative overflow-hidden flex items-center px-1">
+                        {/* Fake Waveform Animation if recording */}
+                        {isRecording && (
+                            <div className="absolute inset-0 flex items-center justify-center gap-[2px] opacity-30">
+                                {Array.from({ length: 40 }).map((_, i) => (
+                                    <div
+                                        key={i}
+                                        className="w-[3px] bg-white rounded-full animate-pulse"
+                                        style={{
+                                            height: `${Math.random() * 100}%`,
+                                            animationDelay: `${Math.random()}s`,
+                                            animationDuration: '0.5s'
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Bubbles (Markers) */}
+                        {/* Normalize time to width? Infinite scroll? Just show last 10 markers or relative? */}
+                        {/* Simple: Progress Bar style, but we don't know total duration. */}
+                        {/* Let's make it a scrolling window of last 30s? Or just relative dots. */}
+                        {/* For simplicity/demo: Static timeline representing "Current Session" if simple, or just a stream. */}
+                        {/* Let's render bubbles as they appear, floating rightwards? No, fixed timeline. */}
+                        {/* Let's visualize markers as dots on a track that fills up? */}
+
+                        {/* Let's do a simple "Recent Markers" visualization */}
+                        <div className="relative w-full h-full flex items-center">
+                            <div className="absolute w-full h-[1px] bg-white/20"></div>
+                            {audioMarkers.slice(-10).map((m, i) => {
+                                // Calculate relative position? Hard without total.
+                                // Just show them as a stack coming in?
+                                // Let's position them by % of current `recordingTime`. 
+                                // As time grows, they shift left.
+                                const pct = (m.time / Math.max(recordingTime, 1000)) * 100;
+                                return (
+                                    <div
+                                        key={m.time + i}
+                                        className="absolute w-2.5 h-2.5 bg-indigo-400 rounded-full border-2 border-black/50 shadow-sm transition-all duration-300"
+                                        style={{ left: `${Math.min(98, pct)}%`, top: '50%', transform: 'translate(-50%, -50%)' }}
+                                        title={`Segment at ${formatTime(m.time)}`}
+                                    />
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Indicator */}
+                    {isRecording && (
+                        <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                    )}
+                </div>
+            </div>
+
+
 
             <style dangerouslySetInnerHTML={{
                 __html: `
