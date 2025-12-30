@@ -3,9 +3,9 @@ import Foundation
 class SupabaseService {
     static let shared = SupabaseService()
     
-    // IMPORTANT: Replace these with your actual Supabase credentials
-    private let supabaseUrl = "YOUR_SUPABASE_URL"
-    private let supabaseKey = "YOUR_SUPABASE_ANON_KEY"
+    // Supabase credentials
+    private let supabaseUrl = "https://acrkclmderqewcwugsnl.supabase.co"
+    private let supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTc0MzAsImV4cCI6MjA4MTgzMzQzMH0.UT2vJTXpPO5tR9sUD8YU0gJ_47Zpe3yJiLzllUljPDw"
     
     private init() {}
     
