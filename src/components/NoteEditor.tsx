@@ -247,8 +247,8 @@ interface NoteEditorProps {
     autoFocus?: boolean;
     onSaveAudio?: (file: File, markers: any[]) => Promise<void>;
     onAudioMarkerClick?: (time: number) => void;
-    activeMarkerIds?: string[] | null; // IDs of markers from the currently playing audio
-    onMarkersChange?: (markerIds: string[]) => void; // Called when markers in editor change (for sync)
+    activeMarkerIds?: string[] | null;
+    onMarkersChange?: (markerIds: string[]) => void; // Called when markers are deleted from editor
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -498,7 +498,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 onChange(html);
             }
 
-            // Extract current marker IDs and notify parent for sync
+            // Sync markers: scan for all audioMarker nodes and notify parent if changed
             if (onMarkersChange) {
                 const currentMarkerIds: string[] = [];
                 editor.state.doc.descendants((node) => {
@@ -506,6 +506,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                         currentMarkerIds.push(node.attrs.id);
                     }
                 });
+
+                // Only call if there are markers or markers were deleted
+                // We use a simple approach: always report current markers
+                // The parent can compare and update attachments accordingly
                 onMarkersChange(currentMarkerIds);
             }
         },
