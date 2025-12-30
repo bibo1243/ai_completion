@@ -288,6 +288,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     const recordingTimeRef = useRef(recordingTime);
     const audioMarkersRef = useRef(audioMarkers);
     const onSaveAudioRef = useRef(onSaveAudio);
+    const lastReportedMarkersRef = useRef<string[]>([]); // Track last reported markers to avoid unnecessary updates
 
     useEffect(() => {
         isRecordingRef.current = isRecording;
@@ -499,7 +500,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             }
 
             // Sync markers: scan for all audioMarker nodes and notify parent if changed
-            if (onMarkersChange) {
+            // Only do this when NOT recording to avoid interfering with recording state
+            if (onMarkersChange && !isRecordingRef.current) {
                 const currentMarkerIds: string[] = [];
                 editor.state.doc.descendants((node) => {
                     if (node.type.name === 'audioMarker' && node.attrs.id) {
@@ -507,10 +509,15 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     }
                 });
 
-                // Only call if there are markers or markers were deleted
-                // We use a simple approach: always report current markers
-                // The parent can compare and update attachments accordingly
-                onMarkersChange(currentMarkerIds);
+                // Only report if markers actually changed
+                const lastMarkers = lastReportedMarkersRef.current;
+                const markersChanged = currentMarkerIds.length !== lastMarkers.length ||
+                    currentMarkerIds.some((id, i) => lastMarkers[i] !== id);
+
+                if (markersChanged) {
+                    lastReportedMarkersRef.current = currentMarkerIds;
+                    onMarkersChange(currentMarkerIds);
+                }
             }
         },
         onSelectionUpdate: ({ editor }) => {
