@@ -2,11 +2,11 @@ import SwiftUI
 import Combine
 
 // MARK: - Models
-struct Task: Identifiable, Codable {
+struct TaskItem: Identifiable, Codable {
     let id: String
     var title: String
     var notes: String?
-    var status: TaskStatus
+    var status: TaskItemStatus
     var color: String?
     var startDate: Date?
     var dueDate: Date?
@@ -17,7 +17,7 @@ struct Task: Identifiable, Codable {
     var createdAt: Date
     var userId: String
     
-    init(id: String = UUID().uuidString, title: String, notes: String? = nil, status: TaskStatus = .pending, color: String? = "#6366f1", startDate: Date? = nil, dueDate: Date? = nil, completedAt: Date? = nil, isProject: Bool = false, parentId: String? = nil, tagIds: [String] = [], createdAt: Date = Date(), userId: String = "") {
+    init(id: String = UUID().uuidString, title: String, notes: String? = nil, status: TaskItemStatus = .pending, color: String? = "#6366f1", startDate: Date? = nil, dueDate: Date? = nil, completedAt: Date? = nil, isProject: Bool = false, parentId: String? = nil, tagIds: [String] = [], createdAt: Date = Date(), userId: String = "") {
         self.id = id
         self.title = title
         self.notes = notes
@@ -99,7 +99,7 @@ enum ViewType: String, CaseIterable {
 class AppState: ObservableObject {
     @Published var currentView: ViewType = .inbox
     @Published var selectedTagId: String? = nil
-    @Published var tasks: [Task] = []
+    @Published var tasks: [TaskItem] = []
     @Published var tags: [Tag] = []
     @Published var selectedTaskId: String? = nil
     @Published var showQuickAdd: Bool = false
@@ -141,7 +141,7 @@ class AppState: ObservableObject {
     
     func loadData() {
         isLoading = true
-        Task {
+        Swift.Task {
             do {
                 let fetchedTasks = try await supabase.fetchTasks()
                 let fetchedTags = try await supabase.fetchTags()
@@ -159,12 +159,12 @@ class AppState: ObservableObject {
         }
     }
     
-    func createTask(_ task: Task) async throws {
+    func createTask(_ task: TaskItem) async throws {
         try await supabase.createTask(task)
         loadData()
     }
     
-    func updateTask(_ task: Task) async throws {
+    func updateTask(_ task: TaskItem) async throws {
         try await supabase.updateTask(task)
         loadData()
     }
@@ -188,7 +188,7 @@ class AppState: ObservableObject {
     }
     
     // Filtered tasks for current view
-    var filteredTasks: [Task] {
+    var filteredTasks: [TaskItem] {
         var result = tasks.filter { $0.status != .archived }
         
         // Filter by search
@@ -235,7 +235,7 @@ class AppState: ObservableObject {
 
 // MARK: - Supabase Service Extension
 extension SupabaseService {
-    func fetchTasks() async throws -> [Task] {
+    func fetchTasks() async throws -> [TaskItem] {
         guard let url = URL(string: "\(supabaseUrl)/rest/v1/tasks?select=*&order=created_at.desc") else {
             throw URLError(.badURL)
         }
@@ -267,11 +267,11 @@ extension SupabaseService {
         let dateFormatter = ISO8601DateFormatter()
         
         return responses.map { r in
-            Task(
+            TaskItem(
                 id: r.id,
                 title: r.title,
                 notes: r.notes,
-                status: TaskStatus(rawValue: r.status) ?? .pending,
+                status: TaskItemStatus(rawValue: r.status) ?? .pending,
                 color: r.color,
                 startDate: r.start_date.flatMap { dateFormatter.date(from: $0) },
                 dueDate: r.due_date.flatMap { dateFormatter.date(from: $0) },
@@ -308,7 +308,7 @@ extension SupabaseService {
         return responses.map { Tag(id: $0.id, name: $0.name, color: $0.color, userId: $0.user_id) }
     }
     
-    func createTask(_ task: Task) async throws {
+    func createTask(_ task: TaskItem) async throws {
         guard let url = URL(string: "\(supabaseUrl)/rest/v1/tasks") else {
             throw URLError(.badURL)
         }
@@ -344,7 +344,7 @@ extension SupabaseService {
         }
     }
     
-    func updateTask(_ task: Task) async throws {
+    func updateTask(_ task: TaskItem) async throws {
         guard let url = URL(string: "\(supabaseUrl)/rest/v1/tasks?id=eq.\(task.id)") else {
             throw URLError(.badURL)
         }
@@ -392,7 +392,4 @@ extension SupabaseService {
             throw URLError(.badServerResponse)
         }
     }
-    
-    var supabaseUrl: String { "https://acrkclmderqewcwugsnl.supabase.co" }
-    var supabaseKey: String { "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFjcmtjbG1kZXJxZXdjd3Vnc25sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTc0MzAsImV4cCI6MjA4MTgzMzQzMH0.UT2vJTXpPO5tR9sUD8YU0gJ_47Zpe3yJiLzllUljPDw" }
 }

@@ -246,14 +246,14 @@ struct MainContentView: View {
 // MARK: - Task Row
 struct TaskRow: View {
     @EnvironmentObject var appState: AppState
-    let task: Task
+    let task: TaskItem
     @State private var isHovered = false
     
     var body: some View {
         HStack(spacing: 12) {
             // Checkbox
             Button(action: {
-                Task {
+                Swift.Task {
                     try? await appState.toggleComplete(task.id)
                 }
             }) {
@@ -414,8 +414,8 @@ struct QuickAddView: View {
     
     func submit() {
         isSubmitting = true
-        let newTask = Task(title: title, notes: notes.isEmpty ? nil : notes, color: selectedColor, userId: appState.userId)
-        Task {
+        let newTask = TaskItem(title: title, notes: notes.isEmpty ? nil : notes, color: selectedColor, userId: appState.userId)
+        Swift.Task {
             do {
                 try await appState.createTask(newTask)
                 await MainActor.run {
@@ -479,7 +479,7 @@ struct LoginView: View {
     func login() {
         isLoading = true
         errorMessage = nil
-        Task {
+        Swift.Task {
             do {
                 try await appState.login(email: email, password: password)
             } catch {
