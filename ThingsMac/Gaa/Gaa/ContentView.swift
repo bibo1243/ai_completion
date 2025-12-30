@@ -1,5 +1,8 @@
 import SwiftUI
 
+// Alias for async Task to avoid conflict with TaskItem
+typealias AsyncTask = _Concurrency.Task
+
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var sidebarWidth: CGFloat = 220
@@ -120,26 +123,26 @@ struct SidebarView: View {
     func countForView(_ viewType: ViewType) -> Int {
         switch viewType {
         case .inbox:
-            return appState.tasks.filter { $0.startDate == nil && $0.status == .pending && !$0.isProject && $0.parentId == nil }.count
+            return appState.tasks.filter { $0.startDate == nil && $0.status == TaskStatus.pending && !$0.isProject && $0.parentId == nil }.count
         case .today:
             let today = Calendar.current.startOfDay(for: Date())
             return appState.tasks.filter { 
                 if let startDate = $0.startDate {
-                    return Calendar.current.isDate(startDate, inSameDayAs: today) && $0.status == .pending
+                    return Calendar.current.isDate(startDate, inSameDayAs: today) && $0.status == TaskStatus.pending
                 }
                 return false
             }.count
         case .projects:
             return appState.tasks.filter { $0.isProject }.count
         case .logbook:
-            return appState.tasks.filter { $0.status == .completed }.count
+            return appState.tasks.filter { $0.status == TaskStatus.completed }.count
         default:
             return 0
         }
     }
     
     func countForTag(_ tagId: String) -> Int {
-        return appState.tasks.filter { $0.tagIds.contains(tagId) && $0.status == .pending }.count
+        return appState.tasks.filter { $0.tagIds.contains(tagId) && $0.status == TaskStatus.pending }.count
     }
 }
 
@@ -253,7 +256,7 @@ struct TaskRow: View {
         HStack(spacing: 12) {
             // Checkbox
             Button(action: {
-                Swift.Task {
+                AsyncTask {
                     try? await appState.toggleComplete(task.id)
                 }
             }) {
@@ -261,7 +264,7 @@ struct TaskRow: View {
                     .strokeBorder(Color(hex: task.color ?? "#6366f1"), lineWidth: 2)
                     .frame(width: 20, height: 20)
                     .overlay(
-                        task.status == .completed ?
+                        task.status == TaskStatus.completed ?
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(Color(hex: task.color ?? "#6366f1"))
@@ -274,8 +277,8 @@ struct TaskRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(task.title)
                     .font(.system(size: 14, weight: .ultraLight))
-                    .strikethrough(task.status == .completed)
-                    .foregroundColor(task.status == .completed ? .secondary : .primary)
+                    .strikethrough(task.status == TaskStatus.completed)
+                    .foregroundColor(task.status == TaskStatus.completed ? .secondary : .primary)
                 
                 if let notes = task.notes, !notes.isEmpty {
                     Text(notes)
@@ -402,7 +405,7 @@ struct QuickAddView: View {
                 Spacer()
                 Button("取消") { dismiss() }
                 Button("新增") {
-                    submit()
+                    submitTask()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(title.isEmpty || isSubmitting)
@@ -412,10 +415,10 @@ struct QuickAddView: View {
         .frame(width: 400)
     }
     
-    func submit() {
+    func submitTask() {
         isSubmitting = true
         let newTask = TaskItem(title: title, notes: notes.isEmpty ? nil : notes, color: selectedColor, userId: appState.userId)
-        Swift.Task {
+        AsyncTask {
             do {
                 try await appState.createTask(newTask)
                 await MainActor.run {
@@ -423,7 +426,9 @@ struct QuickAddView: View {
                 }
             } catch {
                 print("Error: \(error)")
-                isSubmitting = false
+                await MainActor.run {
+                    isSubmitting = false
+                }
             }
         }
     }
@@ -462,7 +467,7 @@ struct LoginView: View {
                     .foregroundColor(.red)
             }
             
-            Button(action: login) {
+            Button(action: loginAction) {
                 if isLoading {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -476,10 +481,10 @@ struct LoginView: View {
         .frame(width: 400, height: 400)
     }
     
-    func login() {
+    func loginAction() {
         isLoading = true
         errorMessage = nil
-        Swift.Task {
+        AsyncTask {
             do {
                 try await appState.login(email: email, password: password)
             } catch {

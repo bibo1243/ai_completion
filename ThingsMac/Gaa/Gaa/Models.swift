@@ -1,12 +1,15 @@
 import SwiftUI
 import Combine
 
+// Alias for async Task to avoid conflict with TaskItem
+typealias AsyncTaskRunner = _Concurrency.Task
+
 // MARK: - Models
 struct TaskItem: Identifiable, Codable {
     let id: String
     var title: String
     var notes: String?
-    var status: TaskItemStatus
+    var status: TaskStatus
     var color: String?
     var startDate: Date?
     var dueDate: Date?
@@ -17,7 +20,7 @@ struct TaskItem: Identifiable, Codable {
     var createdAt: Date
     var userId: String
     
-    init(id: String = UUID().uuidString, title: String, notes: String? = nil, status: TaskItemStatus = .pending, color: String? = "#6366f1", startDate: Date? = nil, dueDate: Date? = nil, completedAt: Date? = nil, isProject: Bool = false, parentId: String? = nil, tagIds: [String] = [], createdAt: Date = Date(), userId: String = "") {
+    init(id: String = UUID().uuidString, title: String, notes: String? = nil, status: TaskStatus = .pending, color: String? = "#6366f1", startDate: Date? = nil, dueDate: Date? = nil, completedAt: Date? = nil, isProject: Bool = false, parentId: String? = nil, tagIds: [String] = [], createdAt: Date = Date(), userId: String = "") {
         self.id = id
         self.title = title
         self.notes = notes
@@ -141,10 +144,10 @@ class AppState: ObservableObject {
     
     func loadData() {
         isLoading = true
-        Swift.Task {
+        AsyncTaskRunner {
             do {
-                let fetchedTasks = try await supabase.fetchTasks()
-                let fetchedTags = try await supabase.fetchTags()
+                let fetchedTasks = try await self.supabase.fetchTasks()
+                let fetchedTags = try await self.supabase.fetchTags()
                 await MainActor.run {
                     self.tasks = fetchedTasks
                     self.tags = fetchedTags
@@ -271,7 +274,7 @@ extension SupabaseService {
                 id: r.id,
                 title: r.title,
                 notes: r.notes,
-                status: TaskItemStatus(rawValue: r.status) ?? .pending,
+                status: TaskStatus(rawValue: r.status) ?? .pending,
                 color: r.color,
                 startDate: r.start_date.flatMap { dateFormatter.date(from: $0) },
                 dueDate: r.due_date.flatMap { dateFormatter.date(from: $0) },
