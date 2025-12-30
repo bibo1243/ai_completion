@@ -77,7 +77,6 @@ struct TaskInputView: View {
                         VStack(spacing: 12) {
                             TextField("Email", text: $email)
                                 .textFieldStyle(.roundedBorder)
-                                .textContentType(.emailAddress)
                             
                             SecureField("密碼", text: $password)
                                 .textFieldStyle(.roundedBorder)
@@ -124,18 +123,64 @@ struct TaskInputView: View {
                                 .cornerRadius(10)
                         }
                         
-                        // Notes
+                        // Notes with Markdown preview
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("備註")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.secondary)
+                            HStack {
+                                Text("備註")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("支援 Markdown")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary.opacity(0.6))
+                            }
                             
-                            TextEditor(text: $notes)
-                                .font(.system(size: 14))
-                                .frame(minHeight: 100, maxHeight: 150)
-                                .padding(8)
-                                .background(Color(nsColor: .controlBackgroundColor))
-                                .cornerRadius(10)
+                            // Split view: Editor + Preview
+                            HStack(spacing: 8) {
+                                // Editor
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("編輯")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(.secondary.opacity(0.5))
+                                    TextEditor(text: $notes)
+                                        .font(.system(size: 13, design: .monospaced))
+                                        .frame(minHeight: 120, maxHeight: 150)
+                                        .padding(8)
+                                        .background(Color(nsColor: .controlBackgroundColor))
+                                        .cornerRadius(8)
+                                }
+                                .frame(maxWidth: .infinity)
+                                
+                                // Preview
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("預覽")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(.secondary.opacity(0.5))
+                                    ScrollView {
+                                        VStack(alignment: .leading) {
+                                            if notes.isEmpty {
+                                                Text("Markdown 預覽...")
+                                                    .foregroundColor(.secondary.opacity(0.4))
+                                                    .font(.system(size: 13))
+                                            } else {
+                                                Text(markdownToAttributedString(notes))
+                                                    .font(.system(size: 13))
+                                                    .textSelection(.enabled)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                    .frame(minHeight: 120, maxHeight: 150)
+                                    .padding(8)
+                                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.5))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+                                    )
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
                         }
                         
                         // Color picker
@@ -343,6 +388,17 @@ struct TaskInputView: View {
                     errorMessage = "登入失敗: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+    
+    // Convert markdown text to AttributedString
+    func markdownToAttributedString(_ markdown: String) -> AttributedString {
+        do {
+            var attributedString = try AttributedString(markdown: markdown, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+            return attributedString
+        } catch {
+            // Fallback to plain text if markdown parsing fails
+            return AttributedString(markdown)
         }
     }
 }

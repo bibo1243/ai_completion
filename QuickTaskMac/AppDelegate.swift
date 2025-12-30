@@ -43,10 +43,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func registerGlobalHotkey() {
-        // Using NSEvent global monitor for Cmd+Shift+I
+        // Using NSEvent global monitor for Ctrl+Cmd+I
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // Check for Cmd+Shift+I
-            if event.modifierFlags.contains([.command, .shift]) && event.keyCode == 34 { // 34 is 'i'
+            // Check for Ctrl+Cmd+I
+            if event.modifierFlags.contains([.command, .control]) && event.keyCode == 34 { // 34 is 'i'
                 DispatchQueue.main.async {
                     self?.showInputWindow()
                 }
@@ -55,7 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Also add local monitor for when app is active
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.modifierFlags.contains([.command, .shift]) && event.keyCode == 34 {
+            if event.modifierFlags.contains([.command, .control]) && event.keyCode == 34 {
                 DispatchQueue.main.async {
                     self?.showInputWindow()
                 }
