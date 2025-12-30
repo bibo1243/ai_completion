@@ -782,6 +782,35 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     >
                         <Sparkles size={16} />
                     </button>
+
+                    {/* Attachment Link Button - placed first after AI polish */}
+                    {attachments.length > 0 && (
+                        <>
+                            <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+                            <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const { from, to } = editor!.state.selection;
+                                    if (from !== to) {
+                                        // Store the selection range
+                                        setSelectedLinkRange({ from, to });
+                                        // Get existing linked URLs for this selection
+                                        const existingMark = editor!.getAttributes('attachmentLink');
+                                        setSelectedPickerUrls(existingMark?.attachmentUrls || []);
+                                        setShowAttachmentPicker(true);
+                                        setShowColorPicker(false);
+                                    }
+                                }}
+                                className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600 shadow-sm hover:scale-105 hover:ring-2 hover:ring-amber-300 transition-all active:scale-95 flex items-center justify-center cursor-pointer"
+                                title="連結附件 (Alt+A)"
+                            >
+                                <Paperclip size={16} />
+                            </button>
+                        </>
+                    )}
+
                     <div className="h-4 w-[1px] bg-gray-200 mx-1" />
                     {/* Color Buttons */}
                     {[
@@ -809,44 +838,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                             title={label}
                         />
                     ))}
-                    <button
-                        type="button"
-                        onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            editor?.chain().focus().unsetColor().run();
-                            setShowColorPicker(false);
-                        }}
-                        className="w-7 h-7 rounded-full border-2 border-gray-300 bg-white shadow-md hover:scale-110 hover:ring-2 hover:ring-gray-300 transition-all active:scale-95 flex items-center justify-center text-gray-400 text-xs font-bold cursor-pointer"
-                        title="清除顏色"
-                    >
-                        清除
-                    </button>
-
-                    {/* Attachment Link Button - only show if there are attachments */}
-                    {attachments.length > 0 && (
-                        <button
-                            type="button"
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const { from, to } = editor!.state.selection;
-                                if (from !== to) {
-                                    // Store the selection range
-                                    setSelectedLinkRange({ from, to });
-                                    // Get existing linked URLs for this selection
-                                    const existingMark = editor!.getAttributes('attachmentLink');
-                                    setSelectedPickerUrls(existingMark?.attachmentUrls || []);
-                                    setShowAttachmentPicker(true);
-                                    setShowColorPicker(false);
-                                }
-                            }}
-                            className="w-7 h-7 rounded-full border-2 border-amber-400 bg-amber-50 shadow-md hover:scale-110 hover:ring-2 hover:ring-amber-300 transition-all active:scale-95 flex items-center justify-center text-amber-600 cursor-pointer"
-                            title="連結附件 (Alt+A)"
-                        >
-                            <Paperclip size={14} />
-                        </button>
-                    )}
                 </div>
             )}
 
@@ -885,13 +876,13 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                                         }
                                     }}
                                     className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center gap-2 text-xs transition-colors ${isSelected
-                                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                            : 'hover:bg-gray-50 text-gray-600'
+                                        ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                        : 'hover:bg-gray-50 text-gray-600'
                                         }`}
                                 >
                                     <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected
-                                            ? 'bg-indigo-500 border-indigo-500 text-white'
-                                            : 'border-gray-300'
+                                        ? 'bg-indigo-500 border-indigo-500 text-white'
+                                        : 'border-gray-300'
                                         }`}>
                                         {isSelected && <Check size={12} />}
                                     </div>
