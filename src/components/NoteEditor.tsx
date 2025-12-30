@@ -1,7 +1,7 @@
 import React, { useEffect, useContext, useState, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -10,7 +10,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import { Sparkles, Mic, Square } from 'lucide-react';
+import { Sparkles, Mic, Square, Paperclip, X, Download } from 'lucide-react';
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
@@ -139,6 +139,40 @@ const ParagraphWithId = Node.create({
     },
 });
 
+// Custom Mark for linking text to attachments
+const AttachmentLinkMark = Mark.create({
+    name: 'attachmentLink',
+
+    addAttributes() {
+        return {
+            attachmentUrls: {
+                default: [],
+                parseHTML: element => {
+                    const urls = element.getAttribute('data-attachment-urls');
+                    return urls ? JSON.parse(urls) : [];
+                },
+                renderHTML: attributes => {
+                    if (!attributes.attachmentUrls || attributes.attachmentUrls.length === 0) {
+                        return {};
+                    }
+                    return { 'data-attachment-urls': JSON.stringify(attributes.attachmentUrls) };
+                },
+            },
+        };
+    },
+
+    parseHTML() {
+        return [{ tag: 'span[data-attachment-link]' }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['span', mergeAttributes(HTMLAttributes, {
+            'data-attachment-link': 'true',
+            class: 'attachment-link-text cursor-pointer'
+        }), 0];
+    },
+});
+
 // React Component for the Audio Marker
 const AudioMarkerComponent = ({ node }: any) => {
     const [isVisible, setIsVisible] = React.useState(true);
@@ -249,6 +283,8 @@ interface NoteEditorProps {
     onAudioMarkerClick?: (time: number) => void;
     activeMarkerIds?: string[] | null; // IDs of markers from the currently playing audio
     onMarkersChange?: (markers: { id: string, time: number }[]) => void; // Called when markers change in editor (for sync)
+    attachments?: { name: string, url: string, size?: number, type?: string }[]; // Available attachments for linking
+    taskColor?: string; // Task color for styling attachment links
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -266,12 +302,22 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     onSaveAudio,
     onAudioMarkerClick,
     activeMarkerIds,
-    onMarkersChange
+    onMarkersChange,
+    attachments = [],
+    taskColor = '#6366f1'
 }) => {
     const { t } = useContext(AppContext);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [colorPickerPosition, setColorPickerPosition] = useState({ top: 0, left: 0 });
     const colorPickerTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // --- Attachment Link State ---
+    const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+    const [attachmentPickerPosition, setAttachmentPickerPosition] = useState({ top: 0, left: 0 });
+    const [selectedLinkRange, setSelectedLinkRange] = useState<{ from: number, to: number } | null>(null);
+    const [showAttachmentPopup, setShowAttachmentPopup] = useState(false);
+    const [attachmentPopupPosition, setAttachmentPopupPosition] = useState({ top: 0, left: 0 });
+    const [linkedAttachmentUrls, setLinkedAttachmentUrls] = useState<string[]>([]);
 
     // --- Audio Recording State ---
     const [isRecording, setIsRecording] = useState(false);
@@ -303,6 +349,43 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             detail: { ids: activeMarkerIds }
         }));
     }, [activeMarkerIds]);
+
+    // Handle clicks on attachment links in the editor
+    useEffect(() => {
+        const handleEditorClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            const attachmentLinkEl = target.closest('[data-attachment-link]');
+
+            if (attachmentLinkEl) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const urlsStr = attachmentLinkEl.getAttribute('data-attachment-urls');
+                if (urlsStr) {
+                    try {
+                        const urls = JSON.parse(urlsStr);
+                        if (Array.isArray(urls) && urls.length > 0) {
+                            const rect = attachmentLinkEl.getBoundingClientRect();
+                            setAttachmentPopupPosition({
+                                top: rect.bottom + 5,
+                                left: Math.min(rect.left, window.innerWidth - 340)
+                            });
+                            setLinkedAttachmentUrls(urls);
+                            setShowAttachmentPopup(true);
+                        }
+                    } catch (err) {
+                        console.error('Failed to parse attachment URLs', err);
+                    }
+                }
+            } else if (!target.closest('.attachment-popup')) {
+                // Close popup if clicking outside
+                setShowAttachmentPopup(false);
+            }
+        };
+
+        document.addEventListener('click', handleEditorClick);
+        return () => document.removeEventListener('click', handleEditorClick);
+    }, []);
 
     // Listen for audio marker clicks from the custom event
     useEffect(() => {
@@ -484,6 +567,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             }),
             DetailsSummary,
             DetailsContent,
+            AttachmentLinkMark, // Add custom attachment link mark
             KeyboardNavigation(onExit, handleEnter),
         ],
         content: initialContent,
@@ -532,15 +616,18 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                         const range = selection.getRangeAt(0);
                         const rect = range.getBoundingClientRect();
 
-                        setColorPickerPosition({
+                        const pos = {
                             top: rect.bottom + 5,
                             left: rect.left + (rect.width / 2)
-                        });
+                        };
+                        setColorPickerPosition(pos);
+                        setAttachmentPickerPosition(pos); // Also set attachment picker position
                         setShowColorPicker(true);
                     }
                 }, 500);
             } else {
                 setShowColorPicker(false);
+                setShowAttachmentPicker(false);
             }
         },
     });
@@ -662,7 +749,10 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     }
 
     return (
-        <div className={`note-editor-wrapper ${className} relative bg-transparent border-none`}>
+        <div
+            className={`note-editor-wrapper ${className} relative bg-transparent border-none`}
+            style={{ '--attachment-link-color': taskColor } as React.CSSProperties}
+        >
             <EditorContent editor={editor} />
 
             {/* 顏色選擇器 */}
@@ -731,6 +821,135 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     >
                         清除
                     </button>
+
+                    {/* Attachment Link Button - only show if there are attachments */}
+                    {attachments.length > 0 && (
+                        <button
+                            type="button"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const { from, to } = editor!.state.selection;
+                                if (from !== to) {
+                                    // Store the selection range
+                                    setSelectedLinkRange({ from, to });
+                                    setShowAttachmentPicker(true);
+                                    setShowColorPicker(false);
+                                }
+                            }}
+                            className="w-7 h-7 rounded-full border-2 border-amber-400 bg-amber-50 shadow-md hover:scale-110 hover:ring-2 hover:ring-amber-300 transition-all active:scale-95 flex items-center justify-center text-amber-600 cursor-pointer"
+                            title="連結附件 (Alt+A)"
+                        >
+                            <Paperclip size={14} />
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Attachment Picker Popup */}
+            {showAttachmentPicker && attachments.length > 0 && (
+                <div
+                    className="fixed z-[99999] bg-white rounded-xl shadow-2xl border border-gray-100 p-3 min-w-[200px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150"
+                    style={{ top: attachmentPickerPosition.top, left: attachmentPickerPosition.left }}
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-600">選擇要連結的附件</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowAttachmentPicker(false)}
+                            className="p-0.5 text-gray-400 hover:text-gray-600"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        {attachments.map((att, idx) => (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={() => {
+                                    if (selectedLinkRange && editor) {
+                                        // Get existing attachment URLs if any
+                                        const existingMark = editor.getAttributes('attachmentLink');
+                                        const existingUrls = existingMark?.attachmentUrls || [];
+                                        const newUrls = existingUrls.includes(att.url)
+                                            ? existingUrls
+                                            : [...existingUrls, att.url];
+
+                                        editor.chain()
+                                            .focus()
+                                            .setTextSelection(selectedLinkRange)
+                                            .setMark('attachmentLink', { attachmentUrls: newUrls })
+                                            .run();
+
+                                        setShowAttachmentPicker(false);
+                                        setSelectedLinkRange(null);
+                                    }
+                                }}
+                                className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-xs text-gray-600 transition-colors"
+                            >
+                                <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                                <span className="truncate">{att.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Linked Attachments Popup (when clicking on linked text) */}
+            {showAttachmentPopup && linkedAttachmentUrls.length > 0 && (
+                <div
+                    className="fixed z-[99999] bg-white rounded-xl shadow-2xl border border-gray-100 p-3 min-w-[220px] max-w-[320px] animate-in fade-in zoom-in-95 duration-150"
+                    style={{ top: attachmentPopupPosition.top, left: attachmentPopupPosition.left }}
+                >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-600">已連結的附件</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowAttachmentPopup(false)}
+                            className="p-0.5 text-gray-400 hover:text-gray-600"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                    <div className="space-y-1.5">
+                        {linkedAttachmentUrls.map((url, idx) => {
+                            const att = attachments.find(a => a.url === url);
+                            return att ? (
+                                <div
+                                    key={idx}
+                                    className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                                >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                                        <span className="text-xs text-gray-600 truncate">{att.name}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            // Download the attachment
+                                            fetch(url)
+                                                .then(res => res.blob())
+                                                .then(blob => {
+                                                    const downloadUrl = window.URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = downloadUrl;
+                                                    a.download = att.name;
+                                                    document.body.appendChild(a);
+                                                    a.click();
+                                                    document.body.removeChild(a);
+                                                    window.URL.revokeObjectURL(downloadUrl);
+                                                });
+                                        }}
+                                        className="p-1 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
+                                        title="下載"
+                                    >
+                                        <Download size={14} />
+                                    </button>
+                                </div>
+                            ) : null;
+                        })}
+                    </div>
                 </div>
             )}
 

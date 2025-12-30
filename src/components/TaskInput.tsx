@@ -1692,6 +1692,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             // Just track which markers currently exist in editor (for filtering)
                                             setEditorMarkerIds(new Set(currentMarkers.map(m => m.id)));
                                         }}
+                                        attachments={attachments}
+                                        taskColor={effectiveColor}
                                     />
                                 </div>
 
