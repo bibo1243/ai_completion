@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Eye, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2 } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2 } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -95,7 +95,6 @@ const cleanHtml = (html: string): string => {
     return text.trim();
 };
 import ReactMarkdown from 'react-markdown';
-import { PresentationView } from './PresentationView';
 import { ParagraphAttachmentLinker } from './ParagraphAttachmentLinker';
 import { AttachmentLink } from '../types';
 
@@ -156,7 +155,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerOffset, setDatePickerOffset] = useState(0); // Days offset from today
-    const [viewMode, setViewMode] = useState<'edit' | 'presentation'>('edit');
+
     const [attachmentLinks, setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
 
 
@@ -1583,18 +1582,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             )}
 
                             <div className="flex justify-end mb-1 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setViewMode(viewMode === 'edit' ? 'presentation' : 'edit')}
-                                    className={`flex items-center gap-1.5 text-[10px] transition-all px-2.5 py-1 rounded-full border shadow-sm ${viewMode === 'presentation'
-                                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
-                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300 font-medium'
-                                        }`}
-                                    title={viewMode === 'edit' ? t('presentationMode') : t('editMode')}
-                                >
-                                    {viewMode === 'edit' ? <Eye size={12} /> : <Edit3 size={12} />}
-                                    <span>{viewMode === 'edit' ? t('presentationMode') : t('editMode')}</span>
-                                </button>
+
                                 <button
                                     type="button"
                                     onClick={() => { handleAiAssistant(); setPolishPosition(null); }}
@@ -1639,81 +1627,72 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         />
                                     )}
 
-                                    {viewMode === 'edit' ? (
-                                        <NoteEditor
-                                            onEditorReady={(editor) => { editorRef.current = editor; }}
-                                            onPolish={(_, range, pos) => {
-                                                setPolishRange(range);
-                                                if (pos) setPolishPosition(pos);
-                                                setIsPromptModalOpen(true);
-                                                setCustomPrompt('');
-                                            }}
-                                            initialContent={desc}
-                                            onChange={setDesc}
-                                            onExit={() => startDateRef.current?.focus()}
-                                            textSizeClass={textSizeClass}
-                                            descFontClass={descFontClass}
-                                            className="h-full"
-                                            onSaveAudio={async (file, markers) => {
-                                                console.log("TaskInput onSaveAudio called with:", file.name, markers);
-                                                if (!supabase) return;
-                                                // Unique file path
-                                                const fileName = `${Date.now()}_${crypto.randomUUID()}.${file.name.split('.').pop()}`;
-                                                const filePath = `${user.id}/${fileName}`;
+                                    <NoteEditor
+                                        onEditorReady={(editor) => { editorRef.current = editor; }}
+                                        onPolish={(_, range, pos) => {
+                                            setPolishRange(range);
+                                            if (pos) setPolishPosition(pos);
+                                            setIsPromptModalOpen(true);
+                                            setCustomPrompt('');
+                                        }}
+                                        initialContent={desc}
+                                        onChange={setDesc}
+                                        onExit={() => startDateRef.current?.focus()}
+                                        textSizeClass={textSizeClass}
+                                        descFontClass={descFontClass}
+                                        className="h-full"
+                                        onSaveAudio={async (file, markers) => {
+                                            console.log("TaskInput onSaveAudio called with:", file.name, markers);
+                                            if (!supabase) return;
+                                            // Unique file path
+                                            const fileName = `${Date.now()}_${crypto.randomUUID()}.${file.name.split('.').pop()}`;
+                                            const filePath = `${user.id}/${fileName}`;
 
-                                                try {
-                                                    const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
-                                                        contentType: file.type,
-                                                        upsert: false
-                                                    });
+                                            try {
+                                                const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
+                                                    contentType: file.type,
+                                                    upsert: false
+                                                });
 
-                                                    if (uploadError) {
-                                                        console.error('Upload voice error:', uploadError);
-                                                        setToast?.({ msg: '錄音儲存失敗', type: 'error' });
-                                                        return;
-                                                    }
-
-                                                    const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
-                                                    if (data) {
-                                                        const fileData = {
-                                                            name: file.name, // Use the formatted date-time name from recording
-                                                            url: data.publicUrl,
-                                                            size: file.size,
-                                                            type: file.type,
-                                                            markers: markers // Save markers here if needed
-                                                        };
-
-                                                        const updatedAttachments = [...attachments, fileData];
-                                                        setAttachments(updatedAttachments);
-
-                                                        if (initialData) {
-                                                            updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
-                                                        }
-                                                        setToast?.({ msg: '錄音已儲存', type: 'info' });
-                                                    }
-                                                } catch (err) {
-                                                    console.error(err);
-                                                    setToast?.({ msg: '錄音儲存發生錯誤', type: 'error' });
+                                                if (uploadError) {
+                                                    console.error('Upload voice error:', uploadError);
+                                                    setToast?.({ msg: '錄音儲存失敗', type: 'error' });
+                                                    return;
                                                 }
-                                            }}
-                                            onAudioMarkerClick={(time) => {
-                                                // Jump the audio player to 4 seconds before this time
-                                                setAudioSeekTime(Math.max(0, time - 4000));
-                                            }}
-                                            activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
-                                            onMarkersChange={(currentMarkers) => {
-                                                // Just track which markers currently exist in editor (for filtering)
-                                                setEditorMarkerIds(new Set(currentMarkers.map(m => m.id)));
-                                            }}
-                                        />
-                                    ) : (
-                                        <PresentationView
-                                            content={desc}
-                                            attachments={attachments}
-                                            images={images}
-                                            attachmentLinks={attachmentLinks}
-                                        />
-                                    )}
+
+                                                const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
+                                                if (data) {
+                                                    const fileData = {
+                                                        name: file.name, // Use the formatted date-time name from recording
+                                                        url: data.publicUrl,
+                                                        size: file.size,
+                                                        type: file.type,
+                                                        markers: markers // Save markers here if needed
+                                                    };
+
+                                                    const updatedAttachments = [...attachments, fileData];
+                                                    setAttachments(updatedAttachments);
+
+                                                    if (initialData) {
+                                                        updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
+                                                    }
+                                                    setToast?.({ msg: '錄音已儲存', type: 'info' });
+                                                }
+                                            } catch (err) {
+                                                console.error(err);
+                                                setToast?.({ msg: '錄音儲存發生錯誤', type: 'error' });
+                                            }
+                                        }}
+                                        onAudioMarkerClick={(time) => {
+                                            // Jump the audio player to 4 seconds before this time
+                                            setAudioSeekTime(Math.max(0, time - 4000));
+                                        }}
+                                        activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
+                                        onMarkersChange={(currentMarkers) => {
+                                            // Just track which markers currently exist in editor (for filtering)
+                                            setEditorMarkerIds(new Set(currentMarkers.map(m => m.id)));
+                                        }}
+                                    />
                                 </div>
 
                                 {showAnalysis && (() => {
