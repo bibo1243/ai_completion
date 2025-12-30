@@ -247,8 +247,8 @@ interface NoteEditorProps {
     autoFocus?: boolean;
     onSaveAudio?: (file: File, markers: any[]) => Promise<void>;
     onAudioMarkerClick?: (time: number) => void;
-    activeMarkerIds?: string[] | null;
-    onMarkersChange?: (markerIds: string[]) => void; // Called when markers are deleted from editor
+    activeMarkerIds?: string[] | null; // IDs of markers from the currently playing audio
+    onMarkersChange?: (markers: { id: string, time: number }[]) => void; // Called when markers change in editor (for sync)
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -288,7 +288,6 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     const recordingTimeRef = useRef(recordingTime);
     const audioMarkersRef = useRef(audioMarkers);
     const onSaveAudioRef = useRef(onSaveAudio);
-    const lastReportedMarkersRef = useRef<string[]>([]); // Track last reported markers to avoid unnecessary updates
 
     useEffect(() => {
         isRecordingRef.current = isRecording;
@@ -499,25 +498,15 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 onChange(html);
             }
 
-            // Sync markers: scan for all audioMarker nodes and notify parent if changed
-            // Only do this when NOT recording to avoid interfering with recording state
-            if (onMarkersChange && !isRecordingRef.current) {
-                const currentMarkerIds: string[] = [];
-                editor.state.doc.descendants((node) => {
+            // Scan for audio markers and notify parent for sync
+            if (onMarkersChange) {
+                const currentMarkers: { id: string, time: number }[] = [];
+                editor.state.doc.descendants((node: any) => {
                     if (node.type.name === 'audioMarker' && node.attrs.id) {
-                        currentMarkerIds.push(node.attrs.id);
+                        currentMarkers.push({ id: node.attrs.id, time: node.attrs.time || 0 });
                     }
                 });
-
-                // Only report if markers actually changed
-                const lastMarkers = lastReportedMarkersRef.current;
-                const markersChanged = currentMarkerIds.length !== lastMarkers.length ||
-                    currentMarkerIds.some((id, i) => lastMarkers[i] !== id);
-
-                if (markersChanged) {
-                    lastReportedMarkersRef.current = currentMarkerIds;
-                    onMarkersChange(currentMarkerIds);
-                }
+                onMarkersChange(currentMarkers);
             }
         },
         onSelectionUpdate: ({ editor }) => {

@@ -1700,39 +1700,30 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 setAudioSeekTime(Math.max(0, time - 4000));
                                             }}
                                             activeMarkerIds={playedAudio?.markers?.map(m => m.id) || null}
-                                            onMarkersChange={(currentMarkerIds) => {
-                                                // Sync: Update attachments to remove deleted markers
-                                                let attachmentsChanged = false;
-                                                const updatedAttachments = attachments.map(att => {
-                                                    if (att.markers && att.markers.length > 0) {
-                                                        const filteredMarkers = att.markers.filter(m =>
-                                                            currentMarkerIds.includes(m.id)
-                                                        );
-                                                        if (filteredMarkers.length !== att.markers.length) {
-                                                            attachmentsChanged = true;
-                                                            return { ...att, markers: filteredMarkers };
+                                            onMarkersChange={(currentMarkers) => {
+                                                // Sync markers from editor to attachments
+                                                // Find attachments that have markers and update them
+                                                const currentMarkerIds = new Set(currentMarkers.map(m => m.id));
+
+                                                setAttachments(prev => {
+                                                    const updated = prev.map(att => {
+                                                        if (att.markers && att.markers.length > 0) {
+                                                            // Filter to only keep markers that still exist in editor
+                                                            const filteredMarkers = att.markers.filter(m => currentMarkerIds.has(m.id));
+                                                            if (filteredMarkers.length !== att.markers.length) {
+                                                                return { ...att, markers: filteredMarkers };
+                                                            }
                                                         }
-                                                    }
-                                                    return att;
+                                                        return att;
+                                                    });
+                                                    return updated;
                                                 });
 
-                                                if (attachmentsChanged) {
-                                                    setAttachments(updatedAttachments);
-
-                                                    // Also update playedAudio if it's affected
-                                                    if (playedAudio?.markers) {
-                                                        const updatedPlayedAudio = updatedAttachments.find(a => a.url === playedAudio.url);
-                                                        if (updatedPlayedAudio) {
-                                                            setPlayedAudio({
-                                                                ...playedAudio,
-                                                                markers: updatedPlayedAudio.markers
-                                                            });
-                                                        }
-                                                    }
-
-                                                    // Save to database
-                                                    if (initialData) {
-                                                        updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
+                                                // Also update playedAudio if it's currently playing
+                                                if (playedAudio?.markers) {
+                                                    const filteredPlayedMarkers = playedAudio.markers.filter(m => currentMarkerIds.has(m.id));
+                                                    if (filteredPlayedMarkers.length !== playedAudio.markers.length) {
+                                                        setPlayedAudio({ ...playedAudio, markers: filteredPlayedMarkers });
                                                     }
                                                 }
                                             }}
