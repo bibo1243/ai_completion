@@ -9,6 +9,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var eventMonitor: Any?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        print("🚀 QuickTask 啟動中...")
+        
         // Create status bar item
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
@@ -16,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Quick Task")
             button.action = #selector(togglePopover)
             button.target = self
+            print("✅ 選單欄圖示已建立")
         }
         
         // Setup popover
@@ -31,6 +34,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
+        
+        // 啟動時自動顯示輸入視窗
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            print("📝 顯示輸入視窗...")
+            self?.showInputWindow()
+        }
     }
     
     func registerGlobalHotkey() {

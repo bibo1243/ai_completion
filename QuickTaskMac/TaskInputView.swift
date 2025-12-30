@@ -12,6 +12,12 @@ struct TaskInputView: View {
     @State private var showSuccess = false
     @State private var errorMessage: String? = nil
     
+    // Login states
+    @State private var isLoggedIn = SupabaseService.shared.isLoggedIn
+    @State private var email: String = ""
+    @State private var password: String = ""
+    @State private var isLoggingIn = false
+    
     var closeAction: () -> Void
     
     let colors = [
@@ -34,11 +40,11 @@ struct TaskInputView: View {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Image(systemName: "plus.circle.fill")
+                    Image(systemName: isLoggedIn ? "plus.circle.fill" : "person.circle.fill")
                         .font(.system(size: 24))
                         .foregroundColor(Color(hex: selectedColor))
                     
-                    Text("快速新增任務")
+                    Text(isLoggedIn ? "快速新增任務" : "登入帳號")
                         .font(.system(size: 18, weight: .bold))
                     
                     Spacer()
@@ -56,9 +62,55 @@ struct TaskInputView: View {
                 
                 Divider()
                 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Title
+                if !isLoggedIn {
+                    // Login Form
+                    VStack(spacing: 20) {
+                        Spacer()
+                        
+                        Image(systemName: "lock.shield")
+                            .font(.system(size: 48))
+                            .foregroundColor(.indigo)
+                        
+                        Text("請先登入您的帳號")
+                            .font(.headline)
+                        
+                        VStack(spacing: 12) {
+                            TextField("Email", text: $email)
+                                .textFieldStyle(.roundedBorder)
+                                .textContentType(.emailAddress)
+                            
+                            SecureField("密碼", text: $password)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        .frame(maxWidth: 280)
+                        
+                        if let error = errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        
+                        Button(action: login) {
+                            HStack {
+                                if isLoggingIn {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                }
+                                Text(isLoggingIn ? "登入中..." : "登入")
+                            }
+                            .frame(minWidth: 120)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(email.isEmpty || password.isEmpty || isLoggingIn)
+                        
+                        Spacer()
+                    }
+                    .padding(20)
+                } else {
+                    // Task Input Form
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Title
                         VStack(alignment: .leading, spacing: 6) {
                             Text("任務標題")
                                 .font(.system(size: 12, weight: .medium))
@@ -198,34 +250,37 @@ struct TaskInputView: View {
                     }
                     .padding(20)
                 }
+                } // End of else (logged in)
                 
-                Divider()
-                
-                // Footer buttons
-                HStack {
-                    Button("取消") {
-                        closeAction()
-                    }
-                    .keyboardShortcut(.escape, modifiers: [])
+                if isLoggedIn {
+                    Divider()
                     
-                    Spacer()
-                    
-                    Button(action: submitTask) {
-                        HStack {
-                            if isSubmitting {
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            }
-                            Text(showSuccess ? "已新增 ✓" : "新增任務")
+                    // Footer buttons
+                    HStack {
+                        Button("取消") {
+                            closeAction()
                         }
-                        .frame(minWidth: 100)
+                        .keyboardShortcut(.escape, modifiers: [])
+                        
+                        Spacer()
+                        
+                        Button(action: submitTask) {
+                            HStack {
+                                if isSubmitting {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                }
+                                Text(showSuccess ? "已新增 ✓" : "新增任務")
+                            }
+                            .frame(minWidth: 100)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color(hex: selectedColor))
+                        .disabled(title.isEmpty || isSubmitting)
+                        .keyboardShortcut(.return, modifiers: .command)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color(hex: selectedColor))
-                    .disabled(title.isEmpty || isSubmitting)
-                    .keyboardShortcut(.return, modifiers: .command)
+                    .padding(16)
                 }
-                .padding(16)
             }
         }
         .frame(width: 480, height: 600)
@@ -266,6 +321,26 @@ struct TaskInputView: View {
                 await MainActor.run {
                     isSubmitting = false
                     errorMessage = "新增失敗: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
+    func login() {
+        isLoggingIn = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                _ = try await SupabaseService.shared.login(email: email, password: password)
+                await MainActor.run {
+                    isLoggingIn = false
+                    isLoggedIn = true
+                }
+            } catch {
+                await MainActor.run {
+                    isLoggingIn = false
+                    errorMessage = "登入失敗: \(error.localizedDescription)"
                 }
             }
         }
