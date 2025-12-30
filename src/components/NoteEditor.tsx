@@ -339,7 +339,11 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             recorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: mimeType });
                 const ext = mimeType.split('/')[1];
-                const fileName = `voice-note-${Date.now()}.${ext}`;
+
+                // Format: yyyy.mm.dd hh:mm
+                const now = new Date();
+                const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const fileName = `${dateStr}.${ext}`;
                 const file = new File([blob], fileName, { type: mimeType });
 
                 // Stop tracks

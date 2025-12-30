@@ -124,10 +124,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
                 {/* Rewind */}
                 <button
                     onClick={() => skip(-5)}
-                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="-5s"
+                    className="flex items-center gap-0.5 px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors text-xs"
+                    title="後退 5 秒"
                 >
-                    <RotateCcw size={16} />
+                    <RotateCcw size={14} />
+                    <span className="font-mono text-[10px]">5s</span>
                 </button>
 
                 {/* Play/Pause */}
@@ -141,10 +142,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
                 {/* Forward */}
                 <button
                     onClick={() => skip(5)}
-                    className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="+5s"
+                    className="flex items-center gap-0.5 px-2 py-1 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors text-xs"
+                    title="快進 5 秒"
                 >
-                    <RotateCw size={16} />
+                    <span className="font-mono text-[10px]">5s</span>
+                    <RotateCw size={14} />
                 </button>
 
                 {/* Custom Seek Bar */}

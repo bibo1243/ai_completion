@@ -134,6 +134,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [highlightRange, setHighlightRange] = useState<{ from: number, to: number } | null>(null);
     const [playedAudio, setPlayedAudio] = useState<{ url: string, name: string, markers?: { time: number, id: string }[] } | null>(null);
     const [audioSeekTime, setAudioSeekTime] = useState<number | null>(null);
+    const [editorMarkerIds, setEditorMarkerIds] = useState<Set<string>>(new Set()); // Track markers currently in editor
 
     const [isAssistantLoading, setIsAssistantLoading] = useState(false);
     const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -1627,7 +1628,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             url={playedAudio.url}
                                             fileName={playedAudio.name}
                                             autoPlay={true}
-                                            markers={playedAudio.markers}
+                                            markers={playedAudio.markers?.filter(m => editorMarkerIds.has(m.id))}
                                             seekToTime={audioSeekTime}
                                             onClose={() => { setPlayedAudio(null); setAudioSeekTime(null); }}
                                             onMarkerClick={(marker) => {
@@ -1675,7 +1676,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
                                                     if (data) {
                                                         const fileData = {
-                                                            name: `語音記事 ${new Date().toLocaleTimeString()} ...${file.name.split('.').pop()}`,
+                                                            name: file.name, // Use the formatted date-time name from recording
                                                             url: data.publicUrl,
                                                             size: file.size,
                                                             type: file.type,
@@ -1699,33 +1700,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 // Jump the audio player to 4 seconds before this time
                                                 setAudioSeekTime(Math.max(0, time - 4000));
                                             }}
-                                            activeMarkerIds={playedAudio?.markers?.map(m => m.id) || null}
+                                            activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
                                             onMarkersChange={(currentMarkers) => {
-                                                // Sync markers from editor to attachments
-                                                // Find attachments that have markers and update them
-                                                const currentMarkerIds = new Set(currentMarkers.map(m => m.id));
-
-                                                setAttachments(prev => {
-                                                    const updated = prev.map(att => {
-                                                        if (att.markers && att.markers.length > 0) {
-                                                            // Filter to only keep markers that still exist in editor
-                                                            const filteredMarkers = att.markers.filter(m => currentMarkerIds.has(m.id));
-                                                            if (filteredMarkers.length !== att.markers.length) {
-                                                                return { ...att, markers: filteredMarkers };
-                                                            }
-                                                        }
-                                                        return att;
-                                                    });
-                                                    return updated;
-                                                });
-
-                                                // Also update playedAudio if it's currently playing
-                                                if (playedAudio?.markers) {
-                                                    const filteredPlayedMarkers = playedAudio.markers.filter(m => currentMarkerIds.has(m.id));
-                                                    if (filteredPlayedMarkers.length !== playedAudio.markers.length) {
-                                                        setPlayedAudio({ ...playedAudio, markers: filteredPlayedMarkers });
-                                                    }
-                                                }
+                                                // Just track which markers currently exist in editor (for filtering)
+                                                setEditorMarkerIds(new Set(currentMarkers.map(m => m.id)));
                                             }}
                                         />
                                     ) : (
