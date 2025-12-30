@@ -95,7 +95,7 @@ const cleanHtml = (html: string): string => {
     return text.trim();
 };
 import ReactMarkdown from 'react-markdown';
-import { ParagraphAttachmentLinker } from './ParagraphAttachmentLinker';
+
 import { AttachmentLink } from '../types';
 
 const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對與標點符號修正），嚴禁任何開場白、結尾、說明或感想。輸出內容必須僅包含潤飾後的正文內容。";
@@ -156,7 +156,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [datePickerOffset, setDatePickerOffset] = useState(0); // Days offset from today
 
-    const [attachmentLinks, setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
+    const [attachmentLinks, _setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
 
 
     const previousPrompts = useMemo(() => {
@@ -2111,23 +2111,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 </div>
                             )}
 
-                            {/* Paragraph-Attachment Linker */}
-                            {(attachments.length > 0 || images.length > 0) && desc && (
-                                <div className="mt-4 pt-4 border-t border-gray-100">
-                                    <ParagraphAttachmentLinker
-                                        content={desc}
-                                        attachments={attachments}
-                                        images={images}
-                                        attachmentLinks={attachmentLinks}
-                                        onLinksChange={(newLinks) => {
-                                            setAttachmentLinks(newLinks);
-                                            if (initialData) {
-                                                updateTask(initialData.id, { attachment_links: newLinks }, [], { skipHistory: true });
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            )}
+
                         </div>
                     </div>
 
