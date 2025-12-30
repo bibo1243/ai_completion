@@ -248,6 +248,7 @@ interface NoteEditorProps {
     onSaveAudio?: (file: File, markers: any[]) => Promise<void>;
     onAudioMarkerClick?: (time: number) => void;
     activeMarkerIds?: string[] | null; // IDs of markers from the currently playing audio
+    onMarkersChange?: (markerIds: string[]) => void; // Called when markers in content change
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -264,7 +265,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     autoFocus = false,
     onSaveAudio,
     onAudioMarkerClick,
-    activeMarkerIds
+    activeMarkerIds,
+    onMarkersChange
 }) => {
     const { t } = useContext(AppContext);
     const [showColorPicker, setShowColorPicker] = useState(false);
@@ -494,6 +496,17 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 onChange('');
             } else {
                 onChange(html);
+            }
+
+            // Scan for all audioMarker nodes and notify parent of current markers
+            if (onMarkersChange) {
+                const currentMarkerIds: string[] = [];
+                editor.state.doc.descendants((node) => {
+                    if (node.type.name === 'audioMarker' && node.attrs.id) {
+                        currentMarkerIds.push(node.attrs.id);
+                    }
+                });
+                onMarkersChange(currentMarkerIds);
             }
         },
         onSelectionUpdate: ({ editor }) => {

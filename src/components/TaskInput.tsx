@@ -1700,6 +1700,25 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 setAudioSeekTime(Math.max(0, time - 4000));
                                             }}
                                             activeMarkerIds={playedAudio?.markers?.map(m => m.id) || null}
+                                            onMarkersChange={(markerIds) => {
+                                                // Update attachments to remove deleted markers
+                                                setAttachments(prev => prev.map(att => {
+                                                    if (att.markers && att.markers.length > 0) {
+                                                        const filteredMarkers = att.markers.filter(m => markerIds.includes(m.id));
+                                                        if (filteredMarkers.length !== att.markers.length) {
+                                                            return { ...att, markers: filteredMarkers };
+                                                        }
+                                                    }
+                                                    return att;
+                                                }));
+                                                // Also update playedAudio if it has markers
+                                                if (playedAudio?.markers) {
+                                                    const filteredMarkers = playedAudio.markers.filter(m => markerIds.includes(m.id));
+                                                    if (filteredMarkers.length !== playedAudio.markers.length) {
+                                                        setPlayedAudio(prev => prev ? { ...prev, markers: filteredMarkers } : null);
+                                                    }
+                                                }
+                                            }}
                                         />
                                     ) : (
                                         <PresentationView
@@ -2039,8 +2058,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         <div
                                             key={file.url}
                                             className={`group flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors ${playedAudio?.url === file.url
-                                                    ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-300/50'
-                                                    : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                                                ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-300/50'
+                                                : 'bg-gray-50 border-gray-100 hover:border-gray-200'
                                                 }`}
                                         >
                                             {file.type?.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|webm|mp4)$/i) ? (
