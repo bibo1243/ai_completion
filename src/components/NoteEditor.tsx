@@ -10,7 +10,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import { Sparkles, Mic, Square, Paperclip, X, Download } from 'lucide-react';
+import { Sparkles, Mic, Square, Paperclip, X, Download, Check } from 'lucide-react';
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
@@ -315,6 +315,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
     const [attachmentPickerPosition, setAttachmentPickerPosition] = useState({ top: 0, left: 0 });
     const [selectedLinkRange, setSelectedLinkRange] = useState<{ from: number, to: number } | null>(null);
+    const [selectedPickerUrls, setSelectedPickerUrls] = useState<string[]>([]); // Currently selected URLs in picker
     const [showAttachmentPopup, setShowAttachmentPopup] = useState(false);
     const [attachmentPopupPosition, setAttachmentPopupPosition] = useState({ top: 0, left: 0 });
     const [linkedAttachmentUrls, setLinkedAttachmentUrls] = useState<string[]>([]);
@@ -833,6 +834,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                                 if (from !== to) {
                                     // Store the selection range
                                     setSelectedLinkRange({ from, to });
+                                    // Get existing linked URLs for this selection
+                                    const existingMark = editor!.getAttributes('attachmentLink');
+                                    setSelectedPickerUrls(existingMark?.attachmentUrls || []);
                                     setShowAttachmentPicker(true);
                                     setShowColorPicker(false);
                                 }
@@ -849,49 +853,93 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             {/* Attachment Picker Popup */}
             {showAttachmentPicker && attachments.length > 0 && (
                 <div
-                    className="fixed z-[99999] bg-white rounded-xl shadow-2xl border border-gray-100 p-3 min-w-[200px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150"
+                    className="fixed z-[99999] bg-white rounded-xl shadow-2xl border border-gray-100 p-3 min-w-[220px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150"
                     style={{ top: attachmentPickerPosition.top, left: attachmentPickerPosition.left }}
                 >
                     <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-bold text-gray-600">選擇要連結的附件</span>
                         <button
                             type="button"
-                            onClick={() => setShowAttachmentPicker(false)}
+                            onClick={() => {
+                                setShowAttachmentPicker(false);
+                                setSelectedPickerUrls([]);
+                            }}
                             className="p-0.5 text-gray-400 hover:text-gray-600"
                         >
                             <X size={14} />
                         </button>
                     </div>
-                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                        {attachments.map((att, idx) => (
-                            <button
-                                key={idx}
-                                type="button"
-                                onClick={() => {
-                                    if (selectedLinkRange && editor) {
-                                        // Get existing attachment URLs if any
-                                        const existingMark = editor.getAttributes('attachmentLink');
-                                        const existingUrls = existingMark?.attachmentUrls || [];
-                                        const newUrls = existingUrls.includes(att.url)
-                                            ? existingUrls
-                                            : [...existingUrls, att.url];
-
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto mb-2">
+                        {attachments.map((att, idx) => {
+                            const isSelected = selectedPickerUrls.includes(att.url);
+                            return (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                        // Toggle selection
+                                        if (isSelected) {
+                                            setSelectedPickerUrls(prev => prev.filter(u => u !== att.url));
+                                        } else {
+                                            setSelectedPickerUrls(prev => [...prev, att.url]);
+                                        }
+                                    }}
+                                    className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center gap-2 text-xs transition-colors ${isSelected
+                                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                            : 'hover:bg-gray-50 text-gray-600'
+                                        }`}
+                                >
+                                    <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected
+                                            ? 'bg-indigo-500 border-indigo-500 text-white'
+                                            : 'border-gray-300'
+                                        }`}>
+                                        {isSelected && <Check size={12} />}
+                                    </div>
+                                    <Paperclip size={12} className={isSelected ? 'text-indigo-400' : 'text-gray-400'} />
+                                    <span className="truncate">{att.name}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className="flex gap-2 pt-2 border-t border-gray-100">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowAttachmentPicker(false);
+                                setSelectedPickerUrls([]);
+                            }}
+                            className="flex-1 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50 rounded-lg transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (selectedLinkRange && editor) {
+                                    if (selectedPickerUrls.length > 0) {
+                                        // Apply the link mark
                                         editor.chain()
                                             .focus()
                                             .setTextSelection(selectedLinkRange)
-                                            .setMark('attachmentLink', { attachmentUrls: newUrls })
+                                            .setMark('attachmentLink', { attachmentUrls: selectedPickerUrls })
                                             .run();
-
-                                        setShowAttachmentPicker(false);
-                                        setSelectedLinkRange(null);
+                                    } else {
+                                        // Remove the link mark if no attachments selected
+                                        editor.chain()
+                                            .focus()
+                                            .setTextSelection(selectedLinkRange)
+                                            .unsetMark('attachmentLink')
+                                            .run();
                                     }
-                                }}
-                                className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-xs text-gray-600 transition-colors"
-                            >
-                                <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
-                                <span className="truncate">{att.name}</span>
-                            </button>
-                        ))}
+                                    setShowAttachmentPicker(false);
+                                    setSelectedLinkRange(null);
+                                    setSelectedPickerUrls([]);
+                                }
+                            }}
+                            className="flex-1 px-3 py-1.5 text-xs bg-indigo-500 text-white hover:bg-indigo-600 rounded-lg transition-colors font-medium"
+                        >
+                            確認 {selectedPickerUrls.length > 0 && `(${selectedPickerUrls.length})`}
+                        </button>
                     </div>
                 </div>
             )}
