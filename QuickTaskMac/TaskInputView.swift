@@ -112,75 +112,35 @@ struct TaskInputView: View {
                             // Title
                         VStack(alignment: .leading, spacing: 6) {
                             Text("任務標題")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 12, weight: .light))
                                 .foregroundColor(.secondary)
                             
                             TextField("輸入任務標題...", text: $title)
                                 .textFieldStyle(.plain)
-                                .font(.system(size: 16))
+                                .font(.system(size: 16, weight: .ultraLight))
                                 .padding(12)
                                 .background(Color(nsColor: .controlBackgroundColor))
                                 .cornerRadius(10)
                         }
                         
-                        // Notes with Markdown preview
+                        // Notes - single editor like web app
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text("備註")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(.system(size: 12, weight: .light))
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Text("支援 Markdown")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary.opacity(0.6))
+                                    .font(.system(size: 10, weight: .ultraLight))
+                                    .foregroundColor(.secondary.opacity(0.5))
                             }
                             
-                            // Split view: Editor + Preview
-                            HStack(spacing: 8) {
-                                // Editor
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("編輯")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(.secondary.opacity(0.5))
-                                    TextEditor(text: $notes)
-                                        .font(.system(size: 13, design: .monospaced))
-                                        .frame(minHeight: 120, maxHeight: 150)
-                                        .padding(8)
-                                        .background(Color(nsColor: .controlBackgroundColor))
-                                        .cornerRadius(8)
-                                }
-                                .frame(maxWidth: .infinity)
-                                
-                                // Preview
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("預覽")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .foregroundColor(.secondary.opacity(0.5))
-                                    ScrollView {
-                                        VStack(alignment: .leading) {
-                                            if notes.isEmpty {
-                                                Text("Markdown 預覽...")
-                                                    .foregroundColor(.secondary.opacity(0.4))
-                                                    .font(.system(size: 13))
-                                            } else {
-                                                Text(markdownToAttributedString(notes))
-                                                    .font(.system(size: 13))
-                                                    .textSelection(.enabled)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                    .frame(minHeight: 120, maxHeight: 150)
-                                    .padding(8)
-                                    .background(Color(nsColor: .windowBackgroundColor).opacity(0.5))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
-                                    )
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
+                            TextEditor(text: $notes)
+                                .font(.system(size: 14, weight: .ultraLight))
+                                .frame(minHeight: 120, maxHeight: 180)
+                                .padding(12)
+                                .background(Color(nsColor: .controlBackgroundColor))
+                                .cornerRadius(10)
                         }
                         
                         // Color picker
