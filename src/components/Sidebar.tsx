@@ -203,7 +203,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         setEditingViewId(id);
                         setEditingViewName(displayLabel);
                     }}
-                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-1.5 rounded-lg mb-0.5 transition-colors ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1.5 rounded-lg mb-1 md:mb-0.5 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 active:bg-gray-100'}`}
                     title={sidebarCollapsed ? displayLabel : ''}
                 >
                     <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>

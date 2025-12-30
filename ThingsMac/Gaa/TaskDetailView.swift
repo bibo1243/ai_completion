@@ -14,6 +14,8 @@ struct TaskDetailView: View {
     @State private var dueDate: Date? = nil
     @State private var selectedTagIds: Set<String> = []
     @State private var isProject: Bool = false
+    @State private var showStartDatePicker = false
+    @State private var showDueDatePicker = false
     @State private var isSaving = false
     @State private var showDeleteConfirm = false
     
@@ -170,7 +172,7 @@ struct TaskDetailView: View {
                                 .font(.system(size: 12, weight: .ultraLight))
                                 .foregroundColor(.secondary)
                         } else {
-                            WrappingHStack {
+                            FlowLayout(spacing: 8) {
                                 ForEach(appState.tags) { tag in
                                     TagChip(
                                         tag: tag,
@@ -335,17 +337,46 @@ struct TagChip: View {
     }
 }
 
-// MARK: - Simple Wrapping HStack
-struct WrappingHStack: View {
-    let content: () -> any View
+// MARK: - Flow Layout (for tags)
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
     
-    init(@ViewBuilder content: @escaping () -> some View) {
-        self.content = content
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = FlowResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
+        return result.size
     }
     
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            AnyView(content())
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(at: CGPoint(x: bounds.minX + result.positions[index].x, y: bounds.minY + result.positions[index].y), proposal: .unspecified)
+        }
+    }
+    
+    struct FlowResult {
+        var size: CGSize = .zero
+        var positions: [CGPoint] = []
+        
+        init(in width: CGFloat, subviews: Subviews, spacing: CGFloat) {
+            var x: CGFloat = 0
+            var y: CGFloat = 0
+            var lineHeight: CGFloat = 0
+            
+            for subview in subviews {
+                let size = subview.sizeThatFits(.unspecified)
+                
+                if x + size.width > width && x > 0 {
+                    x = 0
+                    y += lineHeight + spacing
+                    lineHeight = 0
+                }
+                
+                positions.append(CGPoint(x: x, y: y))
+                lineHeight = max(lineHeight, size.height)
+                x += size.width + spacing
+            }
+            
+            self.size = CGSize(width: width, height: y + lineHeight)
         }
     }
 }

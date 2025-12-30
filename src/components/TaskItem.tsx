@@ -157,11 +157,11 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
     const animationStyle = 'transition-all duration-200 ease-in-out';
 
-    // Smaller padding and margins for focus view
-    const focusViewPadding = isFocusView ? 'py-0.5' : 'py-1.5';
-    const focusViewMargin = isFocusView ? 'mb-0' : 'mb-0.5';
+    // Smaller padding and margins for focus view, larger for mobile
+    const focusViewPadding = isFocusView ? 'py-0.5' : 'py-2 md:py-1.5';
+    const focusViewMargin = isFocusView ? 'mb-0' : 'mb-1 md:mb-0.5';
 
-    const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle}`;
+    const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle} hover-effect active:bg-slate-100 touch-manipulation`;
 
     const renderDateBadge = () => {
         if (!task.start_date && !task.start_time) return null;

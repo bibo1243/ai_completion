@@ -191,7 +191,7 @@ export const MainLayout = () => {
           </div>
         </header>
         <AdvancedFilterBar />
-        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar ${view !== 'focus' && view !== 'project' ? 'p-8' : ''}`}>
+        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar prevent-pull-refresh ${view !== 'focus' && view !== 'project' ? 'p-4 md:p-8' : ''}`}>
           {view === 'journal' ? (
             <JournalView />
           ) : view === 'focus' ? (
@@ -199,7 +199,7 @@ export const MainLayout = () => {
           ) : view === 'project' ? (
             <ProjectView />
           ) : (
-            <div className="w-[calc(100%-100px)] mx-auto mt-8">
+            <div className="w-full md:w-[calc(100%-100px)] mx-auto mt-2 md:mt-8">
               <TaskList />
             </div>
           )}
@@ -213,7 +213,7 @@ export const MainLayout = () => {
           />
         )}
 
-        {/* Floating Add Button - Draggable */}
+        {/* Floating Add Button - Draggable on desktop, fixed on mobile */}
         <button
           onMouseDown={(e) => {
             fabDragOffset.current = { x: e.clientX - fabPosition.x, y: e.clientY - fabPosition.y };
@@ -232,7 +232,7 @@ export const MainLayout = () => {
             if (!isDraggingFab) setLocalQuickAdd(true);
           }}
           style={{ left: fabPosition.x, top: fabPosition.y }}
-          className={`fixed z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center group ${isDraggingFab ? 'cursor-grabbing scale-110' : 'cursor-grab hover:scale-105 active:scale-95'}`}
+          className={`fixed z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center group fab-mobile md:fab-desktop ${isDraggingFab ? 'cursor-grabbing scale-110' : 'cursor-grab hover:scale-105 active:scale-95'}`}
           title="Create New Task (Drag to move)"
         >
           <Plus size={28} className="group-hover:rotate-90 transition-transform duration-200" />
@@ -253,10 +253,11 @@ export const MainLayout = () => {
         {/* GTD Guide Button */}
         <button
           onClick={() => setShowGTDGuide(true)}
-          className="fixed bottom-6 right-24 z-40 h-12 w-12 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
+          className="fixed bottom-6 right-6 md:right-24 z-30 h-10 w-10 md:h-12 md:w-12 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
           title="GTD 使用指南"
         >
-          <BookOpen size={22} />
+          <BookOpen size={18} className="md:hidden" />
+          <BookOpen size={22} className="hidden md:block" />
         </button>
 
         {/* GTD Guide Modal */}
