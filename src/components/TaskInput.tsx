@@ -1700,22 +1700,32 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 setAudioSeekTime(Math.max(0, time - 4000));
                                             }}
                                             activeMarkerIds={playedAudio?.markers?.map(m => m.id) || null}
-                                            onMarkersChange={(markerIds) => {
-                                                // Update attachments to remove deleted markers
-                                                setAttachments(prev => prev.map(att => {
+                                            onMarkersChange={(currentMarkerIds) => {
+                                                // Sync: Remove markers from attachments that no longer exist in editor
+                                                const updatedAttachments = attachments.map(att => {
                                                     if (att.markers && att.markers.length > 0) {
-                                                        const filteredMarkers = att.markers.filter(m => markerIds.includes(m.id));
+                                                        const filteredMarkers = att.markers.filter(m => currentMarkerIds.includes(m.id));
                                                         if (filteredMarkers.length !== att.markers.length) {
                                                             return { ...att, markers: filteredMarkers };
                                                         }
                                                     }
                                                     return att;
-                                                }));
-                                                // Also update playedAudio if it has markers
-                                                if (playedAudio?.markers) {
-                                                    const filteredMarkers = playedAudio.markers.filter(m => markerIds.includes(m.id));
-                                                    if (filteredMarkers.length !== playedAudio.markers.length) {
-                                                        setPlayedAudio(prev => prev ? { ...prev, markers: filteredMarkers } : null);
+                                                });
+
+                                                // Only update if something changed
+                                                const hasChanges = updatedAttachments.some((att, i) => att !== attachments[i]);
+                                                if (hasChanges) {
+                                                    setAttachments(updatedAttachments);
+                                                    // Also update playedAudio if it's currently playing
+                                                    if (playedAudio) {
+                                                        const updatedPlayed = updatedAttachments.find(a => a.url === playedAudio.url);
+                                                        if (updatedPlayed) {
+                                                            setPlayedAudio({ ...playedAudio, markers: updatedPlayed.markers });
+                                                        }
+                                                    }
+                                                    // Persist to database
+                                                    if (initialData) {
+                                                        updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
                                                     }
                                                 }
                                             }}
