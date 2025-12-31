@@ -1,4 +1,5 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Calendar, Tag, ChevronUp, Check, Trash2 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,6 +26,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const titleRef = useRef<HTMLInputElement>(null);
+    const backdropRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (task) {
@@ -50,10 +52,10 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     const excludeIds = getDescendantIds(taskId);
     const eligibleParents = tasks.filter((t: any) => !excludeIds.has(t.id) && t.id !== taskId);
 
-    const handleSave = async () => {
+    const handleSave = () => {
         if (!title.trim()) return;
 
-        await updateTask(taskId, {
+        updateTask(taskId, {
             title: title.trim(),
             notes,
             start_date: startDate || null,
@@ -71,8 +73,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
         onClose();
     };
 
-    const handleDelete = async () => {
-        await deleteTask(taskId);
+    const handleDelete = () => {
+        deleteTask(taskId);
         setToast?.({ msg: '已刪除', type: 'info' });
         onClose();
     };
@@ -97,27 +99,28 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
         { label: '下個月', getValue: () => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]; } },
     ];
 
-    return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center">
-            {/* Backdrop - clicking this closes the modal */}
-            <div
-                className="absolute inset-0 bg-black/40"
-                onClick={onClose}
-                onTouchEnd={(e) => {
-                    e.stopPropagation();
-                    onClose();
-                }}
-            />
+    // Handle backdrop click - only close if clicking directly on backdrop
+    const handleBackdropClick = (e: React.MouseEvent) => {
+        if (e.target === backdropRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+        }
+    };
 
-            {/* Modal content - clicks here should NOT close */}
+    const modalContent = (
+        <div
+            ref={backdropRef}
+            className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/40"
+            onClick={handleBackdropClick}
+        >
+            {/* Modal content - prevent all events from bubbling */}
             <motion.div
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                onTouchEnd={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
                 className="relative w-full bg-white rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
             >
                 {/* Handle bar */}
@@ -127,12 +130,17 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
-                    <button onClick={onClose} className="text-gray-500 p-2 -ml-2 active:bg-gray-100 rounded-full">
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onClose(); }}
+                        className="text-gray-500 p-2 -ml-2 active:bg-gray-100 rounded-full"
+                    >
                         <X size={24} />
                     </button>
                     <h2 className="text-lg font-bold text-gray-800">編輯任務</h2>
                     <button
-                        onClick={handleSave}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleSave(); }}
                         className="px-4 py-2 bg-indigo-600 text-white rounded-full font-bold text-sm active:bg-indigo-700"
                     >
                         儲存
@@ -140,26 +148,28 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                <div className="flex-1 overflow-y-auto p-5 space-y-5" onClick={(e) => e.stopPropagation()}>
                     {/* Title */}
-                    <div>
+                    <div onClick={(e) => e.stopPropagation()}>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">標題</label>
                         <input
                             ref={titleRef}
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                             placeholder="任務名稱..."
                             className="w-full text-xl font-light text-gray-800 border-none outline-none bg-gray-50 rounded-xl px-4 py-4 focus:bg-gray-100 transition-colors"
                         />
                     </div>
 
                     {/* Notes */}
-                    <div>
+                    <div onClick={(e) => e.stopPropagation()}>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">備註</label>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
                             placeholder="新增備註..."
                             rows={4}
                             className="w-full text-base font-light text-gray-700 border-none outline-none bg-gray-50 rounded-xl px-4 py-4 focus:bg-gray-100 transition-colors resize-none"
@@ -167,13 +177,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     </div>
 
                     {/* Quick Action Cards */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-3" onClick={(e) => e.stopPropagation()}>
                         {/* Date Card */}
                         <button
-                            onClick={() => setActiveSection(activeSection === 'date' ? null : 'date')}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'date' ? null : 'date'); }}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'date' || startDate
-                                ? 'border-indigo-500 bg-indigo-50'
-                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Calendar size={24} className={startDate ? 'text-indigo-600' : 'text-gray-400'} />
@@ -184,10 +195,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
                         {/* Tags Card */}
                         <button
-                            onClick={() => setActiveSection(activeSection === 'tags' ? null : 'tags')}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'tags' ? null : 'tags'); }}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'tags' || selectedTags.length > 0
-                                ? 'border-purple-500 bg-purple-50'
-                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                    ? 'border-purple-500 bg-purple-50'
+                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Tag size={24} className={selectedTags.length > 0 ? 'text-purple-600' : 'text-gray-400'} />
@@ -198,10 +210,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
                         {/* Parent Card */}
                         <button
-                            onClick={() => setActiveSection(activeSection === 'parent' ? null : 'parent')}
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'parent' ? null : 'parent'); }}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'parent' || parentId
-                                ? 'border-amber-500 bg-amber-50'
-                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                    ? 'border-amber-500 bg-amber-50'
+                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <ChevronUp size={24} className={parentId ? 'text-amber-600' : 'text-gray-400'} />
@@ -219,13 +232,15 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm font-bold text-gray-700">開始日期</span>
                                         {startDate && (
                                             <button
-                                                onClick={() => setStartDate('')}
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setStartDate(''); }}
                                                 className="text-xs text-red-500 font-bold"
                                             >
                                                 清除
@@ -238,10 +253,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                         {quickDates.map((qd) => (
                                             <button
                                                 key={qd.label}
-                                                onClick={() => setStartDate(qd.getValue())}
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setStartDate(qd.getValue()); }}
                                                 className={`py-3 rounded-xl text-sm font-bold transition-all ${startDate === qd.getValue()
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
+                                                        ? 'bg-indigo-600 text-white'
+                                                        : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
                                                     }`}
                                             >
                                                 {qd.label}
@@ -254,6 +270,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                         type="date"
                                         value={startDate ? startDate.split('T')[0] : ''}
                                         onChange={(e) => setStartDate(e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
                                         className="w-full p-4 bg-white rounded-xl border border-gray-200 text-base"
                                     />
 
@@ -264,6 +281,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                             type="date"
                                             value={dueDate ? dueDate.split('T')[0] : ''}
                                             onChange={(e) => setDueDate(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
                                             className="p-2 bg-white rounded-lg border border-gray-200 text-sm"
                                         />
                                     </div>
@@ -280,6 +298,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
                                     {tags.length === 0 ? (
@@ -291,7 +310,9 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                             return (
                                                 <button
                                                     key={tag.id}
-                                                    onClick={() => {
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
                                                         setSelectedTags(prev =>
                                                             isSelected
                                                                 ? prev.filter(id => id !== tag.id)
@@ -299,8 +320,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                                         );
                                                     }}
                                                     className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                        ? 'bg-white shadow-sm border-2'
-                                                        : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                            ? 'bg-white shadow-sm border-2'
+                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
                                                         }`}
                                                     style={{ borderColor: isSelected ? tagColor : undefined }}
                                                 >
@@ -331,12 +352,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                 animate={{ height: 'auto', opacity: 1 }}
                                 exit={{ height: 0, opacity: 0 }}
                                 className="overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
                             >
                                 <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
                                     {/* Clear parent option */}
                                     {parentId && (
                                         <button
-                                            onClick={() => setParentId(null)}
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); setParentId(null); }}
                                             className="w-full flex items-center justify-between p-4 rounded-xl bg-red-50 border border-red-200 active:bg-red-100"
                                         >
                                             <span className="font-medium text-red-600">移除母任務</span>
@@ -353,10 +376,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                             return (
                                                 <button
                                                     key={p.id}
-                                                    onClick={() => setParentId(isSelected ? null : p.id)}
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); setParentId(isSelected ? null : p.id); }}
                                                     className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                        ? 'bg-white shadow-sm border-2 border-amber-500'
-                                                        : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                            ? 'bg-white shadow-sm border-2 border-amber-500'
+                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -380,13 +404,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
                     {/* Color Picker (only for root tasks) */}
                     {!parentId && (
-                        <div>
+                        <div onClick={(e) => e.stopPropagation()}>
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">顏色</label>
                             <div className="flex gap-3 flex-wrap">
                                 {(Object.keys(COLOR_THEMES) as TaskColor[]).map((c) => (
                                     <button
                                         key={c}
-                                        onClick={() => setColor(c)}
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setColor(c); }}
                                         className={`w-10 h-10 rounded-full transition-all ${color === c ? 'ring-4 ring-offset-2 scale-110' : 'active:scale-95'
                                             }`}
                                         style={{
@@ -399,17 +424,19 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     )}
 
                     {/* Delete Button */}
-                    <div className="pt-4 border-t border-gray-100">
+                    <div className="pt-4 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
                         {showDeleteConfirm ? (
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() => setShowDeleteConfirm(false)}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
                                     className="flex-1 py-4 rounded-xl bg-gray-100 text-gray-600 font-bold active:bg-gray-200"
                                 >
                                     取消
                                 </button>
                                 <button
-                                    onClick={handleDelete}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(); }}
                                     className="flex-1 py-4 rounded-xl bg-red-500 text-white font-bold active:bg-red-600"
                                 >
                                     確認刪除
@@ -417,7 +444,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                             </div>
                         ) : (
                             <button
-                                onClick={() => setShowDeleteConfirm(true)}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
                                 className="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-red-500 font-bold active:bg-red-50 transition-colors"
                             >
                                 <Trash2 size={20} />
@@ -429,4 +457,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
             </motion.div>
         </div>
     );
+
+    // Use createPortal to render outside the normal DOM hierarchy
+    return createPortal(modalContent, document.body);
 };

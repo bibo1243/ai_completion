@@ -8,7 +8,7 @@ import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
 export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
-    const { updateTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast } = useContext(AppContext);
+    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -246,27 +246,17 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         }
     }, []);
 
-    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const handleTouchEnd = useCallback(() => {
         if (longPressTimerRef.current) {
             clearTimeout(longPressTimerRef.current);
             longPressTimerRef.current = null;
         }
 
-        if (!touchStartRef.current) return;
-
-        const duration = Date.now() - touchStartRef.current.time;
-
-        // If it was a quick tap (< 300ms) and not long pressing, open edit mode on mobile
-        if (duration < 300 && !isLongPressing && isMobile) {
-            e.preventDefault();
-            e.stopPropagation();
-            // Use setEditingTaskId to trigger MobileTaskEditor
-            setEditingTaskId(task.id);
-        }
-
+        // Note: onClick handles opening edit mode on mobile
+        // This handler only resets long press state
         setIsLongPressing(false);
         touchStartRef.current = null;
-    }, [isLongPressing, isMobile, task.id, setEditingTaskId]);
+    }, []);
 
     return (
         <motion.div
@@ -283,8 +273,13 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             onKeyDown={handleKeyDown}
             onClick={(e: any) => {
                 e.stopPropagation();
-                // Desktop: select on click
-                if (!isMobile) {
+                if (isMobile) {
+                    // Mobile: single click opens edit mode (only if not already editing)
+                    if (!editingTaskId) {
+                        setEditingTaskId(task.id);
+                    }
+                } else {
+                    // Desktop: select on click
                     handleSelection(e, task.id);
                 }
             }}

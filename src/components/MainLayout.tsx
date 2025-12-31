@@ -12,7 +12,6 @@ import { Mission72Manager } from './Mission72Manager';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { MobileTaskEditor } from './MobileTaskEditor';
 import GTDGuide from './GTDGuide';
-import { AnimatePresence } from 'framer-motion';
 
 export const MainLayout = () => {
   const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds } = useContext(AppContext);
@@ -274,15 +273,13 @@ export const MainLayout = () => {
         {/* GTD Guide Modal */}
         <GTDGuide isOpen={showGTDGuide} onClose={() => setShowGTDGuide(false)} />
 
-        {/* Mobile Task Editor */}
-        <AnimatePresence>
-          {editingTaskId && isMobile && (
-            <MobileTaskEditor
-              taskId={editingTaskId}
-              onClose={() => setEditingTaskId(null)}
-            />
-          )}
-        </AnimatePresence>
+        {/* Mobile Task Editor - uses createPortal internally */}
+        {editingTaskId && isMobile && (
+          <MobileTaskEditor
+            taskId={editingTaskId}
+            onClose={() => setEditingTaskId(null)}
+          />
+        )}
       </main>
     </div>
   );
