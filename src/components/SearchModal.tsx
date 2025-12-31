@@ -24,7 +24,7 @@ const COLOR_CLASSES: Record<TaskColor, string> = {
     fuchsia: 'bg-fuchsia-500',
     pink: 'bg-pink-500',
     rose: 'bg-rose-500',
-    coder: 'bg-stone-500'
+    coder: 'bg-[#78716c]'
 };
 
 // Highlight matching text
