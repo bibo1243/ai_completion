@@ -183,7 +183,7 @@ export const MainLayout = () => {
               <div className="hidden md:flex flex-col items-end group relative">
                 <span className="text-[9px] text-theme-tertiary uppercase tracking-wider font-bold leading-none mb-0.5">User</span>
                 <span className="text-[10px] font-mono text-theme-secondary leading-none cursor-help" title={user?.id}>
-                  {user?.email ? user.email : (user?.id ? `ID: ${user.id.slice(0, 6)}...` : 'Guest')}
+                  {user?.email ? user.email : (user?.id === '00000000-0000-0000-0000-000000000000' ? 'Demo' : (user?.id ? `ID: ${user.id.slice(0, 6)}...` : 'Guest'))}
                 </span>
               </div>
               <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 relative group cursor-pointer" title="登出 (Logout)" onClick={logout}>

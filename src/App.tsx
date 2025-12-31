@@ -24,27 +24,27 @@ const AppRoutes = () => {
   // But AppContext logic:
   // if (!userId) userId = '0000...'; setUser(session?.user || { id: userId });
   // So user is always defined.
-  
+
   // We need to know if it's an authenticated session.
   // We can check user.aud === 'authenticated'.
-  
+
   const isAuthenticated = user && user.aud === 'authenticated';
-  
+
   // For dev/demo purpose, if we want to allow the "default" user to access without login, we can skip this check.
   // But the requirement is "User Authentication System".
   // So we should enforce login.
   // HOWEVER, to avoid locking out the user immediately if they rely on the localstorage ID, 
   // we might need a migration or just enforce it.
-  
+
   // Let's enforce it. If user.id is the default zero-UUID, treat as unauthenticated?
   // Or just check `user.aud`.
-  
-  const isGuest = user?.id === '00000000-0000-0000-0000-000000000000';
-  
+
+  const isDemo = user?.id === '00000000-0000-0000-0000-000000000000';
+
   return (
     <Routes>
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
-      <Route path="/*" element={(isAuthenticated || isGuest) ? <MainLayout /> : <Navigate to="/login" replace />} />
+      <Route path="/*" element={(isAuthenticated || isDemo) ? <MainLayout /> : <Navigate to="/login" replace />} />
     </Routes>
   );
 };
