@@ -19,22 +19,30 @@ export const Login = () => {
     try {
       if (!supabase) throw new Error("Supabase client not initialized");
       if (mode === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
-        setMessage('註冊成功！正在登入...');
-        // Auto-login after signup (since email verification is disabled)
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+
+        // When email confirmation is disabled, signUp returns a session immediately
+        if (data.session) {
+          setMessage('註冊成功！正在進入...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 500);
+        } else if (data.user && !data.session) {
+          // Email confirmation is still required
+          setMessage('請檢查您的電子郵件以進行驗證。');
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+        // Successful login - page will redirect via AppContext
+        window.location.reload();
       }
     } catch (err: any) {
       setError(err.message);
