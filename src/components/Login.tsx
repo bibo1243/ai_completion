@@ -129,6 +129,38 @@ export const Login = () => {
             {mode === 'signin' ? '還沒有帳號？立即註冊' : '已經有帳號？登入'}
           </button>
         </div>
+
+        {/* Demo Account Section */}
+        <div className="mt-6 pt-6 border-t border-gray-100">
+          <p className="text-xs text-gray-400 text-center mb-3">或使用 Demo 帳號體驗</p>
+          <button
+            type="button"
+            onClick={async () => {
+              setLoading(true);
+              setError(null);
+              try {
+                if (!supabase) throw new Error("Supabase client not initialized");
+                const { error } = await supabase.auth.signInWithPassword({
+                  email: 'demo@demo.com',
+                  password: 'demo123456',
+                });
+                if (error) throw error;
+                window.location.reload();
+              } catch (err: any) {
+                setError('Demo 帳號登入失敗: ' + err.message);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded-lg transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-70"
+          >
+            🎮 Demo 帳號登入
+          </button>
+          <p className="text-[10px] text-gray-400 text-center mt-2">
+            demo@demo.com / demo123456
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -32,19 +32,11 @@ const AppRoutes = () => {
 
   // For dev/demo purpose, if we want to allow the "default" user to access without login, we can skip this check.
   // But the requirement is "User Authentication System".
-  // So we should enforce login.
-  // HOWEVER, to avoid locking out the user immediately if they rely on the localstorage ID, 
-  // we might need a migration or just enforce it.
-
-  // Let's enforce it. If user.id is the default zero-UUID, treat as unauthenticated?
-  // Or just check `user.aud`.
-
-  const isDemo = user?.id === '00000000-0000-0000-0000-000000000000';
-
+  // Enforce login for all users - no demo bypass
   return (
     <Routes>
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
-      <Route path="/*" element={(isAuthenticated || isDemo) ? <MainLayout /> : <Navigate to="/login" replace />} />
+      <Route path="/*" element={isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />} />
     </Routes>
   );
 };
