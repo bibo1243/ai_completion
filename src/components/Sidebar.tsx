@@ -734,15 +734,6 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     </div>
                                 </div>
                                 <div>
-                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontFamily')}</span> </div>
-                                    <div className="flex bg-gray-100 rounded p-0.5">
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'system' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'system' || !themeSettings.fontFamily ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '系統' : 'System'}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'rounded' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'rounded' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '圓體' : 'Rounded'}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'serif' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'serif' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '襯線' : 'Serif'}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontFamily: 'mono' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontFamily === 'mono' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '等寬' : 'Mono'}</button>
-                                    </div>
-                                </div>
-                                <div>
                                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('timeFormat')}</span> </div>
                                     <div className="flex bg-gray-100 rounded p-0.5">
                                         <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
