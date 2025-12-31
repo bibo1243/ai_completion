@@ -757,6 +757,18 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 class: `prose prose-sm max-w-none focus:outline-none min-h-[100px] text-slate-500 ${textSizeClass} ${descFontClass} leading-relaxed custom-scrollbar selection:bg-indigo-100`,
             },
         },
+        onCreate: ({ editor }) => {
+            // Scan for audio markers on editor creation and notify parent
+            if (onMarkersChange) {
+                const currentMarkers: { id: string, time: number }[] = [];
+                editor.state.doc.descendants((node: any) => {
+                    if (node.type.name === 'audioMarker' && node.attrs.id) {
+                        currentMarkers.push({ id: node.attrs.id, time: node.attrs.time || 0 });
+                    }
+                });
+                onMarkersChange(currentMarkers);
+            }
+        },
         onUpdate: ({ editor }) => {
             const html = editor.getHTML();
             if (editor.isEmpty) {
