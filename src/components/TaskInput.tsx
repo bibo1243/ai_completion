@@ -2218,7 +2218,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     <button
                                         type="button"
                                         onClick={() => setStartDate(new Date().toISOString())}
-                                        className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-50 text-indigo-600 text-[10px] font-bold border border-indigo-100 hover:bg-indigo-100 transition-all animate-pulse hover:animate-none"
+                                        className="flex items-center gap-1 px-2 py-1.5 rounded-md bg-indigo-500/10 text-indigo-500 text-[10px] font-bold border border-indigo-500/20 hover:bg-indigo-500/20 transition-all animate-pulse hover:animate-none"
                                         title="快速設定為今天"
                                     >
                                         <Sparkles size={11} /> 今天
@@ -2371,7 +2371,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         type="button"
                                         tabIndex={-1}
                                         onClick={() => fileInputRef.current?.click()}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-gray-700 focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
                                     >
                                         {isUploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
                                         <span>圖片</span>
@@ -2390,12 +2390,13 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         type="button"
                                         tabIndex={-1}
                                         onClick={() => attachmentInputRef.current?.click()}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-gray-700 focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
                                     >
                                         {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
                                         <span>{t('attachFiles')}</span>
                                     </button>
 
+                                    {/* Voice Note Button */}
                                     {/* Voice Note Button */}
                                     <button
                                         type="button"
@@ -2409,7 +2410,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 setToast?.({ msg: "錄音功能尚未準備就緒", type: "error" });
                                             }
                                         }}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-500 hover:text-indigo-600 focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-theme-card focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
                                         title="開始錄音"
                                     >
                                         <Mic size={13} />
