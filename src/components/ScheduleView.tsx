@@ -817,26 +817,26 @@ export const ScheduleView = () => {
     };
 
     return (
-        <div ref={containerRef} className="h-full flex flex-col bg-white overflow-hidden">
+        <div ref={containerRef} className="h-full flex flex-col bg-theme-main overflow-hidden">
             {/* Header */}
-            <div className="flex bg-gray-50/50 border-b border-gray-200 p-2 items-center flex-shrink-0 z-40 shadow-sm justify-between">
+            <div className="flex bg-theme-header border-b border-theme p-2 items-center flex-shrink-0 z-40 shadow-sm justify-between">
                 <div className="flex items-center gap-2">
-                    <Clock size={16} className="text-indigo-500" />
-                    <span className="font-bold text-gray-700 text-sm">Schedule</span>
+                    <Clock size={16} className="text-theme-primary" />
+                    <span className="font-bold text-theme-primary text-sm">Schedule</span>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-gray-400 font-medium">WIDTH</span>
+                        <span className="text-[10px] text-theme-tertiary font-medium">WIDTH</span>
                         <input
                             type="range"
                             min="120"
                             max="400"
                             value={columnWidth}
                             onChange={(e) => setColumnWidth(Number(e.target.value))}
-                            className="w-20 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                            className="w-20 h-1 bg-theme-hover rounded-lg appearance-none cursor-pointer accent-indigo-500"
                         />
                     </div>
-                    <button onClick={scrollToToday} className="px-3 py-1 bg-white border border-gray-200 rounded-md text-xs font-bold shadow-sm hover:bg-gray-50 text-indigo-600">
+                    <button onClick={scrollToToday} className="px-3 py-1 bg-theme-card border border-theme rounded-md text-xs font-bold shadow-sm hover:bg-theme-hover text-theme-primary">
                         Today
                     </button>
                     <button
@@ -844,7 +844,7 @@ export const ScheduleView = () => {
                         className={`px-3 py-1 border rounded-md text-xs font-bold shadow-sm transition-colors
                             ${isWorkView
                                 ? 'bg-indigo-600 text-white border-indigo-600'
-                                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                                : 'bg-theme-card border-theme text-theme-tertiary hover:bg-theme-hover'}`}
                     >
                         {isWorkView ? 'Work Hours' : 'Full Day'}
                     </button>
@@ -853,10 +853,10 @@ export const ScheduleView = () => {
 
             <div ref={scrollContainerRef} className="flex-1 overflow-auto flex relative" onScroll={handleScroll}>
                 {/* Time Axis */}
-                <div className="sticky left-0 z-30 bg-white border-r border-gray-200 flex-shrink-0 w-14 flex flex-col pointer-events-none select-none h-min relative">
-                    <div className="sticky top-0 bg-white z-40 border-b border-gray-100 flex-shrink-0" style={{ height: DATE_HEADER_HEIGHT + allDayHeight + 4 }} />
+                <div className="sticky left-0 z-30 bg-theme-sidebar border-r border-theme flex-shrink-0 w-14 flex flex-col pointer-events-none select-none h-min relative">
+                    <div className="sticky top-0 bg-theme-sidebar z-40 border-b border-theme flex-shrink-0" style={{ height: DATE_HEADER_HEIGHT + allDayHeight + 4 }} />
                     {Array.from({ length: 24 }).map((_, h) => (
-                        <div key={h} className="text-[10px] text-gray-400 font-extralight text-center relative box-border" style={{ height: getHourHeight(h) }}>
+                        <div key={h} className="text-[10px] text-theme-tertiary font-extralight text-center relative box-border" style={{ height: getHourHeight(h) }}>
                             <span className="absolute -top-1.5 left-0 right-0">{h}:00</span>
                         </div>
                     ))}
@@ -886,12 +886,12 @@ export const ScheduleView = () => {
                         <div
                             key={day.toISOString()}
                             data-date={day.toISOString()}
-                            className="flex-shrink-0 flex flex-col border-r border-gray-100 bg-white relative group h-min"
+                            className="flex-shrink-0 flex flex-col border-r border-theme bg-theme-main relative group h-min"
                             style={{ minWidth: columnWidth, width: columnWidth }}
                         >
                             {/* Sticky Header (Date + All Day) */}
-                            <div className={`sticky top-0 z-20 border-b border-gray-100 px-1 py-0.5 text-center flex flex-col justify-start select-none shadow-sm relative
-                                ${isToday ? 'bg-indigo-50/95 backdrop-blur-sm' : 'bg-white/95 backdrop-blur-sm'}
+                            <div className={`sticky top-0 z-20 border-b border-theme px-1 py-0.5 text-center flex flex-col justify-start select-none shadow-sm relative
+                                ${isToday ? 'bg-indigo-500/10 backdrop-blur-sm' : 'bg-theme-header backdrop-blur-sm'}
                             `} style={{ height: DATE_HEADER_HEIGHT + allDayHeight + 4 }}>
                                 {/* Resize Handle (only in header area) */}
                                 <div
@@ -899,10 +899,10 @@ export const ScheduleView = () => {
                                     onMouseDown={(e) => handleResizeMouseDown(e, columnIndex)}
                                 />
                                 <div className="flex items-center justify-center gap-1 flex-shrink-0" style={{ height: DATE_HEADER_HEIGHT - 4 }}>
-                                    <span className={`text-[10px] font-extralight ${isToday ? 'text-indigo-600' : 'text-gray-400'}`}>
+                                    <span className={`text-[10px] font-extralight ${isToday ? 'text-indigo-500' : 'text-theme-tertiary'}`}>
                                         週{WEEKDAY_ZH[day.getDay()]}
                                     </span>
-                                    <span className={`text-lg font-extralight ${isToday ? 'text-indigo-600' : 'text-gray-600'}`}>
+                                    <span className={`text-lg font-extralight ${isToday ? 'text-indigo-500' : 'text-theme-primary'}`}>
                                         {day.getDate()}
                                     </span>
                                 </div>
@@ -910,7 +910,7 @@ export const ScheduleView = () => {
                                 {/* All Day Section */}
                                 <div
                                     data-drop-zone="allday"
-                                    className="overflow-y-auto space-y-1 py-1 border-t border-dashed border-gray-100/50 scrollbar-none px-1 cursor-cell transition-colors relative"
+                                    className="overflow-y-auto space-y-1 py-1 border-t border-dashed border-theme scrollbar-none px-1 cursor-cell transition-colors relative"
                                     style={{ height: allDayHeight }}
                                     onDoubleClick={(e) => handleAllDayDoubleClick(e, day)}
                                 >
@@ -965,7 +965,7 @@ export const ScheduleView = () => {
                                 onMouseDown={(e) => handleGridMouseDown(e, day)}
                             >
                                 {Array.from({ length: 24 }).map((_, h) => (
-                                    <div key={h} className="border-t border-gray-50 box-border w-full pointer-events-none" style={{ height: getHourHeight(h) }} />
+                                    <div key={h} className="border-t border-theme-hover box-border w-full pointer-events-none" style={{ height: getHourHeight(h) }} />
                                 ))}
 
                                 {/* Drag-to-Create Indicator */}
@@ -1046,7 +1046,7 @@ export const ScheduleView = () => {
 
                                 {draftTask && isSameDay(draftTask.date, day) && (
                                     <div
-                                        className="absolute z-50 rounded-xl border border-indigo-500 bg-white shadow-xl overflow-hidden px-3 flex items-center"
+                                        className="absolute z-50 rounded-xl border border-indigo-500 bg-theme-card shadow-xl overflow-hidden px-3 flex items-center"
                                         style={{
                                             top: getYFromMinutes(draftTask.startMin),
                                             height: Math.max(44, getYFromMinutes(draftTask.startMin + draftTask.duration) - getYFromMinutes(draftTask.startMin)),
@@ -1060,7 +1060,7 @@ export const ScheduleView = () => {
                                             onChange={(e) => setDraftTask({ ...draftTask, title: e.target.value })}
                                             onKeyDown={(e) => { if (e.key === 'Enter') confirmDraft(); if (e.key === 'Escape') setDraftTask(null); }}
                                             onBlur={confirmDraft}
-                                            className="w-full text-[12px] font-extralight bg-transparent outline-none text-indigo-600 leading-normal"
+                                            className="w-full text-[12px] font-extralight bg-transparent outline-none text-indigo-400 leading-normal"
                                             placeholder="New Task..."
                                             autoFocus
                                         />
@@ -1125,7 +1125,7 @@ export const ScheduleView = () => {
                                     height: durationH,
                                     left: leftPos + 4,
                                     width: (dragState.colWidth || 190) - 8,
-                                    backgroundColor: 'white',
+                                    backgroundColor: 'var(--bg-card)',
                                     borderColor: theme.color,
                                     color: theme.color,
                                     opacity: 0.95

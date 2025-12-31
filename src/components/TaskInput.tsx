@@ -2445,8 +2445,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 </div>
 
                                 {/* Color Picker (only for root tasks) */}
-                                {!parentId && (
-                                    <div className="flex gap-0.5 p-1 bg-gray-50 rounded-lg border border-gray-100">
+                                {
+                                    <div className="flex gap-0.5 p-1 bg-theme-hover rounded-lg border border-theme">
                                         {(Object.keys(COLOR_THEMES) as TaskColor[]).map(c => (
                                             <button
                                                 key={c}
@@ -2457,7 +2457,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             />
                                         ))}
                                     </div>
-                                )}
+                                }
                             </div>
                         </div>
                     </div>
