@@ -757,8 +757,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 class: `prose prose-sm max-w-none focus:outline-none min-h-[100px] text-slate-500 ${textSizeClass} ${descFontClass} leading-relaxed custom-scrollbar selection:bg-indigo-100`,
             },
         },
+        // Scan markers on editor creation so they are available immediately
         onCreate: ({ editor }) => {
-            // Scan for audio markers on editor creation and notify parent
             if (onMarkersChange) {
                 const currentMarkers: { id: string, time: number }[] = [];
                 editor.state.doc.descendants((node: any) => {

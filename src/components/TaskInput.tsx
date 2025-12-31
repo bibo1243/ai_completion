@@ -134,7 +134,6 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [playedAudio, setPlayedAudio] = useState<{ url: string, name: string, markers?: { time: number, id: string }[] } | null>(null);
     const [audioSeekTime, setAudioSeekTime] = useState<number | null>(null);
     const [editorMarkerIds, setEditorMarkerIds] = useState<Set<string>>(new Set()); // Track markers currently in editor
-    const [showAllMarkers, setShowAllMarkers] = useState(true); // Whether to show all audio markers or only active ones
 
     const [isAssistantLoading, setIsAssistantLoading] = useState(false);
     const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
@@ -1614,33 +1613,19 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
                                     {/* Audio Player if active */}
                                     {playedAudio && (
-                                        <div className="relative">
-                                            <AudioPlayer
-                                                url={playedAudio.url}
-                                                fileName={playedAudio.name}
-                                                autoPlay={true}
-                                                markers={playedAudio.markers?.filter(m => editorMarkerIds.has(m.id))}
-                                                seekToTime={audioSeekTime}
-                                                onClose={() => { setPlayedAudio(null); setAudioSeekTime(null); }}
-                                                onMarkerClick={(marker) => {
-                                                    if (editorRef.current && (editorRef.current as any).scrollToParagraph) {
-                                                        (editorRef.current as any).scrollToParagraph(marker.id);
-                                                    }
-                                                }}
-                                            />
-                                            {/* Toggle button for showing/hiding all markers */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowAllMarkers(!showAllMarkers)}
-                                                className={`absolute top-2 right-10 text-[10px] px-2 py-0.5 rounded-full transition-all ${showAllMarkers
-                                                    ? 'bg-indigo-100 text-indigo-600 border border-indigo-200'
-                                                    : 'bg-gray-100 text-gray-500 border border-gray-200'
-                                                    }`}
-                                                title={showAllMarkers ? '顯示所有時間標籤' : '僅顯示播放中的時間標籤'}
-                                            >
-                                                {showAllMarkers ? '全部標籤' : '當前標籤'}
-                                            </button>
-                                        </div>
+                                        <AudioPlayer
+                                            url={playedAudio.url}
+                                            fileName={playedAudio.name}
+                                            autoPlay={true}
+                                            markers={playedAudio.markers?.filter(m => editorMarkerIds.has(m.id))}
+                                            seekToTime={audioSeekTime}
+                                            onClose={() => { setPlayedAudio(null); setAudioSeekTime(null); }}
+                                            onMarkerClick={(marker) => {
+                                                if (editorRef.current && (editorRef.current as any).scrollToParagraph) {
+                                                    (editorRef.current as any).scrollToParagraph(marker.id);
+                                                }
+                                            }}
+                                        />
                                     )}
 
                                     <NoteEditor
@@ -1703,7 +1688,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             // Jump the audio player to 4 seconds before this time
                                             setAudioSeekTime(Math.max(0, time - 4000));
                                         }}
-                                        activeMarkerIds={showAllMarkers ? null : (playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null)}
+                                        activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
                                         onMarkersChange={(currentMarkers) => {
                                             // Just track which markers currently exist in editor (for filtering)
                                             setEditorMarkerIds(new Set(currentMarkers.map(m => m.id)));
