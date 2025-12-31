@@ -1407,7 +1407,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     return (
         <div
             ref={containerRef}
-            className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 ${initialData ? 'bg-theme-main' : 'bg-theme-card'} rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
+            className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 bg-white rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
             onKeyDown={handleKeyDown}
             onDragOver={(e) => {
                 e.preventDefault();
@@ -1488,13 +1488,13 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             {/* Title Prompt Selection Modal */}
                             {showTitlePromptSelection && createPortal(
                                 <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={() => setShowTitlePromptSelection(false)}>
-                                    <div className="bg-theme-card rounded-xl shadow-2xl border border-theme p-4 w-[400px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                                        <div className="flex items-center justify-between mb-3 border-b border-theme pb-2">
-                                            <div className="flex items-center gap-2 text-theme-primary">
+                                    <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-4 w-[400px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                                            <div className="flex items-center gap-2 text-slate-700">
                                                 <Sparkles size={16} className="text-amber-500" />
                                                 <h3 className="font-bold text-sm">選擇 AI 標題生成指令</h3>
                                             </div>
-                                            <button onClick={() => setShowTitlePromptSelection(false)} className="text-theme-tertiary hover:text-theme-secondary">
+                                            <button onClick={() => setShowTitlePromptSelection(false)} className="text-slate-400 hover:text-slate-600">
                                                 <X size={16} />
                                             </button>
                                         </div>
@@ -1502,20 +1502,20 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                                             <button
                                                 onClick={() => executeTitleGeneration()}
-                                                className="w-full text-left p-3 rounded-lg border border-theme hover:border-indigo-300 hover:bg-theme-hover transition-all group"
+                                                className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-all group"
                                             >
-                                                <div className="font-medium text-sm text-theme-primary group-hover:text-indigo-500">預設 SEO 專家模式</div>
-                                                <div className="text-xs text-theme-tertiary mt-1">使用系統預設的 SEO 專家角色，總結文章並生成吸引人的標題。</div>
+                                                <div className="font-medium text-sm text-slate-700 group-hover:text-indigo-700">預設 SEO 專家模式</div>
+                                                <div className="text-xs text-slate-500 mt-1">使用系統預設的 SEO 專家角色，總結文章並生成吸引人的標題。</div>
                                             </button>
 
                                             {titlePrompts.map(prompt => (
                                                 <button
                                                     key={prompt.id}
                                                     onClick={() => executeTitleGeneration(prompt.description || '')}
-                                                    className="w-full text-left p-3 rounded-lg border border-theme hover:border-amber-300 hover:bg-theme-hover transition-all group"
+                                                    className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50 transition-all group"
                                                 >
-                                                    <div className="font-medium text-sm text-theme-primary group-hover:text-amber-500">{prompt.title}</div>
-                                                    <div className="text-xs text-theme-tertiary mt-1 line-clamp-2">
+                                                    <div className="font-medium text-sm text-slate-700 group-hover:text-amber-700">{prompt.title}</div>
+                                                    <div className="text-xs text-slate-500 mt-1 line-clamp-2">
                                                         {(prompt.description || '').replace(/<[^>]+>/g, '')}
                                                     </div>
                                                 </button>
@@ -1537,7 +1537,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         zIndex: 99999
                                     }}
                                 >
-                                    <div className="flex items-center gap-2 text-indigo-500 mb-3">
+                                    <div className="flex items-center gap-2 text-indigo-400 mb-3">
                                         <Wand2 size={14} />
                                         <span className="text-xs font-bold">AI 生成標題預覽</span>
                                     </div>
@@ -1546,14 +1546,14 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         autoFocus
                                         value={generatedTitle}
                                         onChange={(e) => setGeneratedTitle(e.target.value)}
-                                        className="w-full px-3 py-2 text-sm bg-theme-main text-theme-primary border border-theme rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
+                                        className="w-full px-3 py-2 text-sm bg-theme-main border border-theme rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 outline-none text-theme-primary"
                                         placeholder="編輯標題..."
                                     />
                                     <div className="flex justify-end gap-2 mt-3">
                                         <button
                                             type="button"
                                             onClick={handleCancelTitle}
-                                            className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                                            className="px-3 py-1.5 text-xs text-theme-tertiary hover:bg-theme-hover rounded-lg transition-colors"
                                         >
                                             取消
                                         </button>
@@ -1571,9 +1571,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
                             {showSuggestions && (
                                 <div className="w-full mt-1 mb-2">
-                                    <div className="bg-gray-50/50 rounded-lg overflow-hidden border border-gray-100">
+                                    <div className="bg-theme-hover rounded-lg overflow-hidden border border-theme">
                                         {suggestions.map((s, idx) => (
-                                            <div key={s.id} className={`px-3 py-1.5 text-xs cursor-pointer transition-colors flex justify-between items-center ${idx === suggestionIndex ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-500 hover:bg-gray-100'}`} onClick={() => { setTitle(s.title); setShowSuggestions(false); }}>
+                                            <div key={s.id} className={`px-3 py-1.5 text-xs cursor-pointer transition-colors flex justify-between items-center ${idx === suggestionIndex ? 'bg-theme-selection text-theme-primary font-medium' : 'text-theme-secondary hover:bg-theme-hover'}`} onClick={() => { setTitle(s.title); setShowSuggestions(false); }}>
                                                 <span>{s.title}</span>
                                                 {idx === suggestionIndex && <span className="text-[9px] text-indigo-400 font-normal">Ctrl+Enter</span>}
                                             </div>
@@ -1588,7 +1588,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     type="button"
                                     onClick={() => { handleAiAssistant(); setPolishPosition(null); }}
                                     disabled={isAssistantLoading}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-50 text-indigo-600 font-bold shadow-sm ring-1 ring-indigo-100' : 'text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 font-medium'}`}
+                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-500/20 text-indigo-400 font-bold shadow-sm ring-1 ring-indigo-500/30' : 'text-indigo-500 hover:text-indigo-400 hover:bg-indigo-500/10 font-medium'}`}
                                     title="AI Assistant Brain"
                                 >
                                     {isAssistantLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
@@ -1599,7 +1599,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     type="button"
                                     onClick={handleGenerateTitle}
                                     disabled={isGeneratingTitle}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingTitle ? 'bg-amber-50 text-amber-600 font-bold shadow-sm ring-1 ring-amber-100' : 'text-amber-500 hover:text-amber-700 hover:bg-amber-50 font-medium'}`}
+                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingTitle ? 'bg-amber-500/20 text-amber-400 font-bold shadow-sm ring-1 ring-amber-500/30' : 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 font-medium'}`}
                                     title="從備註內容生成 SEO 優化標題"
                                 >
                                     {isGeneratingTitle ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
@@ -2211,7 +2211,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
 
                         {/* Bottom Section: Metadata and Actions */}
-                        <div className="flex flex-col gap-3 w-full border-t border-theme pt-3 mt-1">
+                        <div className="flex flex-col gap-3 w-full border-t border-gray-100 pt-3 mt-1">
                             {/* Row 1: Date, Time, Tags */}
                             <div className="flex flex-wrap gap-2 items-center">
                                 {!startDate && (

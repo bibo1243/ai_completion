@@ -249,7 +249,7 @@
 [data-theme] .bg-white {
     background-color: var(--bg-card) !important;
     color: var(--text-primary) !important;
-    border-color: var(--border-color) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Specific fix for inputs that might have explicit classes like bg-gray-50 */

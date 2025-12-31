@@ -331,7 +331,7 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
     if (props.items.length === 0) {
         return (
             <div
-                className="bg-theme-card/95 backdrop-blur border border-theme rounded-xl shadow-xl p-3 text-xs font-light text-theme-tertiary"
+                className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl p-3 text-xs font-light text-theme-tertiary"
                 onMouseDown={(e) => e.preventDefault()}
             >
                 沒有找到標籤
@@ -341,7 +341,7 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
 
     return (
         <div
-            className="bg-theme-card/95 backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
+            className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
             onMouseDown={(e) => e.preventDefault()}
         >
             {props.items.map((item, index) => {
@@ -361,12 +361,12 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
                             selectItem(index);
                         }}
                         className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
-                            ? 'bg-theme-selection text-theme-primary'
-                            : 'hover:bg-theme-hover text-theme-secondary'
+                            ? 'bg-theme-selection'
+                            : 'hover:bg-theme-hover'
                             }`}
                     >
                         {isCreateOption ? (
-                            <div className="w-4 h-4 rounded-full bg-theme-hover flex items-center justify-center flex-shrink-0 text-indigo-600">
+                            <div className="w-4 h-4 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0 text-indigo-400">
                                 <Plus size={10} strokeWidth={3} />
                             </div>
                         ) : (
@@ -860,7 +860,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
         editorProps: {
             attributes: {
                 // Things 3 aesthetic: borderless, transparent, matching parent typography
-                class: `prose prose-sm max-w-none focus:outline-none min-h-[100px] text-slate-500 ${textSizeClass} ${descFontClass} leading-relaxed custom-scrollbar selection:bg-indigo-100`,
+                class: `prose prose-sm max-w-none focus:outline-none min-h-[100px] text-theme-secondary ${textSizeClass} ${descFontClass} leading-relaxed custom-scrollbar selection:bg-indigo-100`,
             },
         },
         // Scan markers on editor creation so they are available immediately
