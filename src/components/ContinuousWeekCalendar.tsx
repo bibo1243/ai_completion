@@ -252,10 +252,10 @@ export const ContinuousWeekCalendar = () => {
     const headerTitle = `${currentViewDate.getFullYear()}年 ${currentViewDate.getMonth() + 1}月`;
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className="flex flex-col h-full bg-theme-main relative">
             {/* 浮動月份標題 (Sticky Header) - 快速滾動時可見 */}
             <div className="absolute top-12 left-1/2 -translate-x-1/2 z-40 pointer-events-none opacity-0 transition-opacity duration-300 data-[visible=true]:opacity-100" data-visible={true}>
-                <div className="bg-white/90 backdrop-blur-md shadow-lg border border-gray-200/50 px-4 py-1.5 rounded-full text-sm font-bold text-gray-700 flex items-center gap-2">
+                <div className="bg-theme-header backdrop-blur-md shadow-lg border border-theme px-4 py-1.5 rounded-full text-sm font-bold text-theme-primary flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
                     {headerTitle}
                 </div>
@@ -269,9 +269,9 @@ export const ContinuousWeekCalendar = () => {
                 style={{ scrollBehavior: 'auto' }} // 移除 smooth 讓滾動更即時
             >
                 {/* 週頭部 - 移入內部以解決 Scrollbar 對齊問題 */}
-                <div className="flex border-b border-gray-200 bg-gray-50 z-30 sticky top-0 shadow-sm min-h-[32px]">
+                <div className="flex border-b border-theme bg-theme-sidebar z-30 sticky top-0 shadow-sm min-h-[32px]">
                     {weekDays.map((d, i) => (
-                        <div key={d} className={`flex-1 text-center py-2 text-xs font-bold ${i === 0 ? 'text-red-500' : (i === 6 ? 'text-green-600' : 'text-gray-400')
+                        <div key={d} className={`flex-1 text-center py-2 text-xs font-bold ${i === 0 ? 'text-red-500' : (i === 6 ? 'text-green-600' : 'text-theme-tertiary')
                             }`}>
                             {d}
                         </div>
@@ -292,7 +292,7 @@ export const ContinuousWeekCalendar = () => {
                         return (
                             <div
                                 key={week.id}
-                                className="flex w-full absolute left-0 right-0 border-b border-gray-100"
+                                className="flex w-full absolute left-0 right-0 border-b border-theme"
                                 style={{
                                     height: WEEK_HEIGHT,
                                     top: index * WEEK_HEIGHT
@@ -317,18 +317,18 @@ export const ContinuousWeekCalendar = () => {
                                         <div
                                             key={dIndex}
                                             className={`
-                                                flex-1 min-w-0 h-full border-r border-gray-100 relative group
+                                                flex-1 min-w-0 h-full border-r border-theme relative group
                                                 ${day.isToday
-                                                    ? 'bg-indigo-50/40'
+                                                    ? 'bg-indigo-500/10'
                                                     : (isWeekend
-                                                        ? 'bg-gray-50/60'
-                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-white' : 'bg-slate-50/30')
+                                                        ? 'bg-theme-sidebar'
+                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-theme-main' : 'bg-theme-hover/30')
                                                     )
                                                 }
                                                 ${isFlashing ? 'ring-4 ring-green-400 bg-green-50 animate-pulse z-20' : ''}
-                                                ${dragOverDate === day.date.toDateString() ? 'bg-indigo-100/60 ring-inset ring-2 ring-indigo-400 z-10 transition-colors duration-150' : ''}
+                                                ${dragOverDate === day.date.toDateString() ? 'bg-indigo-500/20 ring-inset ring-2 ring-indigo-400 z-10 transition-colors duration-150' : ''}
                                                 ${isHovered ? 'cursor-pointer hover:ring-[1.5px] hover:ring-indigo-500 hover:shadow-sm hover:z-30 z-10' : ''}
-                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() ? 'hover:bg-gray-100/50' : ''}
+                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() ? 'hover:bg-theme-hover' : ''}
                                             `}
                                             onDragEnter={() => setDragOverDate(day.date.toDateString())}
                                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
@@ -364,7 +364,7 @@ export const ContinuousWeekCalendar = () => {
                                                     <div className="absolute -top-3 left-2 bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full z-20 shadow-md">
                                                         {day.date.getFullYear()}年 {day.date.getMonth() + 1}月
                                                     </div>
-                                                    <div className="absolute top-2 left-2 text-6xl font-black text-indigo-50/80 pointer-events-none -z-10 select-none">
+                                                    <div className="absolute top-2 left-2 text-6xl font-black text-indigo-500/5 pointer-events-none -z-10 select-none">
                                                         {day.date.getMonth() + 1}
                                                     </div>
                                                 </>
@@ -390,7 +390,7 @@ export const ContinuousWeekCalendar = () => {
                                                         text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full ml-auto flex-shrink-0
                                                         ${day.isToday
                                                             ? 'bg-indigo-600 text-white'
-                                                            : (isSunday ? 'text-red-500' : (isSaturday ? 'text-green-600' : 'text-gray-400 group-hover:text-gray-600'))
+                                                            : (isSunday ? 'text-red-500' : (isSaturday ? 'text-green-600' : 'text-theme-tertiary group-hover:text-theme-secondary'))
                                                         }
                                                     `}>
                                                         {day.date.getDate()}
@@ -498,7 +498,7 @@ export const ContinuousWeekCalendar = () => {
                                                                 }}
                                                                 onBlur={confirmDraft}
                                                                 placeholder="新任務..."
-                                                                className="w-full text-[9.5px] bg-transparent outline-none text-indigo-600 font-medium"
+                                                                className="w-full text-[9.5px] bg-transparent outline-none text-indigo-400 font-medium"
                                                                 autoFocus
                                                             />
                                                         </div>
@@ -545,7 +545,7 @@ export const ContinuousWeekCalendar = () => {
                 ref={dragImageRef}
                 className="fixed top-[-1000px] left-[-1000px] z-50 pointer-events-none"
             >
-                <div className="bg-white/90 backdrop-blur-xl border border-indigo-200/50 p-3 rounded-xl shadow-2xl flex items-center gap-3 w-48 relative overflow-hidden ring-1 ring-black/5">
+                <div className="bg-theme-card backdrop-blur-xl border border-theme p-3 rounded-xl shadow-2xl flex items-center gap-3 w-48 relative overflow-hidden ring-1 ring-black/5">
                     {/* Decorative background gradient */}
                     <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-purple-50/50 -z-10"></div>
                     <div className="absolute right-0 top-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-2xl -mr-8 -mt-8"></div>

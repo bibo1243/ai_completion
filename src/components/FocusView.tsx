@@ -170,7 +170,7 @@ export const FocusView = () => {
                     transition-all duration-150 ease-out
                     ${isSelected
                         ? `bg-indigo-50 ring-2 shadow-sm ${isConstructionMode || isReschedulingMode ? 'construction-glow ring-transparent' : 'ring-indigo-400'}`
-                        : 'hover:bg-gray-50 active:bg-gray-100'
+                        : 'hover:bg-theme-hover active:bg-theme-hover'
                     }
                 `}
                 style={(isSelected && (isConstructionMode || isReschedulingMode)) ? {
@@ -190,8 +190,8 @@ export const FocusView = () => {
 
                 {/* 任務內容 */}
                 <div className="flex-1 min-w-0">
-                    <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-gray-800 truncate leading-tight`}>
-                        {task.title || <span className="text-gray-400 italic">無標題</span>}
+                    <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-theme-primary truncate leading-tight`}>
+                        {task.title || <span className="text-theme-tertiary italic">無標題</span>}
                     </div>
                 </div>
             </div>
@@ -199,11 +199,11 @@ export const FocusView = () => {
     };
 
     return (
-        <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-white">
+        <div ref={containerRef} className="flex h-full w-full overflow-hidden bg-theme-main">
             {/* Left Pane: 任務列表 */}
             <div
                 style={{ width: focusSplitWidth }}
-                className="flex flex-col h-full border-r border-gray-100 flex-shrink-0 bg-[#fafafa]"
+                className="flex flex-col h-full border-r border-theme flex-shrink-0 bg-theme-sidebar"
             >
 
                 {/* 任務列表 */}
@@ -261,18 +261,18 @@ export const FocusView = () => {
             {/* Right Pane: Timebox (Calendar/Schedule) */}
             <div className="flex-1 h-full min-w-0 relative overflow-hidden flex flex-col">
                 {/* Tab Header */}
-                <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex-shrink-0">
-                    <div className="flex items-center gap-1 bg-gray-200/70 p-0.5 rounded-lg">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-theme bg-theme-header flex-shrink-0">
+                    <div className="flex items-center gap-1 bg-theme-hover p-0.5 rounded-lg">
                         <button
                             onClick={() => setCalendarMode('calendar')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'calendar' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'calendar' ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
                         >
                             <Calendar size={14} />
                             行事曆
                         </button>
                         <button
                             onClick={() => setCalendarMode('schedule')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'schedule' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'schedule' ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
                         >
                             <Clock size={14} />
                             日程表
