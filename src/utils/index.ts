@@ -65,6 +65,17 @@ export const isDescendant = (potentialParentId: string | null, targetId: string,
 };
 
 /**
+ * Check if targetId is a descendant of ancestorId (checking downward in hierarchy)
+ * This is used to prevent selecting a task's own children as its parent
+ */
+export const isDescendantOf = (ancestorId: string, targetId: string, allTasks: TaskData[]): boolean => {
+  if (ancestorId === targetId) return true;
+  const target = allTasks.find(t => t.id === targetId);
+  if (!target || !target.parent_id) return false;
+  return isDescendantOf(ancestorId, target.parent_id, allTasks);
+};
+
+/**
  * Extract tag IDs from description that contain @mention tags
  * Mention format in HTML: <span data-type="mention" data-id="tag-id">...</span>
  */

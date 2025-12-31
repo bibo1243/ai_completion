@@ -6,7 +6,7 @@ import { AppContext } from '../context/AppContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor, AIHistoryEntry } from '../types';
 import { COLOR_THEMES, ThemeColor } from '../constants';
-import { isDescendant } from '../utils';
+import { isDescendantOf } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
 import { SmartDateInput } from './SmartDateInput';
 import { DropdownSelect } from './DropdownSelect';
@@ -567,7 +567,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
     const eligibleParents = useMemo(() => {
         if (!initialData?.id) return tasks.filter(t => t.status !== 'deleted');
-        return tasks.filter(t => t.id !== initialData.id && !isDescendant(initialData.id, t.id, tasks) && t.status !== 'deleted');
+        // Exclude: self, all descendants of self, and deleted tasks
+        return tasks.filter(t =>
+            t.id !== initialData.id &&
+            !isDescendantOf(initialData.id, t.id, tasks) &&
+            t.status !== 'deleted'
+        );
     }, [tasks, initialData]);
 
     const hierarchicalTags = useMemo(() => {
