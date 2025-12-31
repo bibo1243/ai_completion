@@ -273,10 +273,12 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             onKeyDown={handleKeyDown}
             onClick={(e: any) => {
                 e.stopPropagation();
+                e.preventDefault();
                 if (isMobile) {
                     // Mobile: single click opens edit mode (only if not already editing)
+                    // Use setTimeout to ensure click event is fully processed before modal opens
                     if (!editingTaskId) {
-                        setEditingTaskId(task.id);
+                        setTimeout(() => setEditingTaskId(task.id), 50);
                     }
                 } else {
                     // Desktop: select on click

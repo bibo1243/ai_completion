@@ -2,7 +2,7 @@ import React, { useState, useContext, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Calendar, Tag, ChevronUp, Check, Trash2 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { COLOR_THEMES } from '../constants';
 import { TaskColor } from '../types';
 
@@ -24,9 +24,16 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     const [color, setColor] = useState<TaskColor>(task?.color || 'blue');
     const [activeSection, setActiveSection] = useState<'date' | 'tags' | 'parent' | null>(null);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isReady, setIsReady] = useState(false);
 
     const titleRef = useRef<HTMLInputElement>(null);
-    const backdropRef = useRef<HTMLDivElement>(null);
+    const modalRef = useRef<HTMLDivElement>(null);
+
+    // Delay activation to prevent immediate close from the same click event
+    useEffect(() => {
+        const timer = setTimeout(() => setIsReady(true), 100);
+        return () => clearTimeout(timer);
+    }, []);
 
     useEffect(() => {
         if (task) {
@@ -39,6 +46,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
             setColor(task.color || 'blue');
         }
     }, [task]);
+
+    // Prevent body scroll when modal is open
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, []);
 
     if (!task) return null;
 
@@ -99,28 +114,32 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
         { label: '下個月', getValue: () => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]; } },
     ];
 
-    // Handle backdrop click - only close if clicking directly on backdrop
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        if (e.target === backdropRef.current) {
-            e.preventDefault();
-            e.stopPropagation();
+    // Only process backdrop clicks after isReady and if clicking outside modal
+    const handleBackdropMouseDown = (e: React.MouseEvent) => {
+        if (!isReady) return;
+        // Check if click is on the backdrop (not on modal content)
+        if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
             onClose();
         }
     };
 
     const modalContent = (
         <div
-            ref={backdropRef}
-            className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/40"
-            onClick={handleBackdropClick}
+            className="fixed inset-0 z-[9999] flex items-end justify-center"
+            onMouseDown={handleBackdropMouseDown}
+            style={{ touchAction: 'none' }}
         >
-            {/* Modal content - prevent all events from bubbling */}
+            {/* Semi-transparent backdrop */}
+            <div className="absolute inset-0 bg-black/40" />
+
+            {/* Modal content */}
             <motion.div
+                ref={modalRef}
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
-                exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 className="relative w-full bg-white rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
             >
                 {/* Handle bar */}
@@ -132,7 +151,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                 <div className="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
                     <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onClose(); }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={onClose}
                         className="text-gray-500 p-2 -ml-2 active:bg-gray-100 rounded-full"
                     >
                         <X size={24} />
@@ -140,7 +160,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     <h2 className="text-lg font-bold text-gray-800">編輯任務</h2>
                     <button
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); handleSave(); }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={handleSave}
                         className="px-4 py-2 bg-indigo-600 text-white rounded-full font-bold text-sm active:bg-indigo-700"
                     >
                         儲存
@@ -148,28 +169,28 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-5" onClick={(e) => e.stopPropagation()}>
+                <div className="flex-1 overflow-y-auto p-5 space-y-5">
                     {/* Title */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">標題</label>
                         <input
                             ref={titleRef}
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
                             placeholder="任務名稱..."
                             className="w-full text-xl font-light text-gray-800 border-none outline-none bg-gray-50 rounded-xl px-4 py-4 focus:bg-gray-100 transition-colors"
                         />
                     </div>
 
                     {/* Notes */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">備註</label>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            onClick={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
                             placeholder="新增備註..."
                             rows={4}
                             className="w-full text-base font-light text-gray-700 border-none outline-none bg-gray-50 rounded-xl px-4 py-4 focus:bg-gray-100 transition-colors resize-none"
@@ -177,11 +198,12 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     </div>
 
                     {/* Quick Action Cards */}
-                    <div className="grid grid-cols-3 gap-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="grid grid-cols-3 gap-3">
                         {/* Date Card */}
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'date' ? null : 'date'); }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => setActiveSection(activeSection === 'date' ? null : 'date')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'date' || startDate
                                     ? 'border-indigo-500 bg-indigo-50'
                                     : 'border-gray-200 bg-gray-50 active:bg-gray-100'
@@ -196,7 +218,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         {/* Tags Card */}
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'tags' ? null : 'tags'); }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => setActiveSection(activeSection === 'tags' ? null : 'tags')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'tags' || selectedTags.length > 0
                                     ? 'border-purple-500 bg-purple-50'
                                     : 'border-gray-200 bg-gray-50 active:bg-gray-100'
@@ -211,7 +234,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         {/* Parent Card */}
                         <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); setActiveSection(activeSection === 'parent' ? null : 'parent'); }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => setActiveSection(activeSection === 'parent' ? null : 'parent')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'parent' || parentId
                                     ? 'border-amber-500 bg-amber-50'
                                     : 'border-gray-200 bg-gray-50 active:bg-gray-100'
@@ -225,193 +249,168 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     </div>
 
                     {/* Expanded Section - Date */}
-                    <AnimatePresence>
-                        {activeSection === 'date' && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm font-bold text-gray-700">開始日期</span>
-                                        {startDate && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setStartDate(''); }}
-                                                className="text-xs text-red-500 font-bold"
-                                            >
-                                                清除
-                                            </button>
-                                        )}
-                                    </div>
+                    {activeSection === 'date' && (
+                        <div className="bg-gray-50 rounded-2xl p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-gray-700">開始日期</span>
+                                {startDate && (
+                                    <button
+                                        type="button"
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={() => setStartDate('')}
+                                        className="text-xs text-red-500 font-bold"
+                                    >
+                                        清除
+                                    </button>
+                                )}
+                            </div>
 
-                                    {/* Quick date buttons */}
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {quickDates.map((qd) => (
-                                            <button
-                                                key={qd.label}
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); setStartDate(qd.getValue()); }}
-                                                className={`py-3 rounded-xl text-sm font-bold transition-all ${startDate === qd.getValue()
-                                                        ? 'bg-indigo-600 text-white'
-                                                        : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
-                                                    }`}
-                                            >
-                                                {qd.label}
-                                            </button>
-                                        ))}
-                                    </div>
+                            {/* Quick date buttons */}
+                            <div className="grid grid-cols-4 gap-2">
+                                {quickDates.map((qd) => (
+                                    <button
+                                        key={qd.label}
+                                        type="button"
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={() => setStartDate(qd.getValue())}
+                                        className={`py-3 rounded-xl text-sm font-bold transition-all ${startDate === qd.getValue()
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
+                                            }`}
+                                    >
+                                        {qd.label}
+                                    </button>
+                                ))}
+                            </div>
 
-                                    {/* Date picker */}
-                                    <input
-                                        type="date"
-                                        value={startDate ? startDate.split('T')[0] : ''}
-                                        onChange={(e) => setStartDate(e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="w-full p-4 bg-white rounded-xl border border-gray-200 text-base"
-                                    />
+                            {/* Date picker */}
+                            <input
+                                type="date"
+                                value={startDate ? startDate.split('T')[0] : ''}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="w-full p-4 bg-white rounded-xl border border-gray-200 text-base"
+                            />
 
-                                    {/* Due date */}
-                                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                                        <span className="text-sm font-bold text-gray-700">截止日期</span>
-                                        <input
-                                            type="date"
-                                            value={dueDate ? dueDate.split('T')[0] : ''}
-                                            onChange={(e) => setDueDate(e.target.value)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="p-2 bg-white rounded-lg border border-gray-200 text-sm"
-                                        />
-                                    </div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                            {/* Due date */}
+                            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                                <span className="text-sm font-bold text-gray-700">截止日期</span>
+                                <input
+                                    type="date"
+                                    value={dueDate ? dueDate.split('T')[0] : ''}
+                                    onChange={(e) => setDueDate(e.target.value)}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    className="p-2 bg-white rounded-lg border border-gray-200 text-sm"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Expanded Section - Tags */}
-                    <AnimatePresence>
-                        {activeSection === 'tags' && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
-                                    {tags.length === 0 ? (
-                                        <p className="text-gray-500 text-sm text-center py-4">還沒有標籤</p>
-                                    ) : (
-                                        tags.map((tag: any) => {
-                                            const isSelected = selectedTags.includes(tag.id);
-                                            const tagColor = tag.color || '#6366f1';
-                                            return (
-                                                <button
-                                                    key={tag.id}
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedTags(prev =>
-                                                            isSelected
-                                                                ? prev.filter(id => id !== tag.id)
-                                                                : [...prev, tag.id]
-                                                        );
-                                                    }}
-                                                    className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                            ? 'bg-white shadow-sm border-2'
-                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
-                                                        }`}
-                                                    style={{ borderColor: isSelected ? tagColor : undefined }}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-4 h-4 rounded-full"
-                                                            style={{ backgroundColor: tagColor }}
-                                                        />
-                                                        <span className="font-medium text-gray-700">{tag.name}</span>
-                                                    </div>
-                                                    {isSelected && (
-                                                        <Check size={20} style={{ color: tagColor }} />
-                                                    )}
-                                                </button>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    {activeSection === 'tags' && (
+                        <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
+                            {tags.length === 0 ? (
+                                <p className="text-gray-500 text-sm text-center py-4">還沒有標籤</p>
+                            ) : (
+                                tags.map((tag: any) => {
+                                    const isSelected = selectedTags.includes(tag.id);
+                                    const tagColor = tag.color || '#6366f1';
+                                    return (
+                                        <button
+                                            key={tag.id}
+                                            type="button"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={() => {
+                                                setSelectedTags(prev =>
+                                                    isSelected
+                                                        ? prev.filter(id => id !== tag.id)
+                                                        : [...prev, tag.id]
+                                                );
+                                            }}
+                                            className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
+                                                    ? 'bg-white shadow-sm border-2'
+                                                    : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                }`}
+                                            style={{ borderColor: isSelected ? tagColor : undefined }}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div
+                                                    className="w-4 h-4 rounded-full"
+                                                    style={{ backgroundColor: tagColor }}
+                                                />
+                                                <span className="font-medium text-gray-700">{tag.name}</span>
+                                            </div>
+                                            {isSelected && (
+                                                <Check size={20} style={{ color: tagColor }} />
+                                            )}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
 
                     {/* Expanded Section - Parent */}
-                    <AnimatePresence>
-                        {activeSection === 'parent' && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
-                                    {/* Clear parent option */}
-                                    {parentId && (
-                                        <button
-                                            type="button"
-                                            onClick={(e) => { e.stopPropagation(); setParentId(null); }}
-                                            className="w-full flex items-center justify-between p-4 rounded-xl bg-red-50 border border-red-200 active:bg-red-100"
-                                        >
-                                            <span className="font-medium text-red-600">移除母任務</span>
-                                            <X size={20} className="text-red-500" />
-                                        </button>
-                                    )}
+                    {activeSection === 'parent' && (
+                        <div className="bg-gray-50 rounded-2xl p-4 space-y-3 max-h-[40vh] overflow-y-auto">
+                            {/* Clear parent option */}
+                            {parentId && (
+                                <button
+                                    type="button"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={() => setParentId(null)}
+                                    className="w-full flex items-center justify-between p-4 rounded-xl bg-red-50 border border-red-200 active:bg-red-100"
+                                >
+                                    <span className="font-medium text-red-600">移除母任務</span>
+                                    <X size={20} className="text-red-500" />
+                                </button>
+                            )}
 
-                                    {eligibleParents.length === 0 ? (
-                                        <p className="text-gray-500 text-sm text-center py-4">沒有可用的母任務</p>
-                                    ) : (
-                                        eligibleParents.slice(0, 20).map((p: any) => {
-                                            const isSelected = parentId === p.id;
-                                            const pColor = COLOR_THEMES[p.color as TaskColor]?.color || '#6366f1';
-                                            return (
-                                                <button
-                                                    key={p.id}
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); setParentId(isSelected ? null : p.id); }}
-                                                    className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                            ? 'bg-white shadow-sm border-2 border-amber-500'
-                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div
-                                                            className="w-3 h-3 rounded-full"
-                                                            style={{ backgroundColor: pColor }}
-                                                        />
-                                                        <span className="font-medium text-gray-700 truncate">{p.title}</span>
-                                                    </div>
-                                                    {isSelected && (
-                                                        <Check size={20} className="text-amber-600" />
-                                                    )}
-                                                </button>
-                                            );
-                                        })
-                                    )}
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                            {eligibleParents.length === 0 ? (
+                                <p className="text-gray-500 text-sm text-center py-4">沒有可用的母任務</p>
+                            ) : (
+                                eligibleParents.slice(0, 20).map((p: any) => {
+                                    const isSelected = parentId === p.id;
+                                    const pColor = COLOR_THEMES[p.color as TaskColor]?.color || '#6366f1';
+                                    return (
+                                        <button
+                                            key={p.id}
+                                            type="button"
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            onClick={() => setParentId(isSelected ? null : p.id)}
+                                            className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
+                                                    ? 'bg-white shadow-sm border-2 border-amber-500'
+                                                    : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div
+                                                    className="w-3 h-3 rounded-full"
+                                                    style={{ backgroundColor: pColor }}
+                                                />
+                                                <span className="font-medium text-gray-700 truncate">{p.title}</span>
+                                            </div>
+                                            {isSelected && (
+                                                <Check size={20} className="text-amber-600" />
+                                            )}
+                                        </button>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
 
                     {/* Color Picker (only for root tasks) */}
                     {!parentId && (
-                        <div onClick={(e) => e.stopPropagation()}>
+                        <div>
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">顏色</label>
                             <div className="flex gap-3 flex-wrap">
                                 {(Object.keys(COLOR_THEMES) as TaskColor[]).map((c) => (
                                     <button
                                         key={c}
                                         type="button"
-                                        onClick={(e) => { e.stopPropagation(); setColor(c); }}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={() => setColor(c)}
                                         className={`w-10 h-10 rounded-full transition-all ${color === c ? 'ring-4 ring-offset-2 scale-110' : 'active:scale-95'
                                             }`}
                                         style={{
@@ -424,19 +423,21 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     )}
 
                     {/* Delete Button */}
-                    <div className="pt-4 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                    <div className="pt-4 border-t border-gray-100">
                         {showDeleteConfirm ? (
                             <div className="flex gap-3">
                                 <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={() => setShowDeleteConfirm(false)}
                                     className="flex-1 py-4 rounded-xl bg-gray-100 text-gray-600 font-bold active:bg-gray-200"
                                 >
                                     取消
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={handleDelete}
                                     className="flex-1 py-4 rounded-xl bg-red-500 text-white font-bold active:bg-red-600"
                                 >
                                     確認刪除
@@ -445,7 +446,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         ) : (
                             <button
                                 type="button"
-                                onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => setShowDeleteConfirm(true)}
                                 className="w-full flex items-center justify-center gap-2 py-4 rounded-xl text-red-500 font-bold active:bg-red-50 transition-colors"
                             >
                                 <Trash2 size={20} />
