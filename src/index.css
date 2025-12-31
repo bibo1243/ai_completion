@@ -11,6 +11,13 @@
     --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
+/* Global font override - apply to ALL elements */
+*,
+*::before,
+*::after {
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
+}
+
 /* Default Light Theme Variables */
 :root {
     --bg-main: #ffffff;
