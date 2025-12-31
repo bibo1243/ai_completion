@@ -5,18 +5,18 @@ export const DRAG_GHOST_IMG = new Image();
 DRAG_GHOST_IMG.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
 export interface ThemeColor {
-    color: string;
-    bg: string;
-    text: string;
-    accent: string;
-    badge: string;
-    border: string;
-    ring: string;
-    buttonRing: string;
-    dot: string;
-    breadcrumb: string;
-    indicator: string;
-    ringColor: string;
+  color: string;
+  bg: string;
+  text: string;
+  accent: string;
+  badge: string;
+  border: string;
+  ring: string;
+  buttonRing: string;
+  dot: string;
+  breadcrumb: string;
+  indicator: string;
+  ringColor: string;
 }
 
 export const COLOR_THEMES: Record<string, ThemeColor> = {
@@ -34,4 +34,5 @@ export const COLOR_THEMES: Record<string, ThemeColor> = {
   fuchsia: { color: '#d946ef', bg: 'bg-fuchsia-50', text: 'text-fuchsia-600', accent: 'text-fuchsia-600', badge: 'bg-fuchsia-100 text-fuchsia-600 border-fuchsia-200', border: 'border-fuchsia-500', ring: 'focus-within:ring-fuchsia-200', buttonRing: 'focus:ring-fuchsia-200 focus:border-fuchsia-300', dot: 'bg-fuchsia-400', breadcrumb: 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100', indicator: 'bg-fuchsia-500', ringColor: 'ring-fuchsia-400' },
   pink: { color: '#ec4899', bg: 'bg-pink-50', text: 'text-pink-600', accent: 'text-pink-600', badge: 'bg-pink-100 text-pink-600 border-pink-200', border: 'border-pink-500', ring: 'focus-within:ring-pink-200', buttonRing: 'focus:ring-pink-200 focus:border-pink-300', dot: 'bg-pink-400', breadcrumb: 'bg-pink-50 text-pink-600 hover:bg-pink-100', indicator: 'bg-pink-500', ringColor: 'ring-pink-400' },
   rose: { color: '#f43f5e', bg: 'bg-rose-50', text: 'text-rose-600', accent: 'text-rose-600', badge: 'bg-rose-100 text-rose-600 border-rose-200', border: 'border-rose-500', ring: 'focus-within:ring-rose-200', buttonRing: 'focus:ring-rose-200 focus:border-rose-300', dot: 'bg-rose-400', breadcrumb: 'bg-rose-50 text-rose-600 hover:bg-rose-100', indicator: 'bg-rose-500', ringColor: 'ring-rose-400' },
+  coder: { color: '#78716c', bg: 'bg-stone-50', text: 'text-stone-600', accent: 'text-stone-600', badge: 'bg-stone-100 text-stone-600 border-stone-200', border: 'border-stone-500', ring: 'focus-within:ring-stone-200', buttonRing: 'focus:ring-stone-200 focus:border-stone-300', dot: 'bg-stone-400', breadcrumb: 'bg-stone-50 text-stone-600 hover:bg-stone-100', indicator: 'bg-stone-500', ringColor: 'ring-stone-400' },
 };
