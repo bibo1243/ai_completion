@@ -164,29 +164,29 @@ export const MainLayout = () => {
               {selectedTaskIds.length === 1 && (
                 <button
                   onClick={() => setShowMission72(true)}
-                  className="p-1.5 rounded hover:bg-indigo-50 text-indigo-600 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
+                  className="p-1.5 rounded hover:bg-indigo-500/10 text-indigo-400 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
                   title="任務72變 (Mission 72 Transformations)"
                 >
                   <span className="text-xl leading-none filter drop-shadow-sm">🐵</span>
-                  <span className="hidden lg:inline text-xs font-bold text-indigo-600">72變</span>
+                  <span className="hidden lg:inline text-xs font-bold text-indigo-400">72變</span>
                 </button>
               )}
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-              <button onClick={archiveCompletedTasks} className="p-1.5 rounded hover:bg-gray-100 text-slate-500 hover:text-emerald-600 transition-colors" title="歸檔所有已完成任務 (Archive Completed)"> <Archive size={16} /> </button>
-              <div className="w-px h-4 bg-gray-200 mx-1"></div>
-              <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-gray-100 ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
-              <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-gray-100 ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
+              <div className="w-px h-4 bg-theme-hover mx-1"></div>
+              <button onClick={archiveCompletedTasks} className="p-1.5 rounded hover:bg-theme-hover text-theme-tertiary hover:text-emerald-500 transition-colors" title="歸檔所有已完成任務 (Archive Completed)"> <Archive size={16} /> </button>
+              <div className="w-px h-4 bg-theme-hover mx-1"></div>
+              <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-theme-hover ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
+              <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-theme-hover ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
             </div>
 
             {/* User Info */}
-            <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200 ml-1">
+            <div className="flex items-center gap-1.5 pl-2 border-l border-theme ml-1">
               <div className="hidden md:flex flex-col items-end group relative">
-                <span className="text-[9px] text-gray-400 uppercase tracking-wider font-bold leading-none mb-0.5">User</span>
-                <span className="text-[10px] font-mono text-gray-600 leading-none cursor-help" title={user?.id}>
+                <span className="text-[9px] text-theme-tertiary uppercase tracking-wider font-bold leading-none mb-0.5">User</span>
+                <span className="text-[10px] font-mono text-theme-secondary leading-none cursor-help" title={user?.id}>
                   {user?.email ? user.email : (user?.id ? `ID: ${user.id.slice(0, 6)}...` : 'Guest')}
                 </span>
               </div>
-              <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 relative group cursor-pointer" title="登出 (Logout)" onClick={logout}>
+              <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 relative group cursor-pointer" title="登出 (Logout)" onClick={logout}>
                 <User size={12} className="group-hover:hidden" />
                 <LogOut size={12} className="hidden group-hover:block text-red-500" />
               </div>

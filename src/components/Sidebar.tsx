@@ -456,7 +456,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onDragOver={(e) => handleDragOver(e, tag.id)}
                     onDrop={(e) => handleDrop(e, tag.id)}
                     onDragLeave={() => setDropTarget(null)}
-                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-gray-100 text-indigo-600 font-bold' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
+                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
                     style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 6 + 6}px` }}
                     onClick={() => {
                         if (!isEditing) {
@@ -469,7 +469,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onKeyDown={(e) => handleTagKeyDown(e, tag.id)}
                 >
                     {tag.children.length > 0 ? (
-                        <button onClick={(e) => toggleExpand(tag.id, e)} className="p-0 hover:bg-gray-200 rounded text-gray-400">
+                        <button onClick={(e) => toggleExpand(tag.id, e)} className="p-0 hover:bg-theme-hover rounded text-theme-tertiary">
                             {tag.isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
                         </button>
                     ) : <div className="w-[10px]" />}
@@ -478,7 +478,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         <div className="flex items-center flex-1 gap-1">
                             <input
                                 autoFocus
-                                className="flex-1 min-w-0 bg-white border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                className="flex-1 min-w-0 bg-theme-card border border-indigo-500/50 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-theme-primary"
                                 value={editName}
                                 onChange={e => setEditName(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') saveEdit(); else if (e.key === 'Escape') setEditingTagId(null); }}
