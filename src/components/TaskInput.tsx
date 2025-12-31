@@ -1694,6 +1694,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         }}
                                         attachments={attachments}
                                         taskColor={effectiveColor}
+                                        availableTags={tags.map((t: any) => ({ id: t.id, name: t.name, color: t.color }))}
                                     />
                                 </div>
 

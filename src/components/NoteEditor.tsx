@@ -1,6 +1,6 @@
-import React, { useEffect, useContext, useState, useRef } from 'react';
+import React, { useEffect, useContext, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { AppContext } from '../context/AppContext';
-import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper, ReactRenderer } from '@tiptap/react';
 import { Node, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -14,6 +14,9 @@ import { Sparkles, Mic, Square, Paperclip, X, Download, Check } from 'lucide-rea
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
+import Mention from '@tiptap/extension-mention';
+import tippy, { Instance as TippyInstance } from 'tippy.js';
+import 'tippy.js/dist/tippy.css';
 
 
 // Custom extension to handle internal tab and Cmd+Enter exit, and now Enter tracking for recording
@@ -273,6 +276,88 @@ const AudioMarkerNode = Node.create({
     },
 });
 
+// Tag Mention Suggestion List Component
+interface TagMentionListProps {
+    items: { id: string; name: string; color: string }[];
+    command: (item: { id: string; name: string; color: string }) => void;
+}
+
+interface TagMentionListRef {
+    onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+}
+
+const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props, ref) => {
+    const [selectedIndex, setSelectedIndex] = useState(0);
+
+    const selectItem = (index: number) => {
+        const item = props.items[index];
+        if (item) {
+            props.command(item);
+        }
+    };
+
+    const upHandler = () => {
+        setSelectedIndex((selectedIndex + props.items.length - 1) % props.items.length);
+    };
+
+    const downHandler = () => {
+        setSelectedIndex((selectedIndex + 1) % props.items.length);
+    };
+
+    const enterHandler = () => {
+        selectItem(selectedIndex);
+    };
+
+    useEffect(() => setSelectedIndex(0), [props.items]);
+
+    useImperativeHandle(ref, () => ({
+        onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+            if (event.key === 'ArrowUp') {
+                upHandler();
+                return true;
+            }
+            if (event.key === 'ArrowDown') {
+                downHandler();
+                return true;
+            }
+            if (event.key === 'Enter') {
+                enterHandler();
+                return true;
+            }
+            return false;
+        },
+    }));
+
+    if (props.items.length === 0) {
+        return (
+            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-500">
+                沒有找到標籤
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+            {props.items.map((item, index) => (
+                <button
+                    key={item.id}
+                    onClick={() => selectItem(index)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${index === selectedIndex ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'
+                        }`}
+                >
+                    <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: item.color || '#6366f1' }}
+                    />
+                    <span className="truncate">{item.name}</span>
+                </button>
+            ))}
+        </div>
+    );
+});
+
+TagMentionList.displayName = 'TagMentionList';
+
 interface NoteEditorProps {
     initialContent: string;
     onChange: (content: string) => void;
@@ -291,6 +376,8 @@ interface NoteEditorProps {
     onMarkersChange?: (markers: { id: string, time: number }[]) => void; // Called when markers change in editor (for sync)
     attachments?: { name: string, url: string, size?: number, type?: string }[]; // Available attachments for linking
     taskColor?: string; // Task color for styling attachment links
+    availableTags?: { id: string; name: string; color: string }[]; // Tags for @ mention
+    onTagClick?: (tagId: string) => void; // Callback when a tag is clicked
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -310,7 +397,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     activeMarkerIds,
     onMarkersChange,
     attachments = [],
-    taskColor = '#6366f1'
+    taskColor = '#6366f1',
+    availableTags = []
 }) => {
     const { t } = useContext(AppContext);
     const [showColorPicker, setShowColorPicker] = useState(false);
@@ -598,6 +686,67 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
             DetailsSummary,
             DetailsContent,
             AttachmentLinkMark, // Add custom attachment link mark
+            Mention.configure({
+                HTMLAttributes: {
+                    class: 'tag-mention',
+                },
+                renderLabel({ node }) {
+                    return `@${node.attrs.label ?? node.attrs.id}`;
+                },
+                suggestion: {
+                    char: '@',
+                    items: ({ query }: { query: string }) => {
+                        return availableTags
+                            .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()))
+                            .slice(0, 10);
+                    },
+                    render: () => {
+                        let component: ReactRenderer<TagMentionListRef> | null = null;
+                        let popup: TippyInstance[] | null = null;
+
+                        return {
+                            onStart: (props: any) => {
+                                component = new ReactRenderer(TagMentionList, {
+                                    props,
+                                    editor: props.editor,
+                                });
+
+                                if (!props.clientRect) return;
+
+                                popup = tippy('body', {
+                                    getReferenceClientRect: props.clientRect,
+                                    appendTo: () => document.body,
+                                    content: component.element,
+                                    showOnCreate: true,
+                                    interactive: true,
+                                    trigger: 'manual',
+                                    placement: 'bottom-start',
+                                });
+                            },
+                            onUpdate(props: any) {
+                                component?.updateProps(props);
+
+                                if (!props.clientRect || !popup) return;
+
+                                popup[0].setProps({
+                                    getReferenceClientRect: props.clientRect,
+                                });
+                            },
+                            onKeyDown(props: any) {
+                                if (props.event.key === 'Escape') {
+                                    popup?.[0]?.hide();
+                                    return true;
+                                }
+                                return component?.ref?.onKeyDown(props) ?? false;
+                            },
+                            onExit() {
+                                popup?.[0]?.destroy();
+                                component?.destroy();
+                            },
+                        };
+                    },
+                },
+            }),
             KeyboardNavigation(onExit, handleEnter),
         ],
         content: initialContent,
