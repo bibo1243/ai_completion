@@ -157,6 +157,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [datePickerOffset, setDatePickerOffset] = useState(0); // Days offset from today
 
     const [attachmentLinks, _setAttachmentLinks] = useState<AttachmentLink[]>(initialData?.attachment_links || []);
+    const [attachmentsExpanded, setAttachmentsExpanded] = useState(false);
 
 
     const previousPrompts = useMemo(() => {
@@ -2019,98 +2020,133 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 </div>
                             )}
 
-                            {/* File Attachments List */}
+                            {/* Compact Collapsible Attachments */}
                             {attachments.length > 0 && (
-                                <div className="mt-2 space-y-1">
-                                    {attachments.map((file) => (
-                                        <div
-                                            key={file.url}
-                                            className={`group flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors ${playedAudio?.url === file.url
-                                                ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-300/50'
-                                                : 'bg-gray-50 border-gray-100 hover:border-gray-200'
-                                                }`}
-                                        >
-                                            {file.type?.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|webm|mp4)$/i) ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        setPlayedAudio({ url: file.url, name: file.name, markers: file.markers });
-                                                    }}
-                                                    className="p-0.5 text-indigo-500 bg-indigo-50 rounded-full hover:bg-indigo-100 mr-1"
-                                                >
-                                                    <Volume2 size={11} />
-                                                </button>
-                                            ) : (
-                                                <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
-                                            )}
-                                            <input
-                                                ref={(el) => {
-                                                    if (el && focusedAttachmentUrl === file.url) {
-                                                        el.focus();
-                                                        setFocusedAttachmentUrl(null);
-                                                    }
-                                                }}
-                                                type="text"
-                                                value={file.name}
-                                                onChange={(e) => {
-                                                    const newName = e.target.value;
-                                                    setAttachments(prev => prev.map(a => a.url === file.url ? { ...a, name: newName } : a));
-                                                }}
-                                                onBlur={() => {
-                                                    if (initialData) {
-                                                        // Note: 'attachments' in closure might be stale if not careful...
-                                                        // In Functional Component, 'attachments' is const from render. onBlur captures that render's 'attachments'.
-                                                        // If we type, we trigger re-render, so 'attachments' is fresh. It's fine.
-                                                        updateTask(initialData.id, { attachments }, [], { skipHistory: true });
-                                                    }
-                                                }}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        (e.target as HTMLInputElement).blur();
-                                                        attachmentBtnRef.current?.focus();
-                                                    }
-                                                }}
-                                                className="flex-1 text-xs text-gray-600 bg-transparent border-none focus:outline-none focus:bg-indigo-50/50 rounded px-1 truncate min-w-0 selection:bg-indigo-200 cursor-text"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    // Download with current filename
-                                                    fetch(file.url)
-                                                        .then(res => res.blob())
-                                                        .then(blob => {
-                                                            const url = window.URL.createObjectURL(blob);
-                                                            const a = document.createElement('a');
-                                                            a.href = url;
-                                                            a.download = file.name;
-                                                            document.body.appendChild(a);
-                                                            a.click();
-                                                            window.URL.revokeObjectURL(url);
-                                                            document.body.removeChild(a);
-                                                        })
-                                                        .catch(err => console.error('Download failed:', err));
-                                                }}
-                                                className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                                                title="下載"
-                                            >
-                                                <Download size={12} />
-                                            </button>
-                                            <span className="text-[10px] text-gray-400 flex-shrink-0">
-                                                {formatFileSize(file.size)}
+                                <div className="mt-2">
+                                    {/* Collapsed View: Just a summary bar */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setAttachmentsExpanded(!attachmentsExpanded)}
+                                        className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border transition-all ${attachmentsExpanded
+                                                ? 'bg-indigo-50 border-indigo-200'
+                                                : 'bg-gray-50 border-gray-100 hover:bg-gray-100'
+                                            }`}
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <Paperclip size={12} className={attachmentsExpanded ? 'text-indigo-500' : 'text-gray-400'} />
+                                            <span className={`text-xs font-medium ${attachmentsExpanded ? 'text-indigo-700' : 'text-gray-600'}`}>
+                                                {attachments.length} 個附件
                                             </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveAttachment(file.url)}
-                                                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-50 rounded transition-all"
-                                            >
-                                                <X size={12} className="text-gray-400 hover:text-red-500" />
-                                            </button>
+                                            {/* Show audio count if any */}
+                                            {attachments.filter(f => f.type?.startsWith('audio/') || f.name.match(/\.(mp3|wav|ogg|m4a|webm)$/i)).length > 0 && (
+                                                <span className="text-[10px] text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                                    <Volume2 size={9} />
+                                                    {attachments.filter(f => f.type?.startsWith('audio/') || f.name.match(/\.(mp3|wav|ogg|m4a|webm)$/i)).length}
+                                                </span>
+                                            )}
+                                            {/* Truncated file names preview when collapsed */}
+                                            {!attachmentsExpanded && (
+                                                <span className="text-[10px] text-gray-400 truncate max-w-[200px]">
+                                                    {attachments.map(f => f.name.split('.')[0]).join(', ')}
+                                                </span>
+                                            )}
                                         </div>
-                                    ))}
+                                        <ChevronDown
+                                            size={14}
+                                            className={`text-gray-400 transition-transform ${attachmentsExpanded ? 'rotate-180' : ''}`}
+                                        />
+                                    </button>
+
+                                    {/* Expanded View: Full attachment list */}
+                                    {attachmentsExpanded && (
+                                        <div className="mt-1.5 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                            {attachments.map((file) => (
+                                                <div
+                                                    key={file.url}
+                                                    className={`group flex items-center gap-2 px-2 py-1 rounded-md border transition-colors ${playedAudio?.url === file.url
+                                                        ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-300/50'
+                                                        : 'bg-white border-gray-100 hover:border-gray-200'
+                                                        }`}
+                                                >
+                                                    {file.type?.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|webm|mp4)$/i) ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                setPlayedAudio({ url: file.url, name: file.name, markers: file.markers });
+                                                            }}
+                                                            className="p-0.5 text-indigo-500 bg-indigo-50 rounded-full hover:bg-indigo-100"
+                                                        >
+                                                            <Volume2 size={10} />
+                                                        </button>
+                                                    ) : (
+                                                        <Paperclip size={10} className="text-gray-400 flex-shrink-0" />
+                                                    )}
+                                                    <input
+                                                        ref={(el) => {
+                                                            if (el && focusedAttachmentUrl === file.url) {
+                                                                el.focus();
+                                                                setFocusedAttachmentUrl(null);
+                                                            }
+                                                        }}
+                                                        type="text"
+                                                        value={file.name}
+                                                        onChange={(e) => {
+                                                            const newName = e.target.value;
+                                                            setAttachments(prev => prev.map(a => a.url === file.url ? { ...a, name: newName } : a));
+                                                        }}
+                                                        onBlur={() => {
+                                                            if (initialData) {
+                                                                updateTask(initialData.id, { attachments }, [], { skipHistory: true });
+                                                            }
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                (e.target as HTMLInputElement).blur();
+                                                                attachmentBtnRef.current?.focus();
+                                                            }
+                                                        }}
+                                                        className="flex-1 text-[11px] text-gray-600 bg-transparent border-none focus:outline-none focus:bg-indigo-50/50 rounded px-1 truncate min-w-0"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            fetch(file.url)
+                                                                .then(res => res.blob())
+                                                                .then(blob => {
+                                                                    const url = window.URL.createObjectURL(blob);
+                                                                    const a = document.createElement('a');
+                                                                    a.href = url;
+                                                                    a.download = file.name;
+                                                                    document.body.appendChild(a);
+                                                                    a.click();
+                                                                    window.URL.revokeObjectURL(url);
+                                                                    document.body.removeChild(a);
+                                                                })
+                                                                .catch(err => console.error('Download failed:', err));
+                                                        }}
+                                                        className="p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                                        title="下載"
+                                                    >
+                                                        <Download size={10} />
+                                                    </button>
+                                                    <span className="text-[9px] text-gray-400 flex-shrink-0">
+                                                        {formatFileSize(file.size)}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveAttachment(file.url)}
+                                                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-50 rounded transition-all"
+                                                    >
+                                                        <X size={10} className="text-gray-400 hover:text-red-500" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
