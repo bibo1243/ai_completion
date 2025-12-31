@@ -2079,7 +2079,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     key={file.url}
                                                     className={`group flex items-center gap-2 px-2 py-1 rounded-md border transition-colors ${playedAudio?.url === file.url
                                                         ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-300/50'
-                                                        : 'bg-white border-gray-100 hover:border-gray-200'
+                                                        : 'bg-theme-card border-theme hover:border-theme'
                                                         }`}
                                                 >
                                                     {file.type?.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a|webm|mp4)$/i) ? (
@@ -2122,7 +2122,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                                 attachmentBtnRef.current?.focus();
                                                             }
                                                         }}
-                                                        className="flex-1 text-[11px] text-gray-600 bg-transparent border-none focus:outline-none focus:bg-indigo-50/50 rounded px-1 truncate min-w-0"
+                                                        className="flex-1 text-[11px] text-theme-secondary bg-transparent border-none focus:outline-none focus:bg-indigo-50/50 rounded px-1 truncate min-w-0"
                                                     />
                                                     <button
                                                         type="button"
@@ -2227,7 +2227,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 <SmartDateInput innerRef={startDateRef} label="開始日期" value={startDate || undefined} onChange={setStartDate} theme={theme} tasks={tasks} />
 
                                 {startDate && (
-                                    <div className="flex items-center gap-2 bg-gray-50/50 rounded-md px-2 py-1 border border-gray-100">
+                                    <div className="flex items-center gap-2 bg-theme-hover rounded-md px-2 py-1 border border-theme">
                                         <label className="flex items-center gap-2 cursor-pointer select-none">
                                             <input
                                                 ref={allDayRef}

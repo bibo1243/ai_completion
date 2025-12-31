@@ -47,11 +47,15 @@
     --bg-secondary: var(--bg-card);
     --bg-tertiary: var(--bg-hover);
 
-    --text-primary: #e0e1e3;
-    --text-secondary: #9da0a5;
-    --text-tertiary: #5d6066;
-    --border-color: #2d2f36;
-    --accent-color: #5e8ae4;
+    --text-primary: #f3f4f6;
+    /* Brighter White (gray-100) */
+    --text-secondary: #d1d5db;
+    /* Brighter Gray (gray-300) */
+    --text-tertiary: #9ca3af;
+    /* gray-400 */
+    --border-color: #374151;
+    /* Lighter border for visibility */
+    --accent-color: #818cf8;
     --header-bg: rgba(25, 26, 30, 0.95);
 }
 
@@ -67,12 +71,100 @@
     --bg-secondary: var(--bg-card);
     --bg-tertiary: var(--bg-hover);
 
-    --text-primary: #c9d1d9;
+    --text-primary: #e6edf3;
     --text-secondary: #8b949e;
     --text-tertiary: #484f58;
     --border-color: #30363d;
     --accent-color: #58a6ff;
     --header-bg: rgba(13, 17, 23, 0.95);
+}
+
+/* Colored Background Overrides for Dark Modes */
+/* Red (Overdue) */
+[data-theme] .bg-red-50,
+[data-theme] .bg-rose-50 {
+    background-color: rgba(127, 29, 29, 0.3) !important;
+    color: #fca5a5 !important;
+}
+
+[data-theme] .text-red-600,
+[data-theme] .text-rose-600 {
+    color: #fca5a5 !important;
+}
+
+/* Yellow/Amber (Today) */
+[data-theme] .bg-yellow-50,
+[data-theme] .bg-amber-50 {
+    background-color: rgba(120, 53, 15, 0.3) !important;
+    color: #fcd34d !important;
+}
+
+[data-theme] .text-yellow-600,
+[data-theme] .text-amber-600 {
+    color: #fcd34d !important;
+}
+
+/* Green (Done) */
+[data-theme] .bg-green-50,
+[data-theme] .bg-emerald-50 {
+    background-color: rgba(6, 78, 59, 0.3) !important;
+    color: #6ee7b7 !important;
+}
+
+/* Blue/Indigo (Tags/Info) */
+[data-theme] .bg-blue-50,
+[data-theme] .bg-indigo-50 {
+    background-color: rgba(30, 58, 138, 0.3) !important;
+    color: #93c5fd !important;
+}
+
+[data-theme] .text-indigo-600 {
+    color: var(--accent-color) !important;
+}
+
+/* Gray/Slate (Generic Tags) */
+[data-theme] .bg-slate-100,
+[data-theme] .bg-gray-100 {
+    background-color: var(--bg-hover) !important;
+    color: var(--text-secondary) !important;
+}
+
+[data-theme] .bg-slate-200,
+[data-theme] .bg-gray-200 {
+    background-color: var(--border-color) !important;
+}
+
+/* Fix Tag Pills specific borders */
+[data-theme] .border-red-100 {
+    border-color: rgba(127, 29, 29, 0.5) !important;
+}
+
+[data-theme] .border-amber-100 {
+    border-color: rgba(120, 53, 15, 0.5) !important;
+}
+
+[data-theme] .border-indigo-100 {
+    border-color: rgba(30, 58, 138, 0.5) !important;
+}
+
+/* Fix specific UI elements mentioned */
+/* Attachments */
+[data-theme] .bg-gray-50.rounded-lg {
+    background-color: var(--bg-hover) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Functional Buttons (Date/Tag/Move in TaskInput) */
+[data-theme] button.border-gray-200 {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme] button.bg-white {
+    background-color: var(--bg-card) !important;
+}
+
+[data-theme] button.hover\:bg-gray-50:hover {
+    background-color: var(--bg-hover) !important;
 }
 
 /* Semantic Classes for Layout */
