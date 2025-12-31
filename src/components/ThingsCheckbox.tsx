@@ -23,7 +23,7 @@ export const ThingsCheckbox = ({ checked, onChange, size = 18, color = 'blue', i
     const styleSet = colorStyles[color] || colorStyles.gray;
     const checkedClass = isRoot ? styleSet.root : styleSet.sub;
     const borderSizeClass = isRoot ? 'border-2' : '';
-    const uncheckedClass = `bg-white ${borderSizeClass} ${styleSet.border} ${styleSet.hover}`;
+    const uncheckedClass = `bg-transparent ${borderSizeClass} ${styleSet.border} ${styleSet.hover}`;
 
     return (
         <div
