@@ -16,12 +16,20 @@ export const Login = () => {
     setError(null);
     setMessage(null);
 
+    // Demo account shortcut: if user types 'demo' as email, auto-convert
+    let loginEmail = email;
+    let loginPassword = password;
+    if (email.toLowerCase() === 'demo' && password.toLowerCase() === 'demo') {
+      loginEmail = 'demo@demo.com';
+      loginPassword = 'demodemo';
+    }
+
     try {
       if (!supabase) throw new Error("Supabase client not initialized");
       if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
+          email: loginEmail,
+          password: loginPassword,
         });
         if (error) throw error;
 
@@ -37,8 +45,8 @@ export const Login = () => {
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+          email: loginEmail,
+          password: loginPassword,
         });
         if (error) throw error;
         // Successful login - page will redirect via AppContext
@@ -142,7 +150,7 @@ export const Login = () => {
                 if (!supabase) throw new Error("Supabase client not initialized");
                 const { error } = await supabase.auth.signInWithPassword({
                   email: 'demo@demo.com',
-                  password: 'demo123456',
+                  password: 'demodemo',
                 });
                 if (error) throw error;
                 window.location.reload();
@@ -158,7 +166,7 @@ export const Login = () => {
             🎮 Demo 帳號登入
           </button>
           <p className="text-[10px] text-gray-400 text-center mt-2">
-            demo@demo.com / demo123456
+            帳號密碼都輸入 <span className="font-mono font-bold">demo</span> 即可
           </p>
         </div>
       </div>
