@@ -331,7 +331,7 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
     if (props.items.length === 0) {
         return (
             <div
-                className="bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-xl p-3 text-xs font-light text-gray-400"
+                className="bg-theme-card/95 backdrop-blur border border-theme rounded-xl shadow-xl p-3 text-xs font-light text-theme-tertiary"
                 onMouseDown={(e) => e.preventDefault()}
             >
                 沒有找到標籤
@@ -341,7 +341,7 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
 
     return (
         <div
-            className="bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
+            className="bg-theme-card/95 backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
             onMouseDown={(e) => e.preventDefault()}
         >
             {props.items.map((item, index) => {
@@ -361,12 +361,12 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
                             selectItem(index);
                         }}
                         className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
-                            ? 'bg-indigo-50/80'
-                            : 'hover:bg-gray-50/80'
+                            ? 'bg-theme-selection text-theme-primary'
+                            : 'hover:bg-theme-hover text-theme-secondary'
                             }`}
                     >
                         {isCreateOption ? (
-                            <div className="w-4 h-4 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-indigo-600">
+                            <div className="w-4 h-4 rounded-full bg-theme-hover flex items-center justify-center flex-shrink-0 text-indigo-600">
                                 <Plus size={10} strokeWidth={3} />
                             </div>
                         ) : (
@@ -375,7 +375,7 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
                                 style={{ backgroundColor: item.color || '#6366f1' }}
                             />
                         )}
-                        <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-indigo-700' : 'text-gray-600'
+                        <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-theme-primary' : 'text-theme-secondary'
                             }`}>
                             {item.name}
                         </span>

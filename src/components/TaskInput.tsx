@@ -1407,7 +1407,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     return (
         <div
             ref={containerRef}
-            className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 bg-white rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
+            className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 ${initialData ? 'bg-theme-main' : 'bg-theme-card'} rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
             onKeyDown={handleKeyDown}
             onDragOver={(e) => {
                 e.preventDefault();
@@ -1488,13 +1488,13 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             {/* Title Prompt Selection Modal */}
                             {showTitlePromptSelection && createPortal(
                                 <div className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={() => setShowTitlePromptSelection(false)}>
-                                    <div className="bg-white rounded-xl shadow-2xl border border-slate-200 p-4 w-[400px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
-                                        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
-                                            <div className="flex items-center gap-2 text-slate-700">
+                                    <div className="bg-theme-card rounded-xl shadow-2xl border border-theme p-4 w-[400px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between mb-3 border-b border-theme pb-2">
+                                            <div className="flex items-center gap-2 text-theme-primary">
                                                 <Sparkles size={16} className="text-amber-500" />
                                                 <h3 className="font-bold text-sm">選擇 AI 標題生成指令</h3>
                                             </div>
-                                            <button onClick={() => setShowTitlePromptSelection(false)} className="text-slate-400 hover:text-slate-600">
+                                            <button onClick={() => setShowTitlePromptSelection(false)} className="text-theme-tertiary hover:text-theme-secondary">
                                                 <X size={16} />
                                             </button>
                                         </div>
@@ -1502,20 +1502,20 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                                             <button
                                                 onClick={() => executeTitleGeneration()}
-                                                className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-indigo-300 hover:bg-indigo-50 transition-all group"
+                                                className="w-full text-left p-3 rounded-lg border border-theme hover:border-indigo-300 hover:bg-theme-hover transition-all group"
                                             >
-                                                <div className="font-medium text-sm text-slate-700 group-hover:text-indigo-700">預設 SEO 專家模式</div>
-                                                <div className="text-xs text-slate-500 mt-1">使用系統預設的 SEO 專家角色，總結文章並生成吸引人的標題。</div>
+                                                <div className="font-medium text-sm text-theme-primary group-hover:text-indigo-500">預設 SEO 專家模式</div>
+                                                <div className="text-xs text-theme-tertiary mt-1">使用系統預設的 SEO 專家角色，總結文章並生成吸引人的標題。</div>
                                             </button>
 
                                             {titlePrompts.map(prompt => (
                                                 <button
                                                     key={prompt.id}
                                                     onClick={() => executeTitleGeneration(prompt.description || '')}
-                                                    className="w-full text-left p-3 rounded-lg border border-slate-100 hover:border-amber-300 hover:bg-amber-50 transition-all group"
+                                                    className="w-full text-left p-3 rounded-lg border border-theme hover:border-amber-300 hover:bg-theme-hover transition-all group"
                                                 >
-                                                    <div className="font-medium text-sm text-slate-700 group-hover:text-amber-700">{prompt.title}</div>
-                                                    <div className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                                    <div className="font-medium text-sm text-theme-primary group-hover:text-amber-500">{prompt.title}</div>
+                                                    <div className="text-xs text-theme-tertiary mt-1 line-clamp-2">
                                                         {(prompt.description || '').replace(/<[^>]+>/g, '')}
                                                     </div>
                                                 </button>
@@ -1529,7 +1529,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             {/* Title Preview Modal - rendered via portal */}
                             {showTitlePreview && createPortal(
                                 <div
-                                    className="fixed bg-white rounded-xl shadow-2xl border border-indigo-100 p-4 animate-in fade-in zoom-in-95 duration-200"
+                                    className="fixed bg-theme-card rounded-xl shadow-2xl border border-theme p-4 animate-in fade-in zoom-in-95 duration-200"
                                     style={{
                                         top: titleRef.current ? titleRef.current.getBoundingClientRect().bottom + 8 : 100,
                                         left: titleRef.current ? titleRef.current.getBoundingClientRect().left : 100,
@@ -1537,7 +1537,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         zIndex: 99999
                                     }}
                                 >
-                                    <div className="flex items-center gap-2 text-indigo-600 mb-3">
+                                    <div className="flex items-center gap-2 text-indigo-500 mb-3">
                                         <Wand2 size={14} />
                                         <span className="text-xs font-bold">AI 生成標題預覽</span>
                                     </div>
@@ -1546,7 +1546,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         autoFocus
                                         value={generatedTitle}
                                         onChange={(e) => setGeneratedTitle(e.target.value)}
-                                        className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
+                                        className="w-full px-3 py-2 text-sm bg-theme-main text-theme-primary border border-theme rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
                                         placeholder="編輯標題..."
                                     />
                                     <div className="flex justify-end gap-2 mt-3">
@@ -2211,7 +2211,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
 
                         {/* Bottom Section: Metadata and Actions */}
-                        <div className="flex flex-col gap-3 w-full border-t border-gray-100 pt-3 mt-1">
+                        <div className="flex flex-col gap-3 w-full border-t border-theme pt-3 mt-1">
                             {/* Row 1: Date, Time, Tags */}
                             <div className="flex flex-wrap gap-2 items-center">
                                 {!startDate && (
