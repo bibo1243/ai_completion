@@ -10,7 +10,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import { Sparkles, Mic, Square, Paperclip, X, Download, Check } from 'lucide-react';
+import { Sparkles, Mic, Square, Paperclip, X, Download, Check, Plus } from 'lucide-react';
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
@@ -278,8 +278,8 @@ const AudioMarkerNode = Node.create({
 
 // Tag Mention Suggestion List Component
 interface TagMentionListProps {
-    items: { id: string; name: string; color: string; parent_id?: string }[];
-    command: (item: { id: string; name: string; color: string }) => void;
+    items: { id: string; name: string; color: string; parent_id?: string; isCreateOption?: boolean }[];
+    command: (item: { id: string; name: string; color: string; isCreateOption?: boolean }) => void;
 }
 
 interface TagMentionListRef {
@@ -345,6 +345,8 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
             onMouseDown={(e) => e.preventDefault()}
         >
             {props.items.map((item, index) => {
+                const isCreateOption = item.isCreateOption;
+
                 // Calculate depth based on parent_id
                 const hasParent = !!item.parent_id;
                 const paddingLeft = hasParent ? 'pl-6' : 'pl-3';
@@ -359,14 +361,20 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
                             selectItem(index);
                         }}
                         className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
-                                ? 'bg-indigo-50/80'
-                                : 'hover:bg-gray-50/80'
+                            ? 'bg-indigo-50/80'
+                            : 'hover:bg-gray-50/80'
                             }`}
                     >
-                        <div
-                            className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: item.color || '#6366f1' }}
-                        />
+                        {isCreateOption ? (
+                            <div className="w-4 h-4 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-indigo-600">
+                                <Plus size={10} strokeWidth={3} />
+                            </div>
+                        ) : (
+                            <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: item.color || '#6366f1' }}
+                            />
+                        )}
                         <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-indigo-700' : 'text-gray-600'
                             }`}>
                             {item.name}
@@ -398,8 +406,9 @@ interface NoteEditorProps {
     onMarkersChange?: (markers: { id: string, time: number }[]) => void; // Called when markers change in editor (for sync)
     attachments?: { name: string, url: string, size?: number, type?: string }[]; // Available attachments for linking
     taskColor?: string; // Task color for styling attachment links
-    availableTags?: { id: string; name: string; color: string }[]; // Tags for @ mention
+    availableTags?: { id: string; name: string; color: string; parent_id?: string; order_index?: number }[]; // Tags for @ mention
     onTagClick?: (tagId: string) => void; // Callback when a tag is clicked
+    onCreateTag?: (name: string) => Promise<{ id: string, name: string, color: string } | null>; // Callback to create a new tag
 }
 
 const NoteEditor: React.FC<NoteEditorProps> = ({
@@ -420,12 +429,25 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
     onMarkersChange,
     attachments = [],
     taskColor = '#6366f1',
-    availableTags = []
+    availableTags = [],
+    onCreateTag,
 }) => {
     const { t } = useContext(AppContext);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [colorPickerPosition, setColorPickerPosition] = useState({ top: 0, left: 0 });
     const colorPickerTimeout = useRef<NodeJS.Timeout | null>(null);
+
+    // Refs to access latest values inside editor callbacks without triggering re-initialization
+    const tagsRef = useRef(availableTags);
+    const onCreateTagRef = useRef(onCreateTag);
+
+    useEffect(() => {
+        tagsRef.current = availableTags;
+    }, [availableTags]);
+
+    useEffect(() => {
+        onCreateTagRef.current = onCreateTag;
+    }, [onCreateTag]);
 
     // --- Attachment Link State ---
     const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
@@ -718,13 +740,52 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 suggestion: {
                     char: '@',
                     items: ({ query }: { query: string }) => {
-                        // Keep original order and hierarchy, just filter by query
-                        if (!query) return availableTags.slice(0, 15);
-                        return availableTags
+                        const currentTags = tagsRef.current;
+                        const results = currentTags
                             .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()))
                             .slice(0, 15);
+
+                        // If query exists and no exact match found, offer to create new tag
+                        if (query && !currentTags.some(tag => tag.name.toLowerCase() === query.toLowerCase())) {
+                            results.push({
+                                id: 'CREATE_TAG:' + query,
+                                name: `Create "${query}"`,
+                                color: '#6366f1',
+                                isCreateOption: true
+                            } as any);
+                        } else if (!query && results.length === 0) {
+                            return currentTags.slice(0, 15);
+                        }
+
+                        return results;
                     },
                     command: ({ editor, range, props }: { editor: any; range: any; props: any }) => {
+                        // Handle new tag creation
+                        if (props.id.startsWith('CREATE_TAG:')) {
+                            const newTagName = props.id.substring('CREATE_TAG:'.length);
+                            if (onCreateTagRef.current) {
+                                onCreateTagRef.current(newTagName).then((newTag) => {
+                                    if (newTag) {
+                                        editor
+                                            .chain()
+                                            .focus()
+                                            .insertContentAt(range, [
+                                                {
+                                                    type: 'mention',
+                                                    attrs: {
+                                                        id: newTag.id,
+                                                        label: newTag.name,
+                                                    },
+                                                },
+                                                { type: 'text', text: ' ' },
+                                            ])
+                                            .run();
+                                    }
+                                });
+                            }
+                            return;
+                        }
+
                         // Insert the mention with the tag name as label
                         editor
                             .chain()

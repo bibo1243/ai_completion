@@ -1696,6 +1696,20 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         attachments={attachments}
                                         taskColor={effectiveColor}
                                         availableTags={tags.map((t: any) => ({ id: t.id, name: t.name, color: t.color, parent_id: t.parent_id, order_index: t.order_index }))}
+                                        onCreateTag={async (tagName) => {
+                                            if (!addTag) return null;
+                                            try {
+                                                const id = await addTag(tagName, null);
+                                                if (id) {
+                                                    // Default color from AppContext logic is #6366f1
+                                                    return { id, name: tagName, color: '#6366f1' };
+                                                }
+                                            } catch (error) {
+                                                console.error("Failed to create tag from editor", error);
+                                                setToast?.({ msg: '無法新增標籤', type: 'error' });
+                                            }
+                                            return null;
+                                        }}
                                     />
                                 </div>
 
