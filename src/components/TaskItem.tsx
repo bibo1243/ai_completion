@@ -259,6 +259,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         // If it was a quick tap (< 300ms) and not long pressing, open edit mode on mobile
         if (duration < 300 && !isLongPressing && isMobile) {
             e.preventDefault();
+            e.stopPropagation();
             // Use setEditingTaskId to trigger MobileTaskEditor
             setEditingTaskId(task.id);
         }

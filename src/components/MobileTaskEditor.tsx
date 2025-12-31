@@ -98,14 +98,27 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     ];
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black/40 flex items-end justify-center" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] flex items-end justify-center">
+            {/* Backdrop - clicking this closes the modal */}
+            <div
+                className="absolute inset-0 bg-black/40"
+                onClick={onClose}
+                onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                }}
+            />
+
+            {/* Modal content - clicks here should NOT close */}
             <motion.div
                 initial={{ y: '100%' }}
                 animate={{ y: 0 }}
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full bg-white rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+                onTouchEnd={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="relative w-full bg-white rounded-t-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl"
             >
                 {/* Handle bar */}
                 <div className="flex justify-center pt-3 pb-2">
@@ -159,8 +172,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         <button
                             onClick={() => setActiveSection(activeSection === 'date' ? null : 'date')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'date' || startDate
-                                    ? 'border-indigo-500 bg-indigo-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-indigo-500 bg-indigo-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Calendar size={24} className={startDate ? 'text-indigo-600' : 'text-gray-400'} />
@@ -173,8 +186,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         <button
                             onClick={() => setActiveSection(activeSection === 'tags' ? null : 'tags')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'tags' || selectedTags.length > 0
-                                    ? 'border-purple-500 bg-purple-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-purple-500 bg-purple-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Tag size={24} className={selectedTags.length > 0 ? 'text-purple-600' : 'text-gray-400'} />
@@ -187,8 +200,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                         <button
                             onClick={() => setActiveSection(activeSection === 'parent' ? null : 'parent')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'parent' || parentId
-                                    ? 'border-amber-500 bg-amber-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-amber-500 bg-amber-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <ChevronUp size={24} className={parentId ? 'text-amber-600' : 'text-gray-400'} />
@@ -227,8 +240,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                                 key={qd.label}
                                                 onClick={() => setStartDate(qd.getValue())}
                                                 className={`py-3 rounded-xl text-sm font-bold transition-all ${startDate === qd.getValue()
-                                                        ? 'bg-indigo-600 text-white'
-                                                        : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
                                                     }`}
                                             >
                                                 {qd.label}
@@ -286,8 +299,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                                         );
                                                     }}
                                                     className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                            ? 'bg-white shadow-sm border-2'
-                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                        ? 'bg-white shadow-sm border-2'
+                                                        : 'bg-white border border-gray-200 active:bg-gray-100'
                                                         }`}
                                                     style={{ borderColor: isSelected ? tagColor : undefined }}
                                                 >
@@ -342,8 +355,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                                     key={p.id}
                                                     onClick={() => setParentId(isSelected ? null : p.id)}
                                                     className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                            ? 'bg-white shadow-sm border-2 border-amber-500'
-                                                            : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                        ? 'bg-white shadow-sm border-2 border-amber-500'
+                                                        : 'bg-white border border-gray-200 active:bg-gray-100'
                                                         }`}
                                                 >
                                                     <div className="flex items-center gap-3">
