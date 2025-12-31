@@ -201,7 +201,7 @@ export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect
                                     handleSelect(item.id);
                                 }}
                                 onMouseEnter={() => setActiveIndex(idx)}
-                                className={`px-2 py-1.5 text-xs rounded cursor-pointer flex items-center justify-between group ${idx === activeIndex ? 'bg-indigo-50 text-indigo-700' : 'text-theme-secondary hover:bg-theme-hover'}`}
+                                className={`px-2 py-1.5 text-xs rounded cursor-pointer flex items-center justify-between group ${idx === activeIndex ? 'bg-theme-selection text-theme-primary' : 'text-theme-secondary hover:bg-theme-hover'}`}
                                 style={{ paddingLeft: item.depth ? `${item.depth * 12 + 8}px` : '8px' }}
                             >
                                 <div className="flex items-center gap-1.5 truncate">
@@ -221,7 +221,7 @@ export const DropdownSelect = ({ icon: Icon, label, items, selectedIds, onSelect
                         {showAddOption && (
                             <div
                                 onMouseEnter={() => setActiveIndex(filteredItems.length)}
-                                className={`px-2 py-1.5 text-xs cursor-pointer rounded flex items-center gap-1 ${activeIndex === filteredItems.length ? 'bg-indigo-50 text-indigo-700' : 'text-indigo-600 hover:bg-indigo-50'}`}
+                                className={`px-2 py-1.5 text-xs cursor-pointer rounded flex items-center gap-1 ${activeIndex === filteredItems.length ? 'bg-theme-selection text-theme-primary' : 'text-indigo-600 hover:bg-theme-hover'}`}
                                 onMouseDown={(e) => { e.preventDefault(); handleSelect(null, query); }}
                             >
                                 <Plus size={12} /> {t('addNewTag')} "{query}"

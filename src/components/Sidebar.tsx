@@ -236,7 +236,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
                 {!sidebarCollapsed && allowSettings && isAltPressed && isHovered && (
                     <button
-                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 bg-white hover:bg-indigo-50 shadow-sm rounded-full border border-gray-200 z-10"
+                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 bg-theme-card hover:bg-theme-hover shadow-sm rounded-full border border-theme z-10"
                         onClick={(e) => {
                             e.stopPropagation();
                             setEditingFilterView(id);
@@ -526,7 +526,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                             {popoverId === tag.id && popoverPosition && createPortal(
                                 <div
                                     ref={popoverRef}
-                                    className="fixed bg-white rounded-xl shadow-2xl border border-slate-200 p-3 w-52 animate-in fade-in slide-in-from-top-1 duration-200"
+                                    className="fixed bg-theme-card rounded-xl shadow-2xl border border-theme p-3 w-52 animate-in fade-in slide-in-from-top-1 duration-200"
                                     style={{ top: popoverPosition.top, left: Math.max(8, popoverPosition.left), zIndex: 99999 }}
                                     onClick={e => e.stopPropagation()}
                                 >
@@ -554,10 +554,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             setNewTagName('');
                                             setPopoverId(null);
                                             if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
-                                        }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-gray-100 rounded text-[11px] text-slate-600 font-medium">
+                                        }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] text-theme-secondary font-medium">
                                             <Plus size={11} /> {t('addSubTag')}
                                         </button>
-                                        <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-gray-100 rounded text-[11px] text-slate-600 font-medium">
+                                        <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] text-theme-secondary font-medium">
                                             <Edit2 size={11} /> {t('rename')}
                                         </button>
                                         <button onClick={() => { if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-red-50 rounded text-[11px] text-red-600 font-medium">
