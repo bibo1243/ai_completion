@@ -170,7 +170,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const sidebarTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
     // Tag text now uses same size as sidebar text (previously was too small)
     const tagTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
-    const sidebarFontClass = themeSettings.fontWeight === 'thin' ? 'font-light' : '';
+    const sidebarFontClass = themeSettings.fontWeight === 'thin' ? 'font-normal' : '';
 
     const saveViewName = (id: string, name: string) => {
         const newNames = { ...viewNames, [id]: name };
