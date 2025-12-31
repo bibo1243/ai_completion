@@ -330,26 +330,42 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
 
     if (props.items.length === 0) {
         return (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm text-gray-500">
+            <div
+                className="bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-xl p-3 text-xs font-light text-gray-400"
+                onMouseDown={(e) => e.preventDefault()}
+            >
                 沒有找到標籤
             </div>
         );
     }
 
     return (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+        <div
+            className="bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
+            onMouseDown={(e) => e.preventDefault()}
+        >
             {props.items.map((item, index) => (
                 <button
                     key={item.id}
-                    onClick={() => selectItem(index)}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${index === selectedIndex ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50'
+                    type="button"
+                    onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectItem(index);
+                    }}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${index === selectedIndex
+                        ? 'bg-indigo-50/80'
+                        : 'hover:bg-gray-50/80'
                         }`}
                 >
                     <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-white/50"
                         style={{ backgroundColor: item.color || '#6366f1' }}
                     />
-                    <span className="truncate">{item.name}</span>
+                    <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-indigo-700' : 'text-gray-700'
+                        }`}>
+                        {item.name}
+                    </span>
                 </button>
             ))}
         </div>
@@ -699,6 +715,26 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                         return availableTags
                             .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()))
                             .slice(0, 10);
+                    },
+                    command: ({ editor, range, props }: { editor: any; range: any; props: any }) => {
+                        // Insert the mention with the tag name as label
+                        editor
+                            .chain()
+                            .focus()
+                            .insertContentAt(range, [
+                                {
+                                    type: 'mention',
+                                    attrs: {
+                                        id: props.id,
+                                        label: props.name, // Use tag name as label
+                                    },
+                                },
+                                {
+                                    type: 'text',
+                                    text: ' ',
+                                },
+                            ])
+                            .run();
                     },
                     render: () => {
                         let component: ReactRenderer<TagMentionListRef> | null = null;
