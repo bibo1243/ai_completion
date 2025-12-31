@@ -159,7 +159,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
     const selectionStyle = isSelected ? 'bg-theme-selection' : '';
     const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-slate-50` : '';
-    const completedStyle = isDone ? 'bg-emerald-50/30' : '';
+    const completedStyle = (isDone && view !== 'logbook' && view !== 'trash') ? 'bg-emerald-50/30' : (isDone ? 'opacity-60 grayscale' : '');
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
     const animationStyle = 'transition-all duration-200 ease-in-out';
 
