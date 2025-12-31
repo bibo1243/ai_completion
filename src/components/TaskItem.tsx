@@ -157,7 +157,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
 
     const isFocusView = view === 'focus';
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
-    const selectionStyle = isSelected ? 'bg-[#cfe1fc]' : '';
+    const selectionStyle = isSelected ? 'bg-indigo-100' : '';
     const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-slate-50` : '';
     const completedStyle = isDone ? 'bg-emerald-50/30' : '';
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
@@ -175,7 +175,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         if (!task.start_date) return null;
         const is_Today = isToday(task.start_date);
         const is_Overdue = isOverdue(task.start_date) && !isDone;
-        let badgeStyle = "bg-slate-50 text-slate-400";
+        let badgeStyle = "bg-theme-hover text-theme-secondary";
         if (is_Today) badgeStyle = "bg-yellow-50 text-yellow-600 font-medium";
         else if (is_Overdue) badgeStyle = "bg-red-50 text-red-600 font-medium";
         return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}> <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day, language)} </span>);
@@ -339,7 +339,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                 <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} size={isFocusView ? 14 : 18} />
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
-                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-slate-700'} mr-2 truncate block flex-shrink`}>{task.title}</span>
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-theme-primary'} mr-2 truncate block flex-shrink`}>{task.title}</span>
                                 {(task.tags || []).length > 0 && (
                                     <>
                                         {/* Desktop: Full Tag Names */}
@@ -349,7 +349,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                                 if (!tName) return null;
                                                 return (
                                                     <div key={tid} className="relative flex-shrink-0">
-                                                        <span className={`${tagTextSize} font-light border border-slate-200 rounded-md px-1.5 py-px ${isDone ? 'text-slate-300 bg-slate-50' : 'text-slate-500 bg-slate-50'} whitespace-nowrap`}>
+                                                        <span className={`${tagTextSize} font-light border border-theme rounded-md px-1.5 py-px ${isDone ? 'text-theme-tertiary bg-theme-hover' : 'text-theme-secondary bg-theme-hover'} whitespace-nowrap`}>
                                                             #{tName}
                                                         </span>
                                                     </div>
