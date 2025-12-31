@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, createContext, useCallback } from 'react';
 import { supabase as supabaseClient } from '../supabaseClient';
 import { TaskData, TagData, SyncStatus, DragState, HistoryRecord, ThemeSettings, NavRecord, FlatTask, BatchUpdateRecord, TaskStatus, ArchivedTaskData, SearchFilters, SearchHistory } from '../types';
-import { isSameDay, isToday, isDescendant, isOverdue } from '../utils';
+import { isSameDay, isToday, isDescendant, isOverdue, taskHasAnyTag } from '../utils';
 import { DRAG_GHOST_IMG } from '../constants';
 import { translations } from '../translations';
 
@@ -966,8 +966,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 const relatedTagIds = getRelatedTagIds(currentFilter);
 
                 return (t: TaskData) => {
-                    // Check if task has the selected tag OR any of its descendants
-                    if (!t.tags?.some(tagId => relatedTagIds.includes(tagId))) return false;
+                    // Check if task has the selected tag OR any of its descendants (via tags array or @mention)
+                    if (!taskHasAnyTag(t, relatedTagIds)) return false;
 
                     // Advanced Filters
                     if (currentAdvancedFilters.additionalTags.length > 0) {

@@ -63,3 +63,41 @@ export const isDescendant = (potentialParentId: string | null, targetId: string,
   if (!parent) return false;
   return isDescendant(parent.parent_id, targetId, allTasks);
 };
+
+/**
+ * Extract tag IDs from description that contain @mention tags
+ * Mention format in HTML: <span data-type="mention" data-id="tag-id">...</span>
+ */
+export const extractMentionedTagIds = (description: string | null): string[] => {
+  if (!description) return [];
+  // Match data-id attributes in mention spans
+  const regex = /data-type="mention"[^>]*data-id="([^"]+)"/g;
+  const ids: string[] = [];
+  let match;
+  while ((match = regex.exec(description)) !== null) {
+    ids.push(match[1]);
+  }
+  return ids;
+};
+
+/**
+ * Check if a task has a tag via direct tags array OR via @mention in description
+ */
+export const taskHasTag = (task: TaskData, tagId: string): boolean => {
+  // Check direct tags
+  if (task.tags?.includes(tagId)) return true;
+  // Check mentions in description
+  const mentionedIds = extractMentionedTagIds(task.description);
+  return mentionedIds.includes(tagId);
+};
+
+/**
+ * Check if a task has any of the given tags (via direct tags or mentions)
+ */
+export const taskHasAnyTag = (task: TaskData, tagIds: string[]): boolean => {
+  // Check direct tags
+  if (task.tags?.some(id => tagIds.includes(id))) return true;
+  // Check mentions in description
+  const mentionedIds = extractMentionedTagIds(task.description);
+  return mentionedIds.some(id => tagIds.includes(id));
+};
