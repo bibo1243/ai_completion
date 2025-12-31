@@ -7,7 +7,7 @@ import { SearchFilters, SearchHistory, TaskColor } from '../types';
 
 import { TaskInput } from './TaskInput';
 
-const COLORS: TaskColor[] = ['gray', 'blue', 'indigo', 'red', 'orange', 'amber', 'green', 'teal', 'cyan', 'sky', 'purple', 'fuchsia', 'pink', 'rose', 'coder'];
+const COLORS: TaskColor[] = ['gray', 'blue', 'indigo', 'red', 'orange', 'amber', 'green', 'teal', 'cyan', 'sky', 'purple', 'fuchsia', 'pink', 'rose'];
 
 const COLOR_CLASSES: Record<TaskColor, string> = {
     gray: 'bg-gray-400',
@@ -23,8 +23,7 @@ const COLOR_CLASSES: Record<TaskColor, string> = {
     purple: 'bg-purple-500',
     fuchsia: 'bg-fuchsia-500',
     pink: 'bg-pink-500',
-    rose: 'bg-rose-500',
-    coder: 'bg-[#78716c]'
+    rose: 'bg-rose-500'
 };
 
 // Highlight matching text

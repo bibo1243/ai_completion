@@ -718,6 +718,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     </div>
                                 </div>
                                 <div>
+                                    <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{language === 'zh' ? '色彩風格' : 'Color Theme'}</span> </div>
+                                    <div className="flex bg-gray-100 rounded p-0.5">
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'light' }))} className={`flex-1 text-[10px] py-1 rounded ${!themeSettings.themeMode || themeSettings.themeMode === 'light' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '明亮' : 'Light'}</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'dark' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'dark' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '護眼' : 'Dark'}</button>
+                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'programmer' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'programmer' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '極客' : 'Dev'}</button>
+                                    </div>
+                                </div>
+                                <div>
                                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontSize')}</span> </div>
                                     <div className="flex bg-gray-100 rounded p-0.5">
                                         <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>

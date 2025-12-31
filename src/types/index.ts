@@ -1,7 +1,7 @@
 
 export type TaskStatus = 'inbox' | 'active' | 'waiting' | 'someday' | 'reference' | 'completed' | 'deleted' | 'logged';
 export type SyncStatus = 'synced' | 'syncing' | 'error';
-export type TaskColor = 'gray' | 'blue' | 'indigo' | 'red' | 'orange' | 'amber' | 'green' | 'teal' | 'cyan' | 'sky' | 'purple' | 'fuchsia' | 'pink' | 'rose' | 'coder';
+export type TaskColor = 'gray' | 'blue' | 'indigo' | 'red' | 'orange' | 'amber' | 'green' | 'teal' | 'cyan' | 'sky' | 'purple' | 'fuchsia' | 'pink' | 'rose';
 
 export interface TagData {
   id: string;
@@ -102,6 +102,7 @@ export interface ThemeSettings {
   showLunar?: boolean;
   showTaiwanHolidays?: boolean;
   language?: 'zh' | 'en';
+  themeMode?: 'light' | 'dark' | 'programmer';
 }
 
 export type AIProvider = 'gemini' | 'openai';

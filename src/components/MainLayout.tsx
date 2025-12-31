@@ -126,7 +126,7 @@ export const MainLayout = () => {
   };
 
   return (
-    <div className={`flex h-screen bg-white text-gray-900 ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
+    <div data-theme={themeSettings.themeMode && themeSettings.themeMode !== 'light' ? themeSettings.themeMode : undefined} className={`flex h-screen bg-white text-gray-900 ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
       {/* Desktop Sidebar */}
       <div style={{ width: sidebarCollapsed ? 64 : sidebarWidth }} className="relative flex-shrink-0 hidden md:block transition-all duration-300 ease-in-out">
         <Sidebar view={view} setView={setView} tagFilter={tagFilter} setTagFilter={setTagFilter} />
