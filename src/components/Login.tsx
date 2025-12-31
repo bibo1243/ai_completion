@@ -24,7 +24,11 @@ export const Login = () => {
           password,
         });
         if (error) throw error;
-        setMessage('請檢查您的電子郵件以進行驗證。');
+        setMessage('註冊成功！正在登入...');
+        // Auto-login after signup (since email verification is disabled)
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
