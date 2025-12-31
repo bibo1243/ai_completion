@@ -141,6 +141,11 @@
     background-color: var(--border-color) !important;
 }
 
+[data-theme] .bg-slate-50 {
+    background-color: var(--bg-hover) !important;
+    border-color: var(--border-color) !important;
+}
+
 /* Fix Tag Pills specific borders */
 [data-theme] .border-red-100 {
     border-color: rgba(127, 29, 29, 0.5) !important;

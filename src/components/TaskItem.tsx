@@ -158,7 +158,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const isFocusView = view === 'focus';
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
     const selectionStyle = isSelected ? 'bg-theme-selection' : '';
-    const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-slate-50` : '';
+    const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-theme-hover` : '';
     const completedStyle = (isDone && view !== 'logbook' && view !== 'trash') ? 'bg-emerald-50/30' : (isDone ? 'opacity-60 grayscale' : '');
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
     const animationStyle = 'transition-all duration-200 ease-in-out';
@@ -167,7 +167,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const focusViewPadding = isFocusView ? 'py-0.5' : 'py-2 md:py-1.5';
     const focusViewMargin = isFocusView ? 'mb-0' : 'mb-1 md:mb-0.5';
 
-    const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle} hover-effect active:bg-slate-100 touch-manipulation`;
+    const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle} hover-effect active:bg-theme-hover touch-manipulation`;
 
     const renderDateBadge = () => {
         if (!task.start_date && !task.start_time) return null;
