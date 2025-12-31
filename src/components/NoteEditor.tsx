@@ -278,7 +278,7 @@ const AudioMarkerNode = Node.create({
 
 // Tag Mention Suggestion List Component
 interface TagMentionListProps {
-    items: { id: string; name: string; color: string }[];
+    items: { id: string; name: string; color: string; parent_id?: string }[];
     command: (item: { id: string; name: string; color: string }) => void;
 }
 
@@ -344,30 +344,36 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
             className="bg-white/95 backdrop-blur border border-gray-100 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
             onMouseDown={(e) => e.preventDefault()}
         >
-            {props.items.map((item, index) => (
-                <button
-                    key={item.id}
-                    type="button"
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        selectItem(index);
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${index === selectedIndex
-                        ? 'bg-indigo-50/80'
-                        : 'hover:bg-gray-50/80'
-                        }`}
-                >
-                    <div
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-white/50"
-                        style={{ backgroundColor: item.color || '#6366f1' }}
-                    />
-                    <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-indigo-700' : 'text-gray-700'
-                        }`}>
-                        {item.name}
-                    </span>
-                </button>
-            ))}
+            {props.items.map((item, index) => {
+                // Calculate depth based on parent_id
+                const hasParent = !!item.parent_id;
+                const paddingLeft = hasParent ? 'pl-6' : 'pl-3';
+
+                return (
+                    <button
+                        key={item.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            selectItem(index);
+                        }}
+                        className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
+                                ? 'bg-indigo-50/80'
+                                : 'hover:bg-gray-50/80'
+                            }`}
+                    >
+                        <div
+                            className="w-2 h-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: item.color || '#6366f1' }}
+                        />
+                        <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-indigo-700' : 'text-gray-600'
+                            }`}>
+                            {item.name}
+                        </span>
+                    </button>
+                );
+            })}
         </div>
     );
 });
@@ -707,14 +713,16 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                     class: 'tag-mention',
                 },
                 renderLabel({ node }) {
-                    return `@${node.attrs.label ?? node.attrs.id}`;
+                    return node.attrs.label ?? node.attrs.id;
                 },
                 suggestion: {
                     char: '@',
                     items: ({ query }: { query: string }) => {
+                        // Keep original order and hierarchy, just filter by query
+                        if (!query) return availableTags.slice(0, 15);
                         return availableTags
                             .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()))
-                            .slice(0, 10);
+                            .slice(0, 15);
                     },
                     command: ({ editor, range, props }: { editor: any; range: any; props: any }) => {
                         // Insert the mention with the tag name as label
@@ -757,6 +765,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                                     interactive: true,
                                     trigger: 'manual',
                                     placement: 'bottom-start',
+                                    arrow: false,
                                 });
                             },
                             onUpdate(props: any) {
