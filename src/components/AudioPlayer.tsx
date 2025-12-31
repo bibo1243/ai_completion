@@ -86,7 +86,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
     };
 
     return (
-        <div className="w-full bg-slate-50 border border-indigo-100 rounded-xl p-3 mb-4 animate-in fade-in slide-in-from-top-2 flex flex-col gap-2 shadow-sm">
+        <div className="w-full bg-slate-50 border border-indigo-100 rounded-xl p-3 mb-4 animate-in fade-in slide-in-from-top-2 flex flex-col gap-2 shadow-sm sticky top-0 z-10 backdrop-blur-sm bg-slate-50/95">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 overflow-hidden">
                     <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 flex-shrink-0">
