@@ -32,43 +32,47 @@
     --header-bg: rgba(255, 255, 255, 0.9);
 }
 
-/* Dark Theme (Eye Protection) */
+/* Dark Theme (Eye Protection) - Things 3 Inspired */
 [data-theme='dark'] {
-    --bg-main: #18181b;
-    /* zinc-950 */
-    --bg-sidebar: #27272a;
-    /* zinc-800 */
-    --bg-card: #27272a;
-    --bg-hover: #3f3f46;
-    /* zinc-700 */
-    --text-primary: #f4f4f5;
-    /* zinc-100 */
-    --text-secondary: #a1a1aa;
-    /* zinc-400 */
-    --text-tertiary: #71717a;
-    /* zinc-500 */
-    --border-color: #3f3f46;
-    /* zinc-700 */
-    --accent-color: #818cf8;
-    /* indigo-400 */
-    --header-bg: rgba(24, 24, 27, 0.9);
+    --bg-main: #191a1e;
+    /* Deep Blue-Grey */
+    --bg-sidebar: #131417;
+    /* Darker sidebar */
+    --bg-card: #232429;
+    /* Slightly lighter for cards */
+    --bg-hover: #2d2e34;
+
+    /* Legacy variables mapping */
+    --bg-primary: var(--bg-main);
+    --bg-secondary: var(--bg-card);
+    --bg-tertiary: var(--bg-hover);
+
+    --text-primary: #e0e1e3;
+    --text-secondary: #9da0a5;
+    --text-tertiary: #5d6066;
+    --border-color: #2d2f36;
+    --accent-color: #5e8ae4;
+    --header-bg: rgba(25, 26, 30, 0.95);
 }
 
-/* Programmer Theme (VSCode/GitHub Dark style) */
+/* Programmer Theme (VSCode/GitHub Dark style) - High Contrast */
 [data-theme='programmer'] {
     --bg-main: #0d1117;
-    /* GitHub Dark bg */
     --bg-sidebar: #010409;
-    /* GitHub Dark sidebar */
     --bg-card: #161b22;
     --bg-hover: #21262d;
+
+    /* Legacy variables mapping */
+    --bg-primary: var(--bg-main);
+    --bg-secondary: var(--bg-card);
+    --bg-tertiary: var(--bg-hover);
+
     --text-primary: #c9d1d9;
     --text-secondary: #8b949e;
     --text-tertiary: #484f58;
     --border-color: #30363d;
     --accent-color: #58a6ff;
-    /* GitHub Blue */
-    --header-bg: rgba(13, 17, 23, 0.9);
+    --header-bg: rgba(13, 17, 23, 0.95);
 }
 
 /* Semantic Classes for Layout */
@@ -114,17 +118,19 @@
     color: var(--text-primary);
 }
 
-/* Force Input/Select/Textarea styles in dark modes */
-[data-theme] input,
+/* Force Input/Select/Textarea styles in dark modes - High Specificity */
+[data-theme] input:not([type="checkbox"]):not([type="radio"]),
 [data-theme] select,
-[data-theme] textarea {
+[data-theme] textarea,
+[data-theme] .bg-white {
     background-color: var(--bg-card) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
 }
 
-/* Fix popovers and modals */
-[data-theme] .bg-white {
+/* Specific fix for inputs that might have explicit classes like bg-gray-50 */
+[data-theme] input.bg-gray-50,
+[data-theme] input.bg-white {
     background-color: var(--bg-card) !important;
 }
 
