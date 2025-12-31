@@ -190,7 +190,7 @@ export const FocusView = () => {
 
                 {/* 任務內容 */}
                 <div className="flex-1 min-w-0">
-                    <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-theme-primary truncate leading-tight`}>
+                    <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-theme-secondary truncate leading-tight`}>
                         {task.title || <span className="text-theme-tertiary italic">無標題</span>}
                     </div>
                 </div>
