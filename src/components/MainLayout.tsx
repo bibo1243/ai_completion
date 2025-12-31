@@ -10,7 +10,9 @@ import { AdvancedFilterBar } from './AdvancedFilterBar';
 import { Toast } from './Toast';
 import { Mission72Manager } from './Mission72Manager';
 import { DraggableTaskModal } from './DraggableTaskModal';
+import { MobileTaskEditor } from './MobileTaskEditor';
 import GTDGuide from './GTDGuide';
+import { AnimatePresence } from 'framer-motion';
 
 export const MainLayout = () => {
   const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds } = useContext(AppContext);
@@ -19,6 +21,15 @@ export const MainLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMission72, setShowMission72] = useState(false);
   const [showGTDGuide, setShowGTDGuide] = useState(false);
+
+  // Detect mobile
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Draggable FAB state
   const [fabPosition, setFabPosition] = useState(() => {
@@ -262,6 +273,16 @@ export const MainLayout = () => {
 
         {/* GTD Guide Modal */}
         <GTDGuide isOpen={showGTDGuide} onClose={() => setShowGTDGuide(false)} />
+
+        {/* Mobile Task Editor */}
+        <AnimatePresence>
+          {editingTaskId && isMobile && (
+            <MobileTaskEditor
+              taskId={editingTaskId}
+              onClose={() => setEditingTaskId(null)}
+            />
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

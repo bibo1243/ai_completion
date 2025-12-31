@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useContext } from 'react';
+import React, { useRef, useEffect, useContext, useState, useCallback } from 'react';
 import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
@@ -11,6 +11,12 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const { updateTask, setFocusedTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
+
+    // Mobile touch handling
+    const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+    const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [isLongPressing, setIsLongPressing] = useState(false);
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     const isExpanded = flatTask.isExpanded;
     const hasChildren = flatTask.hasChildren;
@@ -211,6 +217,56 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const iconSize = isFocusView ? 12 : 16;
     const tagTextSize = isFocusView ? 'text-[8px]' : 'text-[10px]';
 
+    // Mobile touch handlers
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        if (!isMobile) return;
+        const touch = e.touches[0];
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+
+        // Long press for drag (500ms)
+        longPressTimerRef.current = setTimeout(() => {
+            setIsLongPressing(true);
+            // Trigger vibration feedback if available
+            if (navigator.vibrate) navigator.vibrate(50);
+        }, 500);
+    }, [isMobile]);
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        if (!touchStartRef.current) return;
+        const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+        const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+
+        // If moved more than 10px, cancel long press
+        if (dx > 10 || dy > 10) {
+            if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+            }
+        }
+    }, []);
+
+    const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+
+        if (!touchStartRef.current) return;
+
+        const duration = Date.now() - touchStartRef.current.time;
+
+        // If it was a quick tap (< 300ms) and not long pressing, open edit mode on mobile
+        if (duration < 300 && !isLongPressing && isMobile) {
+            e.preventDefault();
+            // Use setEditingTaskId to trigger MobileTaskEditor
+            setEditingTaskId(task.id);
+        }
+
+        setIsLongPressing(false);
+        touchStartRef.current = null;
+    }, [isLongPressing, isMobile, task.id, setEditingTaskId]);
+
     return (
         <motion.div
             layout
@@ -218,20 +274,29 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             ref={itemRef}
             data-task-id={task.id}
             data-task-index={flatTask.index}
-            draggable={view !== 'schedule' && view !== 'focus' && view !== 'upcoming' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
+            draggable={!isMobile && view !== 'schedule' && view !== 'focus' && view !== 'upcoming' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
             onDragStart={(e: any) => { if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) { e.preventDefault(); return; } startDrag(e, flatTask); }}
-            className={finalClass}
+            className={`${finalClass} ${isLongPressing ? 'scale-[1.02] shadow-lg z-50' : ''}`}
             style={{ marginLeft: `${view === 'today' ? 0 : flatTask.depth * INDENT_SIZE}px` }}
             tabIndex={0}
             onKeyDown={handleKeyDown}
             onClick={(e: any) => {
                 e.stopPropagation();
-                handleSelection(e, task.id);
+                // Desktop: select on click
+                if (!isMobile) {
+                    handleSelection(e, task.id);
+                }
             }}
             onDoubleClick={(e: any) => {
                 e.stopPropagation();
-                onEdit();
+                // Desktop: edit on double-click
+                if (!isMobile) {
+                    onEdit();
+                }
             }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
         >
             <div className={`flex flex-col ${isFocusView ? 'px-1' : 'px-3'}`}>
                 {/* Breadcrumb for Focus/Today View - Styled Bubble */}
