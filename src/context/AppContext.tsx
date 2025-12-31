@@ -201,6 +201,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setThemeSettings(prev => ({ ...prev, language: lang }));
     };
 
+    // Sync theme to document element for global scope (including Portals)
+    useEffect(() => {
+        if (themeSettings.themeMode && themeSettings.themeMode !== 'light') {
+            document.documentElement.setAttribute('data-theme', themeSettings.themeMode);
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+    }, [themeSettings.themeMode]);
+
     const t = useCallback((key: string) => {
         // @ts-ignore
         return translations[language][key] || key;
@@ -1448,7 +1457,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
-    const addTask = async (data: any, childIds: string[] = [], specificId?: string) => {
+    const addTask = async (data: any, _childIds: string[] = [], specificId?: string) => {
         if (!supabaseClient) return '';
         setSyncStatus('syncing');
         const id = specificId || crypto.randomUUID();
@@ -1484,10 +1493,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             handleError(error);
             return '';
         }
-        if (childIds.length > 0 && supabaseClient) {
-            setTasks(prev => prev.map(t => childIds.includes(t.id) ? { ...t, parent_id: id } : t));
-            await supabaseClient.from('tasks').update({ parent_id: id }).in('id', childIds);
-        }
+
         setSyncStatus('synced');
         return id;
     };

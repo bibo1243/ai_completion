@@ -2273,7 +2273,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     }}
                                 />
 
-                                {!initialData && (<DropdownSelect tabIndex={-1} icon={ChevronDown} label="子任務" items={eligibleParents} selectedIds={childIds} placeholder="搜尋子任務..." theme={theme} onSelect={(id: string) => setChildIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])} />)}
+
                             </div>
 
                             {/* Time Picker (when not all-day) */}
