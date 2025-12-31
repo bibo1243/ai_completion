@@ -2286,8 +2286,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         className="overflow-hidden flex items-center gap-3 px-1"
                                     >
                                         <div className="flex items-center gap-2">
-                                            <Clock size={12} className="text-gray-400" />
-                                            <div className="flex items-center bg-gray-50 border border-gray-100 rounded-md px-2 py-0.5">
+                                            <Clock size={12} className="text-theme-tertiary" />
+                                            <div className="flex items-center bg-theme-hover border border-theme rounded-md px-2 py-0.5">
                                                 <input
                                                     ref={startTimeRef}
                                                     type="text"
@@ -2295,21 +2295,24 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     onChange={(e) => handleStartTimeChange(e.target.value)}
                                                     onKeyDown={(e) => { if (e.key === 'Tab') handleCustomTab(e); else e.stopPropagation(); }}
                                                     placeholder="09:00"
-                                                    className="bg-transparent border-none text-[11px] font-medium text-gray-600 focus:ring-0 outline-none p-0 w-12"
+                                                    className="bg-transparent border-none text-[11px] font-medium text-theme-primary focus:ring-0 outline-none p-0 w-12 placeholder:text-theme-tertiary"
                                                 />
                                                 {themeSettings.timeFormat === '12h' && (
-                                                    <span className="text-[9px] font-bold text-indigo-400 ml-1">
-                                                        {(() => {
-                                                            const parts = startTime.split(':');
-                                                            if (parts.length !== 2) return '';
-                                                            const h = parseInt(parts[0]);
-                                                            const m = parseInt(parts[1]);
-                                                            if (isNaN(h) || isNaN(m)) return '';
-                                                            return `${h % 12 || 12}:${String(m).padStart(2, '0')}${h < 12 ? 'AM' : 'PM'}`;
-                                                        })()}
-                                                    </span>
+                                                    <button
+                                                        onClick={() => {
+                                                            const [time, period] = startTime.split(' ');
+                                                            if (period) {
+                                                                handleStartTimeChange(`${time} ${period === 'AM' ? 'PM' : 'AM'}`);
+                                                            }
+                                                        }}
+                                                        className="text-[10px] font-bold text-theme-tertiary hover:text-theme-secondary ml-1"
+                                                    >
+                                                        {startTime.includes('PM') ? 'PM' : 'AM'}
+                                                    </button>
                                                 )}
-                                                <span className="text-gray-300 mx-1">→</span>
+                                            </div>
+                                            <span className="text-theme-tertiary text-xs">→</span>
+                                            <div className="flex items-center bg-theme-hover border border-theme rounded-md px-2 py-0.5">
                                                 <input
                                                     ref={endTimeRef}
                                                     type="text"
@@ -2317,7 +2320,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     onChange={(e) => handleEndTimeChange(e.target.value)}
                                                     onKeyDown={(e) => { if (e.key === 'Tab') handleCustomTab(e); else e.stopPropagation(); }}
                                                     placeholder="10:00"
-                                                    className="bg-transparent border-none text-[11px] font-medium text-gray-600 focus:ring-0 outline-none p-0 w-12"
+                                                    className="bg-transparent border-none text-[11px] font-medium text-theme-primary focus:ring-0 outline-none p-0 w-12 placeholder:text-theme-tertiary"
                                                 />
                                                 {themeSettings.timeFormat === '12h' && (
                                                     <span className="text-[9px] font-bold text-indigo-400 ml-1">
