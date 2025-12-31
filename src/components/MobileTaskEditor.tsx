@@ -16,7 +16,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
     const task = tasks.find((t: any) => t.id === taskId);
     const [title, setTitle] = useState(task?.title || '');
-    const [notes, setNotes] = useState((task as any)?.notes || '');
+    const [description, setDescription] = useState(task?.description || '');
     const [startDate, setStartDate] = useState<string>(task?.start_date || '');
     const [dueDate, setDueDate] = useState<string>(task?.due_date || '');
     const [selectedTags, setSelectedTags] = useState<string[]>(task?.tags || []);
@@ -38,7 +38,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     useEffect(() => {
         if (task) {
             setTitle(task.title || '');
-            setNotes((task as any)?.notes || '');
+            setDescription(task?.description || '');
             setStartDate(task.start_date || '');
             setDueDate(task.due_date || '');
             setSelectedTags(task.tags || []);
@@ -72,7 +72,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
         updateTask(taskId, {
             title: title.trim(),
-            notes,
+            description,
             start_date: startDate || null,
             due_date: dueDate || null,
             tags: selectedTags,
@@ -188,8 +188,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                     <div>
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">備註</label>
                         <textarea
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
                             onMouseDown={(e) => e.stopPropagation()}
                             placeholder="新增備註..."
                             rows={4}
@@ -205,8 +205,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={() => setActiveSection(activeSection === 'date' ? null : 'date')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'date' || startDate
-                                    ? 'border-indigo-500 bg-indigo-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-indigo-500 bg-indigo-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Calendar size={24} className={startDate ? 'text-indigo-600' : 'text-gray-400'} />
@@ -221,8 +221,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={() => setActiveSection(activeSection === 'tags' ? null : 'tags')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'tags' || selectedTags.length > 0
-                                    ? 'border-purple-500 bg-purple-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-purple-500 bg-purple-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <Tag size={24} className={selectedTags.length > 0 ? 'text-purple-600' : 'text-gray-400'} />
@@ -237,8 +237,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                             onMouseDown={(e) => e.stopPropagation()}
                             onClick={() => setActiveSection(activeSection === 'parent' ? null : 'parent')}
                             className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all ${activeSection === 'parent' || parentId
-                                    ? 'border-amber-500 bg-amber-50'
-                                    : 'border-gray-200 bg-gray-50 active:bg-gray-100'
+                                ? 'border-amber-500 bg-amber-50'
+                                : 'border-gray-200 bg-gray-50 active:bg-gray-100'
                                 }`}
                         >
                             <ChevronUp size={24} className={parentId ? 'text-amber-600' : 'text-gray-400'} />
@@ -274,8 +274,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onClick={() => setStartDate(qd.getValue())}
                                         className={`py-3 rounded-xl text-sm font-bold transition-all ${startDate === qd.getValue()
-                                                ? 'bg-indigo-600 text-white'
-                                                : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
+                                            ? 'bg-indigo-600 text-white'
+                                            : 'bg-white border border-gray-200 text-gray-700 active:bg-indigo-50'
                                             }`}
                                     >
                                         {qd.label}
@@ -328,8 +328,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                                 );
                                             }}
                                             className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                    ? 'bg-white shadow-sm border-2'
-                                                    : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                ? 'bg-white shadow-sm border-2'
+                                                : 'bg-white border border-gray-200 active:bg-gray-100'
                                                 }`}
                                             style={{ borderColor: isSelected ? tagColor : undefined }}
                                         >
@@ -379,8 +379,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                                             onMouseDown={(e) => e.stopPropagation()}
                                             onClick={() => setParentId(isSelected ? null : p.id)}
                                             className={`w-full flex items-center justify-between p-4 rounded-xl transition-all ${isSelected
-                                                    ? 'bg-white shadow-sm border-2 border-amber-500'
-                                                    : 'bg-white border border-gray-200 active:bg-gray-100'
+                                                ? 'bg-white shadow-sm border-2 border-amber-500'
+                                                : 'bg-white border border-gray-200 active:bg-gray-100'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
