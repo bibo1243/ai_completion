@@ -223,13 +223,18 @@ const AudioMarkerComponent = ({ node }: any) => {
         return null;
     }
 
+    const fileName = node.attrs.fileName;
+    const tooltipText = fileName
+        ? `🎵 ${fileName} | 點擊播放此段落`
+        : '點擊播放此段落';
+
     return (
         <NodeViewWrapper as="span" className="inline-flex items-baseline align-middle mx-0.5 select-none">
             <span
                 className="inline-flex items-center justify-center bg-slate-100 text-slate-400 border border-slate-200 px-1 py-0 rounded text-[7px] font-mono hover:bg-indigo-100 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer whitespace-nowrap"
                 contentEditable={false}
                 data-id={node.attrs.id}
-                title="點擊播放此段落"
+                title={tooltipText}
                 onClick={handleClick}
                 onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
             >
@@ -251,6 +256,7 @@ const AudioMarkerNode = Node.create({
             id: { default: null },
             time: { default: null },
             label: { default: '0:00' },
+            fileName: { default: null },
         };
     },
 
@@ -434,6 +440,29 @@ const NoteEditor: React.FC<NoteEditorProps> = ({
                 stream.getTracks().forEach(track => track.stop());
 
                 console.log("Recording stopped. Markers:", audioMarkersRef.current);
+
+                // Update all markers created during this recording with the fileName
+                if (editorRef.current) {
+                    const markerIds = new Set(audioMarkersRef.current.map(m => m.id));
+                    const { tr } = editorRef.current.state;
+                    let modified = false;
+
+                    editorRef.current.state.doc.descendants((node: any, pos: number) => {
+                        if (node.type.name === 'audioMarker' && markerIds.has(node.attrs.id)) {
+                            // Update the node's fileName attribute
+                            tr.setNodeMarkup(pos, undefined, {
+                                ...node.attrs,
+                                fileName: fileName
+                            });
+                            modified = true;
+                        }
+                    });
+
+                    if (modified) {
+                        editorRef.current.view.dispatch(tr);
+                        console.log("Updated markers with fileName:", fileName);
+                    }
+                }
 
                 if (onSaveAudioRef.current) {
                     onSaveAudioRef.current(file, [...audioMarkersRef.current]);
