@@ -129,7 +129,7 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
         onFocus={handleFocus}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border ${value ? `${textColorClass} bg-white border-transparent shadow-sm ring-1 ring-gray-100` : 'text-gray-400 border-transparent hover:bg-gray-100'} focus:outline-none focus:bg-white focus:ring-1 ${focusRingClass} ${textSizeClass} ${fontWeightClass}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-gray-200 hover:border-gray-300 hover:bg-gray-50 focus:outline-none focus:bg-white focus:ring-1 ${focusRingClass} ${textSizeClass} ${fontWeightClass} ${value ? textColorClass : 'text-gray-400'}`}
       >
         <Calendar size={13} />
         <span>{value ? getRelativeDateString(value, false, language) : label}</span>

@@ -2227,7 +2227,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 <SmartDateInput innerRef={startDateRef} label="開始日期" value={startDate || undefined} onChange={setStartDate} theme={theme} tasks={tasks} />
 
                                 {startDate && (
-                                    <div className="flex items-center gap-2 bg-theme-hover rounded-md px-2 py-1 border border-theme">
+                                    <div className="flex items-center gap-2 bg-transparent rounded-md px-2 py-1 border border-theme">
                                         <label className="flex items-center gap-2 cursor-pointer select-none">
                                             <input
                                                 ref={allDayRef}
@@ -2287,7 +2287,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     >
                                         <div className="flex items-center gap-2">
                                             <Clock size={12} className="text-theme-tertiary" />
-                                            <div className="flex items-center bg-theme-hover border border-theme rounded-md px-2 py-0.5">
+                                            <div className="flex items-center bg-transparent border border-theme rounded-md px-2 py-0.5">
                                                 <input
                                                     ref={startTimeRef}
                                                     type="text"
@@ -2312,7 +2312,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 )}
                                             </div>
                                             <span className="text-theme-tertiary text-xs">→</span>
-                                            <div className="flex items-center bg-theme-hover border border-theme rounded-md px-2 py-0.5">
+                                            <div className="flex items-center bg-transparent border border-theme rounded-md px-2 py-0.5">
                                                 <input
                                                     ref={endTimeRef}
                                                     type="text"
@@ -2346,7 +2346,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     value={duration}
                                                     onChange={(e) => handleDurationChange(e.target.value)}
                                                     onKeyDown={(e) => { if (e.key === 'Tab') handleCustomTab(e); else e.stopPropagation(); }}
-                                                    className="w-14 bg-gray-50 border border-gray-100 rounded-md px-2 py-0.5 text-[11px] font-medium text-gray-600 focus:ring-1 focus:ring-indigo-100 outline-none placeholder:text-gray-300"
+                                                    className="w-14 bg-transparent border border-theme rounded-md px-2 py-0.5 text-[11px] font-medium text-theme-primary focus:ring-1 focus:ring-indigo-100 outline-none placeholder:text-theme-tertiary"
                                                 />
                                                 <span className="absolute right-2 top-1.5 text-[8px] text-gray-400 font-bold pointer-events-none">MIN</span>
                                             </div>

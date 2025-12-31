@@ -157,7 +157,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
 
     const isFocusView = view === 'focus';
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
-    const selectionStyle = isSelected ? 'bg-indigo-100' : '';
+    const selectionStyle = isSelected ? 'bg-theme-selection' : '';
     const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-slate-50` : '';
     const completedStyle = isDone ? 'bg-emerald-50/30' : '';
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
@@ -339,7 +339,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                 <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} size={isFocusView ? 14 : 18} />
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
-                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-theme-primary'} mr-2 truncate block flex-shrink`}>{task.title}</span>
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-theme-secondary'} mr-2 truncate block flex-shrink`}>{task.title}</span>
                                 {(task.tags || []).length > 0 && (
                                     <>
                                         {/* Desktop: Full Tag Names */}

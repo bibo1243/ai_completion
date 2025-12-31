@@ -179,6 +179,18 @@
     background-color: var(--bg-main) !important;
 }
 
+.bg-theme-selection {
+    background-color: #e0e7ff !important;
+    /* bg-indigo-100 for Light Mode */
+}
+
+/* Dark Mode Selection Override */
+[data-theme='dark'] .bg-theme-selection,
+[data-theme='programmer'] .bg-theme-selection {
+    background-color: rgba(99, 102, 241, 0.2) !important;
+    /* Indigo-500 @ 20% */
+}
+
 .bg-theme-sidebar {
     background-color: var(--bg-sidebar) !important;
 }
