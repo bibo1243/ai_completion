@@ -965,7 +965,7 @@ export const ScheduleView = () => {
                                 onMouseDown={(e) => handleGridMouseDown(e, day)}
                             >
                                 {Array.from({ length: 24 }).map((_, h) => (
-                                    <div key={h} className="border-t border-theme-hover box-border w-full pointer-events-none" style={{ height: getHourHeight(h) }} />
+                                    <div key={h} className="border-t border-theme box-border w-full pointer-events-none opacity-20" style={{ height: getHourHeight(h) }} />
                                 ))}
 
                                 {/* Drag-to-Create Indicator */}

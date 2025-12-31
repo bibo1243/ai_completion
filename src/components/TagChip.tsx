@@ -22,10 +22,10 @@ export const TagChip = ({ tag, onRemove, size = 'normal' }: { tag: TagData, onRe
     const fontWeightClass = themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-normal';
 
     return (
-        <div className={`inline-flex items-center gap-1 bg-slate-50 text-slate-600 ${paddingClass} rounded-md border border-slate-200 ${textSizeClass} ${fontWeightClass}`}>
+        <div className={`inline-flex items-center gap-1 bg-theme-hover text-theme-secondary ${paddingClass} rounded-md border border-theme ${textSizeClass} ${fontWeightClass}`}>
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: tagsWithResolvedColors[tag.id] || tag.color }} />
             <span>{tag.name}</span>
-            {onRemove && <button type="button" onClick={onRemove} className="hover:text-slate-900"><X size={10} /></button>}
+            {onRemove && <button type="button" onClick={onRemove} className="hover:text-theme-primary"><X size={10} /></button>}
         </div>
     );
 };

@@ -203,8 +203,16 @@
     background-color: var(--header-bg) !important;
 }
 
+.bg-theme-hover {
+    background-color: var(--bg-hover) !important;
+}
+
 .bg-theme-hover:hover {
     background-color: var(--bg-hover) !important;
+}
+
+.border-theme-hover {
+    border-color: var(--bg-hover) !important;
 }
 
 .text-theme-primary {
