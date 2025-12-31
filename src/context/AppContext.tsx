@@ -210,6 +210,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
     }, [themeSettings.themeMode]);
 
+    // Sync font family to document for global application
+    useEffect(() => {
+        const fontFamily = themeSettings.fontFamily || 'system';
+        document.documentElement.setAttribute('data-font', fontFamily);
+    }, [themeSettings.fontFamily]);
+
     const t = useCallback((key: string) => {
         // @ts-ignore
         return translations[language][key] || key;

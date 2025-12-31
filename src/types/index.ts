@@ -97,7 +97,7 @@ export interface HistoryRecord {
 export interface ThemeSettings {
   fontWeight: 'normal' | 'thin';
   fontSize: 'small' | 'normal' | 'large';
-  fontFamily: 'system' | 'things';
+  fontFamily: 'system' | 'things' | 'serif' | 'mono' | 'rounded';
   timeFormat?: '12h' | '24h';
   showLunar?: boolean;
   showTaiwanHolidays?: boolean;
