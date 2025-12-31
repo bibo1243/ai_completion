@@ -203,11 +203,11 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         setEditingViewId(id);
                         setEditingViewName(displayLabel);
                     }}
-                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1.5 rounded-lg mb-1 md:mb-0.5 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-gray-100 text-gray-900 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 active:bg-gray-100'}`}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1.5 rounded-lg mb-1 md:mb-0.5 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-theme-hover text-theme-primary font-bold' : 'text-theme-tertiary hover:bg-theme-hover hover:text-theme-primary active:bg-theme-hover'}`}
                     title={sidebarCollapsed ? displayLabel : ''}
                 >
                     <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
-                        {Icon && <Icon size={16} className={active ? 'text-indigo-600' : 'text-gray-400'} />}
+                        {Icon && <Icon size={16} style={{ color: active ? 'var(--accent-color)' : undefined }} className={active ? '' : 'text-theme-tertiary'} />}
                         {!sidebarCollapsed && (
                             isEditing ? (
                                 <input
@@ -221,7 +221,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     }}
                                     onBlur={() => saveViewName(id, editingViewName)}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="bg-white border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-20"
+                                    className="bg-theme-card border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-20 text-theme-primary"
                                 />
                             ) : (
                                 <span>{displayLabel}</span>
@@ -598,18 +598,18 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     };
 
     return (
-        <aside className="w-full bg-[#fbfbfb] border-r border-gray-100 h-screen flex flex-col p-5 sticky top-0 overflow-hidden">
+        <aside className="w-full bg-theme-sidebar border-r border-theme h-screen flex flex-col p-5 sticky top-0 overflow-hidden">
             <div className={`mb-8 flex items-center ${sidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between px-1'} opacity-60`}>
-                {!sidebarCollapsed && <div className="flex items-center gap-2"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase">{t('appearance')}</span></div>}
+                {!sidebarCollapsed && <div className="flex items-center gap-2 text-theme-secondary"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase text-theme-tertiary">{t('appearance')}</span></div>}
                 <div className="flex items-center gap-1">
                     <button
                         onClick={() => setSearchOpen(true)}
-                        className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500"
+                        className="hover:bg-theme-hover p-1 rounded transition-colors text-theme-secondary"
                         title="搜尋 (⌘K)"
                     >
                         <Search size={18} />
                     </button>
-                    <button onClick={toggleSidebar} className="hover:bg-gray-200 p-1 rounded transition-colors text-gray-500">
+                    <button onClick={toggleSidebar} className="hover:bg-theme-hover p-1 rounded transition-colors text-theme-secondary">
                         {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
                     </button>
                 </div>

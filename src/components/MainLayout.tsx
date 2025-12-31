@@ -126,14 +126,14 @@ export const MainLayout = () => {
   };
 
   return (
-    <div data-theme={themeSettings.themeMode && themeSettings.themeMode !== 'light' ? themeSettings.themeMode : undefined} className={`flex h-screen bg-white text-gray-900 ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
+    <div data-theme={themeSettings.themeMode && themeSettings.themeMode !== 'light' ? themeSettings.themeMode : undefined} className={`flex h-screen bg-theme-main text-theme-primary ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
       {/* Desktop Sidebar */}
       <div style={{ width: sidebarCollapsed ? 64 : sidebarWidth }} className="relative flex-shrink-0 hidden md:block transition-all duration-300 ease-in-out">
         <Sidebar view={view} setView={setView} tagFilter={tagFilter} setTagFilter={setTagFilter} />
         {/* Resizer Handle */}
         {!sidebarCollapsed && (
           <div
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-400/50 transition-colors z-50"
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-theme-main/10 transition-colors z-50"
             onMouseDown={() => setIsResizing(true)}
           />
         )}
@@ -142,20 +142,20 @@ export const MainLayout = () => {
       {/* Mobile Sidebar Overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 md:hidden" onClick={() => setMobileMenuOpen(false)}>
-          <div className="absolute left-0 top-0 h-full w-[280px] bg-white shadow-2xl animate-in slide-in-from-left duration-200" onClick={e => e.stopPropagation()}>
+          <div className="absolute left-0 top-0 h-full w-[280px] bg-theme-sidebar shadow-2xl animate-in slide-in-from-left duration-200" onClick={e => e.stopPropagation()}>
             <Sidebar view={view} setView={(v: any) => { setView(v); setMobileMenuOpen(false); }} tagFilter={tagFilter} setTagFilter={(t: any) => { setTagFilter(t); setMobileMenuOpen(false); }} />
           </div>
         </div>
       )}
 
-      <main className="flex-1 flex flex-col relative overflow-hidden">
-        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-gray-50 z-40 sticky top-0 bg-white/90 backdrop-blur-sm">
+      <main className="flex-1 flex flex-col relative overflow-hidden bg-theme-main">
+        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-theme z-40 sticky top-0 bg-theme-header backdrop-blur-sm">
           {/* Left: Menu & Title */}
           <div className="flex items-center gap-2 md:gap-4">
-            <button className="md:hidden p-1 -ml-2 text-gray-500 hover:bg-gray-100 rounded" onClick={() => setMobileMenuOpen(true)}>
+            <button className="md:hidden p-1 -ml-2 text-theme-secondary hover:bg-theme-hover rounded" onClick={() => setMobileMenuOpen(true)}>
               <Menu size={20} />
             </button>
-            {canNavigateBack ? (<button onClick={navigateBack} className="p-1 hover:bg-gray-100 rounded text-slate-500 flex items-center gap-1 text-sm font-medium transition-colors" title="返回 (Alt + Left)"> <CornerUpLeft size={16} /> <span className="hidden md:inline">返回</span> </button>) : (<h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-gray-800`}>{getHeaderTitle()}</h2>)}
+            {canNavigateBack ? (<button onClick={navigateBack} className="p-1 hover:bg-theme-hover rounded text-theme-secondary flex items-center gap-1 text-sm font-medium transition-colors" title="返回 (Alt + Left)"> <CornerUpLeft size={16} /> <span className="hidden md:inline">返回</span> </button>) : (<h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-theme-primary`}>{getHeaderTitle()}</h2>)}
           </div>
 
           {/* Right: Tools, User, Sync */}

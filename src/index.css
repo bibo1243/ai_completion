@@ -9,106 +9,125 @@
     --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
     --safe-area-inset-left: env(safe-area-inset-left, 0px);
     --safe-area-inset-right: env(safe-area-inset-right, 0px);
+}
 
-    /* Default Light Theme Variables */
-    --bg-primary: #ffffff;
-    --bg-secondary: #f9fafb;
-    --bg-tertiary: #f3f4f6;
+/* Default Light Theme Variables */
+:root {
+    --bg-main: #ffffff;
+    --bg-sidebar: #f9fafb;
+    /* gray-50 */
+    --bg-card: #f9fafb;
+    --bg-hover: #f3f4f6;
+    /* gray-100 */
     --text-primary: #111827;
+    /* gray-900 */
     --text-secondary: #4b5563;
+    /* gray-600 */
     --text-tertiary: #9ca3af;
+    /* gray-400 */
     --border-color: #e5e7eb;
+    /* gray-200 */
+    --accent-color: #6366f1;
+    /* indigo-500 */
+    --header-bg: rgba(255, 255, 255, 0.9);
 }
 
+/* Dark Theme (Eye Protection) */
 [data-theme='dark'] {
-    /* Dark Theme (Eye Protection) - Warm Dark */
-    --bg-primary: #1c1c1e;
-    --bg-secondary: #2c2c2e;
-    --bg-tertiary: #3a3a3c;
-    --text-primary: #e5e5e7;
-    --text-secondary: #aeaeb2;
-    --text-tertiary: #636366;
-    --border-color: #38383a;
+    --bg-main: #18181b;
+    /* zinc-950 */
+    --bg-sidebar: #27272a;
+    /* zinc-800 */
+    --bg-card: #27272a;
+    --bg-hover: #3f3f46;
+    /* zinc-700 */
+    --text-primary: #f4f4f5;
+    /* zinc-100 */
+    --text-secondary: #a1a1aa;
+    /* zinc-400 */
+    --text-tertiary: #71717a;
+    /* zinc-500 */
+    --border-color: #3f3f46;
+    /* zinc-700 */
+    --accent-color: #818cf8;
+    /* indigo-400 */
+    --header-bg: rgba(24, 24, 27, 0.9);
 }
 
+/* Programmer Theme (VSCode/GitHub Dark style) */
 [data-theme='programmer'] {
-    /* Programmer Theme (Antigravity/GitHub Dark) */
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-tertiary: #21262d;
+    --bg-main: #0d1117;
+    /* GitHub Dark bg */
+    --bg-sidebar: #010409;
+    /* GitHub Dark sidebar */
+    --bg-card: #161b22;
+    --bg-hover: #21262d;
     --text-primary: #c9d1d9;
     --text-secondary: #8b949e;
     --text-tertiary: #484f58;
     --border-color: #30363d;
+    --accent-color: #58a6ff;
+    /* GitHub Blue */
+    --header-bg: rgba(13, 17, 23, 0.9);
 }
 
-/* Theme Overrides - Hijack Tailwind Classes when theme is active */
-[data-theme] .bg-white {
-    background-color: var(--bg-primary) !important;
+/* Semantic Classes for Layout */
+.bg-theme-main {
+    background-color: var(--bg-main) !important;
 }
 
-[data-theme] .bg-gray-50 {
-    background-color: var(--bg-secondary) !important;
+.bg-theme-sidebar {
+    background-color: var(--bg-sidebar) !important;
 }
 
-[data-theme] .bg-gray-100 {
-    background-color: var(--bg-tertiary) !important;
+.bg-theme-card {
+    background-color: var(--bg-card) !important;
 }
 
-[data-theme] .bg-slate-50 {
-    background-color: var(--bg-secondary) !important;
+.bg-theme-header {
+    background-color: var(--header-bg) !important;
 }
 
-[data-theme] .border-gray-50,
-[data-theme] .border-gray-100,
-[data-theme] .border-gray-200,
-[data-theme] .border-slate-100,
-[data-theme] .border-slate-200 {
-    border-color: var(--border-color) !important;
+.bg-theme-hover:hover {
+    background-color: var(--bg-hover) !important;
 }
 
-[data-theme] .text-gray-900,
-[data-theme] .text-gray-800,
-[data-theme] .text-slate-800 {
+.text-theme-primary {
     color: var(--text-primary) !important;
 }
 
-[data-theme] .text-gray-600,
-[data-theme] .text-gray-700,
-[data-theme] .text-slate-600,
-[data-theme] .text-slate-700 {
+.text-theme-secondary {
     color: var(--text-secondary) !important;
 }
 
-[data-theme] .text-gray-500,
-[data-theme] .text-gray-400,
-[data-theme] .text-slate-500,
-[data-theme] .text-slate-400 {
+.text-theme-tertiary {
     color: var(--text-tertiary) !important;
 }
 
-[data-theme] .hover\:bg-gray-100:hover {
-    background-color: var(--bg-tertiary) !important;
+.border-theme {
+    border-color: var(--border-color) !important;
 }
 
-[data-theme] .hover\:bg-gray-200:hover {
-    background-color: var(--bg-tertiary) !important;
+/* Global Base Styles override */
+[data-theme] body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
 }
 
-[data-theme] .group:hover .group-hover\:bg-gray-100 {
-    background-color: var(--bg-tertiary) !important;
-}
-
-/* Input overrides for dark themes */
+/* Force Input/Select/Textarea styles in dark modes */
 [data-theme] input,
 [data-theme] select,
 [data-theme] textarea {
-    background-color: var(--bg-secondary) !important;
+    background-color: var(--bg-card) !important;
     color: var(--text-primary) !important;
     border-color: var(--border-color) !important;
 }
 
-/* Popover/Modal overrides */
+/* Fix popovers and modals */
+[data-theme] .bg-white {
+    background-color: var(--bg-card) !important;
+}
+
 [data-theme] .shadow-xl,
 [data-theme] .shadow-2xl {
     box-shadow: 0 0 0 1px var(--border-color), 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
