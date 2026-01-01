@@ -27,7 +27,7 @@ interface TagTreeItem {
 }
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter } = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId } = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
@@ -389,6 +389,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         setTagFilter(id);
         setView('all');
         setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
+        setFocusedTaskId(null);
     };
 
     const handleTagKeyDown = (e: React.KeyboardEvent, id: string) => {
@@ -434,6 +435,13 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             nextEl.focus();
             const nextId = nextEl.getAttribute('data-tag-id');
             if (nextId) activateTag(nextId);
+        }
+
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (visibleTasks.length > 0) {
+                setFocusedTaskId(visibleTasks[0].data.id);
+            }
         }
 
         if (e.key === 'Enter') {
