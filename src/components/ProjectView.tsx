@@ -440,7 +440,7 @@ export const ProjectView = () => {
                 >
                     <button
                         onClick={() => setSelectedProjectId(null)}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-theme-secondary hover:text-gray-700 transition-colors"
+                        className="p-2 rounded-lg bg-transparent hover:bg-theme-hover text-theme-secondary hover:text-theme-primary transition-colors"
                         title="返回專案總覽"
                     >
                         <ArrowLeft size={20} />
@@ -459,7 +459,7 @@ export const ProjectView = () => {
                     {/* Edit Root Task Button */}
                     <button
                         onClick={() => setEditingTaskId(selectedProjectId)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600 hover:text-theme-primary transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-theme-hover hover:bg-theme-card rounded-lg text-sm text-theme-secondary hover:text-theme-primary transition-colors"
                         title="編輯專案"
                     >
                         <Edit3 size={14} />
@@ -515,7 +515,7 @@ export const ProjectView = () => {
                                             e.stopPropagation();
                                             setNotesExpanded(false);
                                         }}
-                                        className="absolute bottom-2 right-6 p-1.5 rounded-full bg-theme-main/80 hover:bg-theme-hover text-gray-400 hover:text-gray-600 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-medium backdrop-blur-sm z-10 border border-theme shadow-sm"
+                                        className="absolute bottom-2 right-6 p-1.5 rounded-full bg-theme-main/80 hover:bg-theme-hover text-gray-400 hover:text-theme-secondary transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-medium backdrop-blur-sm z-10 border border-theme shadow-sm"
                                         title="收合備註"
                                     >
                                         <ChevronRight size={14} className="-rotate-90" />
@@ -551,7 +551,7 @@ export const ProjectView = () => {
                         {/* Close button for overlay if needed, though TaskInput usually has one */}
                         <button
                             onClick={() => setEditingTaskId(null)}
-                            className="absolute top-6 right-6 p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+                            className="absolute top-6 right-6 p-2 text-gray-400 hover:text-theme-secondary rounded-full hover:bg-theme-hover transition-colors"
                         >
                             <X size={24} />
                         </button>
@@ -613,7 +613,7 @@ export const ProjectView = () => {
             <div className="flex-1 overflow-y-auto p-6">
                 {projects.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                        <div className="w-24 h-24 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
+                        <div className="w-24 h-24 bg-theme-hover rounded-2xl flex items-center justify-center mb-4">
                             <Image size={40} className="opacity-30" />
                         </div>
                         <p className="text-lg font-medium">尚無專案</p>
@@ -753,7 +753,7 @@ const ProjectCard = ({ project, size, tags, onClick, fontFamilyClass }: ProjectC
                                 {projectTags.map(tag => (
                                     <span
                                         key={tag.id}
-                                        className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-600"
+                                        className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-theme-hover text-theme-secondary"
                                     >
                                         #{tag.name}
                                     </span>
