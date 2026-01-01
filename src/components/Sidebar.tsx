@@ -384,6 +384,13 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         }
     };
 
+    const activateTag = (id: string) => {
+        if (editingTagId) return;
+        setTagFilter(id);
+        setView('all');
+        setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
+    };
+
     const handleTagKeyDown = (e: React.KeyboardEvent, id: string) => {
         if (editingTagId === id) return;
 
@@ -405,7 +412,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     setExpandedTags(prev => prev.filter(tid => tid !== id));
                 } else if (tag.parent_id) {
                     const parentEl = document.querySelector(`[data-tag-id="${tag.parent_id}"]`) as HTMLElement;
-                    if (parentEl) parentEl.focus();
+                    if (parentEl) {
+                        parentEl.focus();
+                        activateTag(tag.parent_id);
+                    }
                 }
             }
         }
@@ -420,7 +430,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 ? (currentIndex + 1) % allTags.length
                 : (currentIndex - 1 + allTags.length) % allTags.length;
 
-            (allTags[nextIndex] as HTMLElement).focus();
+            const nextEl = allTags[nextIndex] as HTMLElement;
+            nextEl.focus();
+            const nextId = nextEl.getAttribute('data-tag-id');
+            if (nextId) activateTag(nextId);
         }
 
         if (e.key === 'Enter') {
@@ -456,14 +469,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onDragOver={(e) => handleDragOver(e, tag.id)}
                     onDrop={(e) => handleDrop(e, tag.id)}
                     onDragLeave={() => setDropTarget(null)}
-                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-tertiary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
+                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all select-none ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-tertiary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
                     style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 6 + 6}px` }}
                     onClick={() => {
-                        if (!isEditing) {
-                            setTagFilter(tag.id);
-                            setView('all');
-                            setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
-                        }
+                        if (!isEditing) activateTag(tag.id);
                     }}
                     onDoubleClick={(e) => {
                         e.stopPropagation();
