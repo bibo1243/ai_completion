@@ -426,6 +426,25 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             const tag = tags.find((t: any) => t.id === id);
+            if (tag) {
+                // If tag has children, toggle expand; otherwise start editing
+                const hasChildren = tags.some((t: any) => t.parent_id === id);
+                if (hasChildren) {
+                    if (expandedTags.includes(id)) {
+                        setExpandedTags(prev => prev.filter(tid => tid !== id));
+                    } else {
+                        setExpandedTags(prev => [...prev, id]);
+                    }
+                } else {
+                    startEditing(tag);
+                }
+            }
+        }
+
+        // F2 key for renaming (alternative to Enter for tags with children)
+        if (e.key === 'F2') {
+            e.preventDefault();
+            const tag = tags.find((t: any) => t.id === id);
             if (tag) startEditing(tag);
         }
 
@@ -489,7 +508,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         </div>
                     ) : (
                         <>
-                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.85 } : undefined}>{tag.name}</span>}
+                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.5 } : undefined}>{tag.name}</span>}
                             {!sidebarCollapsed && (
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
