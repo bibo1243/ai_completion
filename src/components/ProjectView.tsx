@@ -470,12 +470,12 @@ export const ProjectView = () => {
                 {/* Collapsible Notes Section */}
                 {selectedProject.description && (
                     <div
-                        className="border-b bg-slate-50/80"
+                        className="border-b bg-theme-hover"
                         style={{ borderBottomColor: theme.color + '30' }}
                     >
                         {/* Notes Header */}
                         <div
-                            className="flex items-center gap-2 px-6 py-1 cursor-pointer hover:bg-slate-100 transition-colors"
+                            className="flex items-center gap-2 px-6 py-1 cursor-pointer hover:bg-theme-card transition-colors"
                             onClick={() => setNotesExpanded(!notesExpanded)}
                         >
                             <motion.div
@@ -507,7 +507,7 @@ export const ProjectView = () => {
                                         editable={true}
                                         descFontClass="font-extralight"
                                         textSizeClass="text-sm"
-                                        className="min-h-full pb-8"
+                                        className="min-h-full pb-8 text-theme-secondary"
                                     />
 
                                     <button
@@ -515,7 +515,7 @@ export const ProjectView = () => {
                                             e.stopPropagation();
                                             setNotesExpanded(false);
                                         }}
-                                        className="absolute bottom-2 right-6 p-1.5 rounded-full bg-gray-100/80 hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-medium backdrop-blur-sm z-10 border border-gray-200/50 shadow-sm"
+                                        className="absolute bottom-2 right-6 p-1.5 rounded-full bg-theme-main/80 hover:bg-theme-hover text-gray-400 hover:text-gray-600 transition-all opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs font-medium backdrop-blur-sm z-10 border border-theme shadow-sm"
                                         title="收合備註"
                                     >
                                         <ChevronRight size={14} className="-rotate-90" />
