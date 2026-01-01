@@ -426,25 +426,6 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             const tag = tags.find((t: any) => t.id === id);
-            if (tag) {
-                // If tag has children, toggle expand; otherwise start editing
-                const hasChildren = tags.some((t: any) => t.parent_id === id);
-                if (hasChildren) {
-                    if (expandedTags.includes(id)) {
-                        setExpandedTags(prev => prev.filter(tid => tid !== id));
-                    } else {
-                        setExpandedTags(prev => [...prev, id]);
-                    }
-                } else {
-                    startEditing(tag);
-                }
-            }
-        }
-
-        // F2 key for renaming (alternative to Enter for tags with children)
-        if (e.key === 'F2') {
-            e.preventDefault();
-            const tag = tags.find((t: any) => t.id === id);
             if (tag) startEditing(tag);
         }
 
@@ -483,6 +464,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                             setView('all');
                             setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
                         }
+                    }}
+                    onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        startEditing(tag);
                     }}
                     tabIndex={0}
                     onKeyDown={(e) => handleTagKeyDown(e, tag.id)}
