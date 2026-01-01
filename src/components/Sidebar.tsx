@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layout, Hash, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -489,8 +489,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         </div>
                     ) : (
                         <>
-                            <Hash size={10} style={{ color: tagsWithResolvedColors[tag.id] || '#94a3b8' }} />
-                            {!sidebarCollapsed && <span className="truncate flex-1 text-left">{tag.name}</span>}
+                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.85 } : undefined}>{tag.name}</span>}
                             {!sidebarCollapsed && (
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
