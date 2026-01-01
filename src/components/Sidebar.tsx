@@ -477,7 +477,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onDragOver={(e) => handleDragOver(e, tag.id)}
                     onDrop={(e) => handleDrop(e, tag.id)}
                     onDragLeave={() => setDropTarget(null)}
-                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all select-none ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-tertiary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
+                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all select-none outline-none ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-tertiary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
                     style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 6 + 6}px` }}
                     onClick={() => {
                         if (!isEditing) activateTag(tag.id);
