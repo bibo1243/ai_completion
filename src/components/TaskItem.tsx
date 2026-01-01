@@ -8,7 +8,7 @@ import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
 export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
-    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast } = useContext(AppContext);
+    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +58,17 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             e.preventDefault(); e.stopPropagation();
             if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
             if (e.shiftKey) {
+                // If at root level and Tag Filter is active, move focus back to Tag
+                if (flatTask.depth === 0 && tagFilter) {
+                    const tagEl = document.querySelector(`[data-tag-id="${tagFilter}"]`) as HTMLElement;
+                    if (tagEl) {
+                        tagEl.focus();
+                        setFocusedTaskId(null);
+                        setSelectedTaskIds([]);
+                        return;
+                    }
+                }
+
                 if (canNavigateBack) { navigateBack(); }
                 else { keyboardMove(task.id, 'left'); }
             } else {
