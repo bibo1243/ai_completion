@@ -210,13 +210,13 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -20 }}
                     transition={{ duration: 0.2 }}
-                    className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden"
+                    className="w-full max-w-2xl bg-theme-card rounded-2xl shadow-2xl overflow-hidden"
                     onClick={e => e.stopPropagation()}
                 >
                     {/* Search Header */}
-                    <div className="p-4 border-b border-gray-100">
-                        <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-                            <Search size={20} className="text-gray-400" />
+                    <div className="p-4 border-b border-theme">
+                        <div className="flex items-center gap-3 bg-theme-hover rounded-xl px-4 py-3">
+                            <Search size={20} className="text-theme-tertiary" />
                             <input
                                 ref={inputRef}
                                 type="text"
@@ -224,10 +224,10 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                 onChange={e => setQuery(e.target.value)}
                                 onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
                                 placeholder="搜尋任務..."
-                                className="flex-1 bg-transparent outline-none text-gray-700 placeholder-gray-400"
+                                className="flex-1 bg-transparent outline-none text-theme-primary placeholder-theme-tertiary"
                             />
                             {query && (
-                                <button onClick={() => setQuery('')} className="text-gray-400 hover:text-gray-600">
+                                <button onClick={() => setQuery('')} className="text-theme-tertiary hover:text-theme-primary">
                                     <X size={18} />
                                 </button>
                             )}
@@ -237,7 +237,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                         <div className="flex items-center gap-2 mt-3">
                             <button
                                 onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-100 text-indigo-700' : 'bg-theme-hover text-theme-secondary hover:bg-theme-hover/80'
                                     }`}
                             >
                                 {showFilters ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -251,7 +251,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                             {/* History Button */}
                             <button
                                 onClick={() => { setQuery(''); setFilters({ tags: [], startDate: null, endDate: null, colors: [] }); }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-theme-hover text-theme-secondary hover:bg-theme-hover/80 transition-colors"
                             >
                                 <Clock size={14} />
                                 歷史
@@ -264,7 +264,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                             {hasActiveFilters && (
                                 <button
                                     onClick={clearFilters}
-                                    className="text-xs text-gray-500 hover:text-gray-700"
+                                    className="text-xs text-theme-tertiary hover:text-theme-primary"
                                 >
                                     清除篩選
                                 </button>
@@ -283,7 +283,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                     {/* Tags */}
                                     <div>
                                         <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                                            <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
                                                 <Tag size={12} />
                                                 標籤
                                                 {filters.tags.length > 0 && (
@@ -294,17 +294,17 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                             </div>
                                             {/* AND/OR Toggle */}
                                             {filters.tags.length > 1 && (
-                                                <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+                                                <div className="flex items-center bg-theme-hover rounded-lg p-0.5">
                                                     <button
                                                         onClick={() => setTagMode('or')}
-                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'or' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'
+                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'or' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
                                                             }`}
                                                     >
                                                         或 OR
                                                     </button>
                                                     <button
                                                         onClick={() => setTagMode('and')}
-                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'and' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'
+                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'and' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
                                                             }`}
                                                     >
                                                         且 AND
@@ -320,9 +320,9 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                 value={tagSearch}
                                                 onChange={e => setTagSearch(e.target.value)}
                                                 placeholder="搜尋標籤..."
-                                                className="w-full px-3 py-1.5 bg-gray-50 rounded-lg text-xs border-0 focus:ring-2 focus:ring-indigo-500 pl-8"
+                                                className="w-full px-3 py-1.5 bg-theme-hover rounded-lg text-xs border-0 focus:ring-2 focus:ring-indigo-500 pl-8 text-theme-primary"
                                             />
-                                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-theme-tertiary" />
                                         </div>
 
                                         {/* Selected Tags */}
@@ -354,7 +354,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                         <button
                                                             key={tag.id}
                                                             onClick={() => toggleTag(tag.id)}
-                                                            className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 hover:bg-gray-100 rounded-lg text-xs text-gray-700 transition-colors text-left"
+                                                            className="flex items-center gap-1.5 px-2 py-1.5 bg-theme-hover hover:bg-theme-hover/80 rounded-lg text-xs text-theme-secondary transition-colors text-left"
                                                         >
                                                             <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
                                                             <span className="truncate">{tag.name}</span>
@@ -362,7 +362,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                     ))}
                                             </div>
                                             {tags.filter(tag => !filters.tags.includes(tag.id)).filter(tag => !tagSearch || tag.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
-                                                <div className="text-center text-xs text-gray-400 py-2">
+                                                <div className="text-center text-xs text-theme-tertiary py-2">
                                                     找不到符合的標籤
                                                 </div>
                                             )}
@@ -372,7 +372,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                     {/* Date Range */}
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                                            <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
                                                 <Calendar size={12} />
                                                 日期區間
                                                 {(filters.startDate || filters.endDate) && (
@@ -396,14 +396,14 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                 type="date"
                                                 value={filters.startDate || ''}
                                                 onChange={e => setFilters(prev => ({ ...prev, startDate: e.target.value || null }))}
-                                                className="px-3 py-1.5 rounded-lg bg-gray-100 text-xs border-0 focus:ring-2 focus:ring-indigo-500"
+                                                className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
                                             />
-                                            <span className="text-gray-400">至</span>
+                                            <span className="text-theme-tertiary">至</span>
                                             <input
                                                 type="date"
                                                 value={filters.endDate || ''}
                                                 onChange={e => setFilters(prev => ({ ...prev, endDate: e.target.value || null }))}
-                                                className="px-3 py-1.5 rounded-lg bg-gray-100 text-xs border-0 focus:ring-2 focus:ring-indigo-500"
+                                                className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
                                             />
                                             {(filters.startDate || filters.endDate) && (
                                                 <button
@@ -419,7 +419,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
 
                                     {/* Colors */}
                                     <div>
-                                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-2">
+                                        <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-2">
                                             <Palette size={12} />
                                             顏色
                                         </div>
@@ -444,7 +444,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                         {searchResults.length > 0 ? (
                             <div className="p-4">
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-medium text-gray-500">
+                                    <span className="text-xs font-medium text-theme-secondary">
                                         找到 {searchResults.length} 個結果
                                     </span>
                                     {!showSaveInput ? (
@@ -462,7 +462,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                 value={saveName}
                                                 onChange={e => setSaveName(e.target.value)}
                                                 placeholder="輸入名稱..."
-                                                className="px-2 py-1 text-xs border rounded-lg w-32"
+                                                className="px-2 py-1 text-xs border rounded-lg w-32 bg-theme-hover text-theme-primary border-theme"
                                                 autoFocus
                                             />
                                             <button
@@ -473,7 +473,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                             </button>
                                             <button
                                                 onClick={() => { setShowSaveInput(false); setSaveName(''); }}
-                                                className="p-1 text-gray-400 hover:text-gray-600"
+                                                className="p-1 text-theme-tertiary hover:text-theme-primary"
                                             >
                                                 <X size={14} />
                                             </button>
@@ -494,7 +494,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                         };
 
                                         return (
-                                            <div key={task.id} className="rounded-xl hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
+                                            <div key={task.id} className="rounded-xl hover:bg-theme-hover transition-colors border border-transparent hover:border-theme">
                                                 {isEditing ? (
                                                     <TaskInput
                                                         initialData={task}
@@ -505,12 +505,16 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                         <div className="flex items-start gap-3">
                                                             <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${COLOR_CLASSES[task.color]}`} />
                                                             <div className="flex-1 min-w-0">
-                                                                <div className="font-medium text-gray-800">
+                                                                <div className="font-medium text-theme-primary">
                                                                     <HighlightText text={task.title} query={query} />
                                                                 </div>
                                                                 {task.description && (
-                                                                    <div className="text-sm text-gray-500 mt-1 max-h-20 overflow-y-auto">
-                                                                        <HighlightText text={task.description} query={query} />
+                                                                    <div className="text-sm text-theme-secondary mt-1 max-h-20 overflow-y-auto">
+                                                                        {/* Strip HTML tags for clean display */}
+                                                                        <HighlightText
+                                                                            text={task.description.replace(/<[^>]*>/g, '')}
+                                                                            query={query}
+                                                                        />
                                                                     </div>
                                                                 )}
                                                                 {task.tags.length > 0 && (
@@ -518,7 +522,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                                         {task.tags.map(tagId => {
                                                                             const tag = tags.find(t => t.id === tagId);
                                                                             return tag ? (
-                                                                                <span key={tagId} className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px]">
+                                                                                <span key={tagId} className="px-2 py-0.5 bg-theme-hover text-theme-secondary rounded-full text-[10px]">
                                                                                     {tag.name}
                                                                                 </span>
                                                                             ) : null;
@@ -528,21 +532,21 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                                             </div>
                                                             <div className="flex flex-col items-end gap-1 flex-shrink-0">
                                                                 {formattedDate && (
-                                                                    <span className="text-xs text-gray-400">
+                                                                    <span className="text-xs text-theme-tertiary">
                                                                         {formattedDate}
                                                                     </span>
                                                                 )}
                                                                 <div className="flex items-center gap-1">
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }}
-                                                                        className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                                        className="p-1 text-theme-tertiary hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
                                                                         title="編輯"
                                                                     >
                                                                         <Check size={14} />
                                                                     </button>
                                                                     <button
                                                                         onClick={(e) => { e.stopPropagation(); goToTask(); }}
-                                                                        className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                                        className="p-1 text-theme-tertiary hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                                                                         title="前往任務"
                                                                     >
                                                                         <ExternalLink size={14} />
@@ -558,13 +562,13 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                 </div>
                             </div>
                         ) : query || hasActiveFilters ? (
-                            <div className="p-8 text-center text-gray-400">
+                            <div className="p-8 text-center text-theme-tertiary">
                                 <Search size={32} className="mx-auto mb-2 opacity-50" />
                                 <p>沒有找到符合的任務</p>
                             </div>
                         ) : searchHistory.length > 0 ? (
                             <div className="p-4">
-                                <div className="flex items-center gap-2 text-xs font-medium text-gray-500 mb-3">
+                                <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-3">
                                     <Clock size={12} />
                                     搜尋歷史
                                 </div>
@@ -572,16 +576,16 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                     {searchHistory.map(item => (
                                         <div
                                             key={item.id}
-                                            className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 group"
+                                            className="flex items-center justify-between p-2 rounded-lg hover:bg-theme-hover group"
                                         >
                                             <button
                                                 onClick={() => loadHistoryItem(item)}
                                                 className="flex-1 text-left"
                                             >
-                                                <div className="font-medium text-gray-700 text-sm">
+                                                <div className="font-medium text-theme-primary text-sm">
                                                     {item.name || item.query || '(無關鍵字)'}
                                                 </div>
-                                                <div className="text-xs text-gray-400 mt-0.5">
+                                                <div className="text-xs text-theme-tertiary mt-0.5">
                                                     {new Date(item.created_at).toLocaleDateString()}
                                                     {item.filters.tags.length > 0 && ` · ${item.filters.tags.length} 個標籤`}
                                                     {item.filters.colors.length > 0 && ` · ${item.filters.colors.length} 個顏色`}
@@ -589,7 +593,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                             </button>
                                             <button
                                                 onClick={() => deleteSearchHistory(item.id)}
-                                                className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="p-1 text-theme-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
@@ -598,7 +602,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                 </div>
                             </div>
                         ) : (
-                            <div className="p-8 text-center text-gray-400">
+                            <div className="p-8 text-center text-theme-tertiary">
                                 <Search size={32} className="mx-auto mb-2 opacity-50" />
                                 <p>輸入關鍵字開始搜尋</p>
                             </div>
@@ -606,10 +610,10 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                     </div>
 
                     {/* Footer */}
-                    <div className="p-3 border-t border-gray-100 bg-gray-50 flex justify-between items-center text-xs text-gray-400">
+                    <div className="p-3 border-t border-theme bg-theme-hover flex justify-between items-center text-xs text-theme-tertiary">
                         <div className="flex items-center gap-4">
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded">Enter</kbd> 搜尋</span>
-                            <span><kbd className="px-1.5 py-0.5 bg-gray-200 rounded">Esc</kbd> 關閉</span>
+                            <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Enter</kbd> 搜尋</span>
+                            <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Esc</kbd> 關閉</span>
                         </div>
                     </div>
                 </motion.div>
