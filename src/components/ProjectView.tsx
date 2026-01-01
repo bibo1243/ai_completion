@@ -329,11 +329,11 @@ export const ProjectView = () => {
     }, [isResizingNotes, notesHeight, selectedProjectId]);
 
     // Color extraction for header gradient
-    const [headerGradient, setHeaderGradient] = useState<string>('white');
+    const [headerGradient, setHeaderGradient] = useState<string | null>(null);
 
     useEffect(() => {
         if (!selectedProject) {
-            setHeaderGradient('white');
+            setHeaderGradient(null);
             return;
         }
 
@@ -342,7 +342,7 @@ export const ProjectView = () => {
             : (selectedProject as any).cover_image;
 
         if (!coverImage) {
-            setHeaderGradient('white');
+            setHeaderGradient(null);
             return;
         }
 
@@ -409,15 +409,15 @@ export const ProjectView = () => {
 
                     setHeaderGradient(`linear-gradient(135deg, rgba(${c1}, 0.25) 0%, rgba(${c2}, 0.2) 100%)`);
                 } else {
-                    setHeaderGradient('white');
+                    setHeaderGradient(null);
                 }
             } catch (e) {
                 console.warn("Gradient extraction failed:", e);
-                setHeaderGradient('white');
+                setHeaderGradient(null);
             }
         };
 
-        img.onerror = () => setHeaderGradient('white');
+        img.onerror = () => setHeaderGradient(null);
 
     }, [selectedProject]);
 
@@ -432,10 +432,10 @@ export const ProjectView = () => {
             <div className="flex flex-col h-full bg-theme-main">
                 {/* Header */}
                 <div
-                    className="flex items-center gap-4 px-6 py-4 border-b relative transition-[background] duration-500"
+                    className="flex items-center gap-4 px-6 py-4 border-b relative transition-[background] duration-500 bg-theme-header"
                     style={{
                         borderBottomColor: theme.color + '30',
-                        background: headerGradient
+                        backgroundImage: headerGradient || 'none'
                     }}
                 >
                     <button
