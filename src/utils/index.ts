@@ -56,23 +56,24 @@ export const isSameDay = (d1: Date, d2: Date) => d1.getFullYear() === d2.getFull
 export const isToday = (dateStr: string | null) => dateStr ? isSameDay(new Date(dateStr), new Date()) : false;
 export const isOverdue = (dateStr: string | null) => dateStr ? new Date(dateStr).getTime() < new Date().setHours(0, 0, 0, 0) : false;
 
+/**
+ * Check if targetId is a descendant (child, grandchild, etc.) of potentialParentId
+ * Used to prevent circular parent-child relationships
+ */
 export const isDescendant = (potentialParentId: string | null, targetId: string, allTasks: TaskData[]): boolean => {
   if (!potentialParentId) return false;
-  if (potentialParentId === targetId) return true;
-  const parent = allTasks.find(t => t.id === potentialParentId);
-  if (!parent) return false;
-  return isDescendant(parent.parent_id, targetId, allTasks);
-};
 
-/**
- * Check if targetId is a descendant of ancestorId (checking downward in hierarchy)
- * This is used to prevent selecting a task's own children as its parent
- */
-export const isDescendantOf = (ancestorId: string, targetId: string, allTasks: TaskData[]): boolean => {
-  if (ancestorId === targetId) return true;
-  const target = allTasks.find(t => t.id === targetId);
-  if (!target || !target.parent_id) return false;
-  return isDescendantOf(ancestorId, target.parent_id, allTasks);
+  // Get direct children of potentialParentId
+  const children = allTasks.filter(t => t.parent_id === potentialParentId);
+
+  for (const child of children) {
+    // If targetId is a direct child, it's a descendant
+    if (child.id === targetId) return true;
+    // Recursively check if targetId is a descendant of this child
+    if (isDescendant(child.id, targetId, allTasks)) return true;
+  }
+
+  return false;
 };
 
 /**
