@@ -429,7 +429,7 @@ export const ProjectView = () => {
 
 
         return (
-            <div className="flex flex-col h-full bg-white">
+            <div className="flex flex-col h-full bg-theme-main">
                 {/* Header */}
                 <div
                     className="flex items-center gap-4 px-6 py-4 border-b relative transition-[background] duration-500"
@@ -440,13 +440,13 @@ export const ProjectView = () => {
                 >
                     <button
                         onClick={() => setSelectedProjectId(null)}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+                        className="p-2 rounded-lg hover:bg-gray-100 text-theme-secondary hover:text-gray-700 transition-colors"
                         title="返回專案總覽"
                     >
                         <ArrowLeft size={20} />
                     </button>
                     <div className="flex-1 min-w-0">
-                        <h1 className={`text-xl font-bold text-gray-800 ${fontFamilyClass} truncate`}>
+                        <h1 className={`text-xl font-bold text-theme-primary ${fontFamilyClass} truncate`}>
                             {selectedProject.title}
                         </h1>
                     </div>
@@ -459,7 +459,7 @@ export const ProjectView = () => {
                     {/* Edit Root Task Button */}
                     <button
                         onClick={() => setEditingTaskId(selectedProjectId)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600 hover:text-theme-primary transition-colors"
                         title="編輯專案"
                     >
                         <Edit3 size={14} />
@@ -541,7 +541,7 @@ export const ProjectView = () => {
 
                 {/* Root Task Editor Modal - Simplified Overlay */}
                 {editingTaskId === selectedProjectId && selectedProject && (
-                    <div className="fixed inset-0 z-50 flex items-start justify-center bg-white/95 backdrop-blur-sm overflow-y-auto pt-20">
+                    <div className="fixed inset-0 z-50 flex items-start justify-center bg-theme-main/95 backdrop-blur-sm overflow-y-auto pt-20">
                         <div className="w-full max-w-3xl px-4 pb-20">
                             <TaskInput
                                 initialData={selectedProject}
@@ -582,14 +582,14 @@ export const ProjectView = () => {
 
     // Gallery View
     return (
-        <div className="flex flex-col h-full bg-gradient-to-br from-slate-50 to-gray-100">
+        <div className="flex flex-col h-full bg-theme-main">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-sm border-b border-gray-200/50">
+            <div className="flex items-center justify-between px-6 py-4 bg-theme-header backdrop-blur-sm border-b border-gray-200/50">
                 <div>
-                    <h1 className={`text-xl font-bold text-gray-800 ${fontFamilyClass}`}>
+                    <h1 className={`text-xl font-bold text-theme-primary ${fontFamilyClass}`}>
                         專案總覽
                     </h1>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-theme-secondary mt-0.5">
                         {projects.length} 個進行中的專案
                     </p>
                 </div>
@@ -605,7 +605,7 @@ export const ProjectView = () => {
                         onChange={(e) => setCardSize(parseInt(e.target.value))}
                         className="w-24 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
                     />
-                    <span className="text-xs text-gray-500 w-12">{cardSize}px</span>
+                    <span className="text-xs text-theme-secondary w-12">{cardSize}px</span>
                 </div>
             </div>
 
@@ -684,7 +684,7 @@ const ProjectCard = ({ project, size, tags, onClick, fontFamilyClass }: ProjectC
                 onClick={() => !isDragging && onClick()}
                 className={`
                     relative rounded-xl overflow-hidden cursor-pointer
-                    bg-white shadow-md hover:shadow-xl
+                    bg-theme-card shadow-md hover:shadow-xl
                     transition-all duration-200
                     ${isDragging ? 'ring-2 ring-indigo-400' : ''}
                 `}
@@ -696,7 +696,7 @@ const ProjectCard = ({ project, size, tags, onClick, fontFamilyClass }: ProjectC
             >
                 {/* Drag Handle */}
                 <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="p-1 bg-white/80 rounded-md shadow-sm cursor-grab active:cursor-grabbing">
+                    <div className="p-1 bg-theme-header rounded-md shadow-sm cursor-grab active:cursor-grabbing">
                         <GripVertical size={14} className="text-gray-400" />
                     </div>
                 </div>
@@ -736,11 +736,11 @@ const ProjectCard = ({ project, size, tags, onClick, fontFamilyClass }: ProjectC
                 {/* Content */}
                 <div className="p-3 h-[45%] flex flex-col justify-between">
                     <div>
-                        <h3 className={`font-bold text-gray-800 line-clamp-2 ${fontFamilyClass}`} style={{ fontSize: size > 250 ? '14px' : '12px' }}>
+                        <h3 className={`font-bold text-theme-primary line-clamp-2 ${fontFamilyClass}`} style={{ fontSize: size > 250 ? '14px' : '12px' }}>
                             {project.title}
                         </h3>
                         {project.description && (
-                            <p className="text-[10px] text-gray-500 line-clamp-2 mt-1">
+                            <p className="text-[10px] text-theme-secondary line-clamp-2 mt-1">
                                 {project.description}
                             </p>
                         )}
