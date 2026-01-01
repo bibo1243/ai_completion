@@ -171,6 +171,10 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
             if (editingTaskId) return;
             const activeEl = document.activeElement as HTMLElement;
             if (activeEl?.tagName === 'INPUT' || activeEl?.tagName === 'TEXTAREA' || activeEl?.isContentEditable) return;
+
+            // Fix conflict with Sidebar tag selection - prevent jumping to task list
+            if (activeEl?.closest('[data-tag-id]')) return;
+
             // Don't handle if search modal is open
             if (document.querySelector('[data-search-modal]')) return;
 
