@@ -740,9 +740,10 @@ const ProjectCard = ({ project, size, tags, onClick, fontFamilyClass }: ProjectC
                             {project.title}
                         </h3>
                         {project.description && (
-                            <p className="text-[10px] text-theme-secondary line-clamp-2 mt-1">
-                                {project.description}
-                            </p>
+                            <div
+                                className="text-[10px] text-theme-secondary line-clamp-2 mt-1 prose prose-invert max-w-none"
+                                dangerouslySetInnerHTML={{ __html: project.description }}
+                            />
                         )}
                     </div>
 
