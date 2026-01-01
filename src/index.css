@@ -261,7 +261,7 @@ pre,
 }
 
 /* Force Input/Select/Textarea styles in dark modes - High Specificity */
-[data-theme] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 [data-theme] select,
 [data-theme] textarea,
 [data-theme] .bg-white {
