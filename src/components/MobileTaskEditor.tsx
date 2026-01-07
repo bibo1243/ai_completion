@@ -1,11 +1,10 @@
-import React, { useState, useContext, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useContext, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, Tag, ChevronUp, Check, Trash2, Repeat, Paperclip, Mic, Image as ImageIcon, Volume2, Download, AlertCircle, Play, Pause } from 'lucide-react';
+import { X, Calendar, Tag, Check, Trash2, Repeat, Paperclip, Mic, Image as ImageIcon, Download, AlertCircle, Play, Pause } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { RecordingContext } from '../context/RecordingContext';
 import { supabase } from '../supabaseClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { COLOR_THEMES } from '../constants';
+import { motion } from 'framer-motion';
 import { TaskColor, ImportanceLevel, RepeatRule, RepeatType } from '../types';
 import NoteEditor from './NoteEditor';
 
@@ -16,7 +15,7 @@ interface MobileTaskEditorProps {
 
 export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onClose }) => {
     const { tasks, tags, updateTask, deleteTask, toggleExpansion, setToast, user } = useContext(AppContext);
-    const { isRecording, startRecording, stopRecording, recordingTaskId, recordingTime } = useContext(RecordingContext);
+    const { isRecording, startRecording, stopRecording, recordingTaskId } = useContext(RecordingContext);
 
     const task = tasks.find((t: any) => t.id === taskId);
     const [title, setTitle] = useState(task?.title || '');
@@ -71,15 +70,6 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
 
     if (!task) return null;
 
-    const getDescendantIds = (id: string, visited = new Set<string>()): Set<string> => {
-        if (visited.has(id)) return visited;
-        visited.add(id);
-        tasks.filter((t: any) => t.parent_id === id).forEach((child: any) => getDescendantIds(child.id, visited));
-        return visited;
-    };
-    const excludeIds = getDescendantIds(taskId);
-    const eligibleParents = tasks.filter((t: any) => !excludeIds.has(t.id) && t.id !== taskId);
-
     const handleSave = () => {
         if (!title.trim()) return;
 
@@ -126,10 +116,9 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
         if (!rule) return '不重複';
         switch (rule.type) {
             case 'daily': return `每 ${rule.interval || 1} 天`;
-            case 'weekly': return `每週 ${rule.days ? rule.days.map(d => ['日', '一', '二', '三', '四', '五', '六'][d]).join('、') : ''}`;
-            case 'monthly': return `每月 ${rule.dates?.join('、')} 日`;
+            case 'weekly': return `每週 ${rule.weekdays ? rule.weekdays.map(d => ['日', '一', '二', '三', '四', '五', '六'][d]).join('、') : ''}`;
+            case 'monthly': return rule.monthDay ? `每月 ${rule.monthDay} 日` : `每 ${rule.interval || 1} 個月`;
             case 'yearly': return '每年';
-            case 'custom': return '自訂';
             default: return '重複';
         }
     };
@@ -179,13 +168,15 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                 };
 
                 // Immediately update task
-                const existing = isImage ? (task.images || []) : (task.attachments || []);
-                const updates = isImage
-                    ? { images: [...existing, data.publicUrl] }
-                    : { attachments: [...existing, fileData] };
-
-                await updateTask(taskId, updates, [], { skipHistory: true });
-                setToast?.({ msg: isImage ? '圖片已上傳' : '檔案已上傳', type: 'info' });
+                if (isImage) {
+                    const existing = (task.images || []) as string[];
+                    await updateTask(taskId, { images: [...existing, data.publicUrl] }, [], { skipHistory: true });
+                    setToast?.({ msg: '圖片已上傳', type: 'info' });
+                } else {
+                    const existing = (task.attachments || []) as any[];
+                    await updateTask(taskId, { attachments: [...existing, fileData] }, [], { skipHistory: true });
+                    setToast?.({ msg: '檔案已上傳', type: 'info' });
+                }
             }
         } catch (err) {
             console.error(err);
@@ -199,12 +190,13 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
     const handleRemoveAttachment = async (url: string, isImage: boolean) => {
         if (!confirm('確定要刪除此附件嗎？')) return;
 
-        const existing = isImage ? (task.images || []) : (task.attachments || []);
-        const updates = isImage
-            ? { images: existing.filter((u: string) => u !== url) }
-            : { attachments: existing.filter((a: any) => a.url !== url) };
-
-        await updateTask(taskId, updates, [], { skipHistory: true });
+        if (isImage) {
+            const existing = (task.images || []) as string[];
+            await updateTask(taskId, { images: existing.filter(u => u !== url) }, [], { skipHistory: true });
+        } else {
+            const existing = (task.attachments || []) as any[];
+            await updateTask(taskId, { attachments: existing.filter(a => a.url !== url) }, [], { skipHistory: true });
+        }
     };
 
     // --- Audio Logic ---

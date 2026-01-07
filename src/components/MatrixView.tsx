@@ -53,26 +53,28 @@ const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, bgColor, border
         let newOrder: number | undefined;
 
         if (closestTask) {
-            const targetIndex = closestTask.index;
+            const targetIndex = (closestTask as any).index;
             const targetTask = tasks[targetIndex];
 
-            // If drop is above the closest task
-            if (closestTask.offset < 0) {
-                const prevTask = tasks[targetIndex - 1];
-                if (prevTask) {
-                    newOrder = ((prevTask.order_index || 0) + (targetTask.order_index || 0)) / 2;
+            if (targetTask) {
+                // If drop is above the closest task
+                if ((closestTask as any).offset < 0) {
+                    const prevTask = tasks[targetIndex - 1];
+                    if (prevTask) {
+                        newOrder = ((prevTask.order_index || 0) + (targetTask.order_index || 0)) / 2;
+                    } else {
+                        // Top of list
+                        newOrder = (targetTask.order_index || 0) - 10000;
+                    }
                 } else {
-                    // Top of list
-                    newOrder = (targetTask.order_index || 0) - 10000;
-                }
-            } else {
-                // Drop is below the closest task
-                const nextTask = tasks[targetIndex + 1];
-                if (nextTask) {
-                    newOrder = ((targetTask.order_index || 0) + (nextTask.order_index || 0)) / 2;
-                } else {
-                    // Bottom of list
-                    newOrder = (targetTask.order_index || 0) + 10000;
+                    // Drop is below the closest task
+                    const nextTask = tasks[targetIndex + 1];
+                    if (nextTask) {
+                        newOrder = ((targetTask.order_index || 0) + (nextTask.order_index || 0)) / 2;
+                    } else {
+                        // Bottom of list
+                        newOrder = (targetTask.order_index || 0) + 10000;
+                    }
                 }
             }
         } else if (tasks.length > 0) {

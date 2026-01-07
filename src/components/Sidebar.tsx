@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban, Crosshair, Lightbulb } from 'lucide-react';
+
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -117,7 +117,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             setIsAddingTag(false);
             setAddingSubTagTo(null);
             if (parentId && !expandedTags.includes(parentId)) {
-                setExpandedTags(prev => [...prev, parentId]);
+                setExpandedTags((prev: any) => [...prev, parentId]);
             }
         } else {
             setIsAddingTag(false);
@@ -126,16 +126,16 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     };
 
     const counts = {
-        all: tasks.filter(t => {
+        all: tasks.filter((t: any) => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
 
             // Exclude if task has prompt, journal, inspiration, or note tag
-            const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
-            const journalTag = tags.find(tg => tg.name.trim().toLowerCase() === 'journal');
-            const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
-            const noteTag = tags.find(tg => tg.name.trim().toLowerCase() === 'note');
-            const projectTag = tags.find(tg => tg.name.trim().toLowerCase() === 'project');
-            const hashPromptTag = tags.find(tg => tg.name === '#prompt');
+            const promptTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'prompt');
+            const journalTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'journal');
+            const inspirationTag = tags.find((tg: any) => tg.name.includes('靈感'));
+            const noteTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'note');
+            const projectTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'project');
+            const hashPromptTag = tags.find((tg: any) => tg.name === '#prompt');
 
             if (promptTag && t.tags.includes(promptTag.id)) return false;
             if (journalTag && t.tags.includes(journalTag.id)) return false;
@@ -145,7 +145,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
             // Exclude Project tasks (have 'project' tag AND have children)
             if (projectTag && t.tags.includes(projectTag.id)) {
-                const hasChildren = tasks.some(child => child.parent_id === t.id && child.status !== 'deleted');
+                const hasChildren = tasks.some((child: any) => child.parent_id === t.id && child.status !== 'deleted');
                 if (hasChildren) return false;
             }
 
@@ -158,7 +158,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             while (curr.parent_id) {
                 if (visited.has(curr.id)) break;
                 visited.add(curr.id);
-                const parent = tasks.find(p => p.id === curr.parent_id);
+                const parent = tasks.find((p: any) => p.id === curr.parent_id);
                 if (!parent) break;
                 if (parent.start_date || parent.due_date) return false;
                 curr = parent;
@@ -166,22 +166,22 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
             return true;
         }).length,
-        todayOverdue: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date)).length,
-        todayScheduled: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && (isToday(t.start_date || t.due_date))).length,
-        prompt: tasks.filter(t => {
-            const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
+        todayOverdue: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date)).length,
+        todayScheduled: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && (isToday(t.start_date || t.due_date))).length,
+        prompt: tasks.filter((t: any) => {
+            const promptTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'prompt');
             return t.status !== 'deleted' && t.status !== 'logged' && promptTag && t.tags.includes(promptTag.id) && !t.reviewed_at;
         }).length,
-        logbook: tasks.filter(t => t.status === 'logged' && !t.reviewed_at).length,
-        waiting: tasks.filter(t => {
+        logbook: tasks.filter((t: any) => t.status === 'logged' && !t.reviewed_at).length,
+        waiting: tasks.filter((t: any) => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
-            const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
+            const inspirationTag = tags.find((tg: any) => tg.name.includes('靈感'));
             return (t.status === 'waiting' || (inspirationTag && t.tags.includes(inspirationTag.id))) && !t.reviewed_at;
         }).length,
-        trash: tasks.filter(t => t.status === 'deleted').length,
-        note: tasks.filter(t => {
+        trash: tasks.filter((t: any) => t.status === 'deleted').length,
+        note: tasks.filter((t: any) => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
-            const noteTag = tags.find(tg => tg.name.trim().toLowerCase() === 'note');
+            const noteTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'note');
             return noteTag && t.tags.includes(noteTag.id);
         }).length
     };
@@ -303,7 +303,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
     const toggleExpand = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setExpandedTags(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]);
+        setExpandedTags((prev: any) => prev.includes(id) ? prev.filter((tid: any) => tid !== id) : [...prev, id]);
     };
 
     const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -359,7 +359,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             const children = tags.filter((t: any) => t.parent_id === targetId);
             const maxOrder = children.reduce((max: number, t: any) => Math.max(max, t.order_index || 0), 0);
             newOrder = maxOrder + 10000;
-            if (!expandedTags.includes(targetId)) setExpandedTags(prev => [...prev, targetId]);
+            if (!expandedTags.includes(targetId)) setExpandedTags((prev: any) => [...prev, targetId]);
         } else {
             newParentId = targetTag.parent_id;
             const siblings = tags.filter((t: any) => t.parent_id === targetTag.parent_id).sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0));
@@ -432,9 +432,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             e.preventDefault();
             const tag = tags.find((t: any) => t.id === id);
             if (tag && tags.some((t: any) => t.parent_id === id)) {
-                if (!expandedTags.includes(id)) {
-                    setExpandedTags(prev => [...prev, id]);
-                }
+                if (!expandedTags.includes(id)) setExpandedTags((prev: any) => [...prev, tag.id]);
             }
         }
 
@@ -442,14 +440,12 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             e.preventDefault();
             const tag = tags.find((t: any) => t.id === id);
             if (tag) {
-                if (expandedTags.includes(id)) {
-                    setExpandedTags(prev => prev.filter(tid => tid !== id));
-                } else if (tag.parent_id) {
-                    const parentEl = document.querySelector(`[data-tag-id="${tag.parent_id}"]`) as HTMLElement;
-                    if (parentEl) {
-                        parentEl.focus();
-                        activateTag(tag.parent_id);
-                    }
+                if (expandedTags.includes(id)) setExpandedTags((prev: any) => prev.filter((tid: any) => tid !== id));
+            } else if (tag.parent_id) {
+                const parentEl = document.querySelector(`[data-tag-id="${tag.parent_id}"]`) as HTMLElement;
+                if (parentEl) {
+                    parentEl.focus();
+                    activateTag(tag.parent_id);
                 }
             }
         }
@@ -551,7 +547,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             e.stopPropagation();
                                             setAddingSubTagTo(tag.id);
                                             setNewTagName('');
-                                            if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
+                                            if (!tag.isExpanded) setExpandedTags((prev: any) => [...prev, tag.id]);
                                         }}
                                         className="p-0.5 hover:bg-gray-200 rounded text-gray-400"
                                         title={t('addSubTag')}
@@ -606,7 +602,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                             setAddingSubTagTo(tag.id);
                                             setNewTagName('');
                                             setPopoverId(null);
-                                            if (!tag.isExpanded) setExpandedTags(prev => [...prev, tag.id]);
+                                            if (!tag.isExpanded) setExpandedTags((prev: any) => [...prev, tag.id]);
                                         }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] text-theme-secondary font-medium">
                                             <Plus size={11} /> {t('addSubTag')}
                                         </button>
@@ -789,24 +785,24 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 <div>
                                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{language === 'zh' ? '色彩風格' : 'Color Theme'}</span> </div>
                                     <div className="flex bg-gray-100 rounded p-0.5">
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'light' }))} className={`flex-1 text-[10px] py-1 rounded ${!themeSettings.themeMode || themeSettings.themeMode === 'light' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '明亮' : 'Light'}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'dark' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'dark' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '護眼' : 'Dark'}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, themeMode: 'programmer' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'programmer' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '極客' : 'Dev'}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, themeMode: 'light' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'light' || (!themeSettings.themeMode) ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '淺色' : 'Light'}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, themeMode: 'dark' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'dark' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '深色' : 'Dark'}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, themeMode: 'programmer' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.themeMode === 'programmer' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{language === 'zh' ? '極客' : 'Dev'}</button>
                                     </div>
                                 </div>
                                 <div>
                                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('fontSize')}</span> </div>
                                     <div className="flex bg-gray-100 rounded p-0.5">
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeNormal')}</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeLarge')}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, fontSize: 'small' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'small' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeSmall')}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, fontSize: 'normal' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'normal' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeNormal')}</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, fontSize: 'large' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.fontSize === 'large' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>{t('sizeLarge')}</button>
                                     </div>
                                 </div>
                                 <div>
                                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1"> <span className="flex items-center gap-1">{t('timeFormat')}</span> </div>
                                     <div className="flex bg-gray-100 rounded p-0.5">
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
-                                        <button onClick={() => setThemeSettings(p => ({ ...p, timeFormat: '12h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '12h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>12H</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, timeFormat: '24h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '24h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>24H</button>
+                                        <button onClick={() => setThemeSettings((p: any) => ({ ...p, timeFormat: '12h' }))} className={`flex-1 text-[10px] py-1 rounded ${themeSettings.timeFormat === '12h' ? 'bg-white shadow-sm font-bold text-indigo-600' : 'text-gray-500'}`}>12H</button>
                                     </div>
                                 </div>
                             </div>

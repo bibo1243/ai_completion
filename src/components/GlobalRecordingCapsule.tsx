@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { RecordingContext } from '../context/RecordingContext';
 import { Square } from 'lucide-react';
 

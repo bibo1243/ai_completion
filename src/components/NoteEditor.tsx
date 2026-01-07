@@ -1,6 +1,7 @@
 import React, { useEffect, useContext, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { AppContext } from '../context/AppContext';
-import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, NodeViewWrapper, ReactRenderer } from '@tiptap/react';
+import { RecordingContext } from '../context/RecordingContext';
+import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, ReactRenderer } from '@tiptap/react';
 import { Node, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -192,46 +193,7 @@ const ParagraphWithId = Node.create({
 });
 
 
-// Custom Heading extension that adds unique IDs and timestamps
-const HeadingWithTimestamp = Node.create({
-    name: 'heading',
-    priority: 1000,
-    group: 'block',
-    content: 'inline*',
-    defining: true,
 
-    addOptions() {
-        return {
-            levels: [1, 2, 3],
-        }
-    },
-
-    parseHTML() {
-        return this.options.levels.map((level: number) => ({
-            tag: `h${level}`,
-            attrs: { level },
-        }))
-    },
-
-    renderHTML({ node, HTMLAttributes }) {
-        const hasLevel = this.options.levels.includes(node.attrs.level)
-        const level = hasLevel
-            ? node.attrs.level
-            : this.options.levels[0]
-
-        return [`h${level}`, mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
-    },
-
-    addAttributes() {
-        return {
-            level: {
-                default: 1,
-                rendered: false,
-            },
-            // Removed block-level timestamp attributes in favor of inline marks
-        };
-    },
-});
 // Custom Mark for linking text to attachments
 const AttachmentLinkMark = Mark.create({
     name: 'attachmentLink',
@@ -435,7 +397,7 @@ interface NoteEditorProps {
     onTagClick?: (tagId: string) => void; // Callback when a tag is clicked
     onCreateTag?: (name: string) => Promise<{ id: string, name: string, color: string } | null>; // Callback to create a new tag
 }
-import { RecordingContext } from '../context/RecordingContext';
+
 
 // Custom extension to handle internal tab and Cmd+Enter exit
 interface NoteEditorHandle {

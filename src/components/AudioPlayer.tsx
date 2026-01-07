@@ -11,7 +11,7 @@ interface AudioPlayerProps {
     seekToTime?: number | null; // Time in ms to seek to (when changed)
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = false, markers = [], onClose, onMarkerClick, seekToTime }) => {
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = false, markers = [], onClose, seekToTime }) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(autoPlay);
     const [duration, setDuration] = useState(0);
@@ -136,7 +136,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
                     onClick={togglePlay}
                     className="w-10 h-10 flex items-center justify-center bg-indigo-600 text-white rounded-full hover:bg-indigo-700 shadow-md transition-all active:scale-95"
                 >
-                    {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" ml-1 />}
+                    {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
                 </button>
 
                 {/* Forward */}

@@ -2,7 +2,7 @@ import { useState, useContext, useMemo, useEffect, useRef, useCallback } from 'r
 import { motion } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
 import { TaskList } from './TaskList';
-import { ArrowLeft, Calendar, Clock, Image, Settings2, GripVertical, ChevronRight, Edit3, X, FolderPlus, Trophy, Trash2 } from 'lucide-react';
+import { ArrowLeft, Image, Settings2, GripVertical, ChevronRight, Edit3, X, FolderPlus, Trophy } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 
 import { TaskInput } from './TaskInput';
@@ -67,19 +67,19 @@ export const ProjectView = () => {
     const projects = useMemo<ProjectData[]>(() => {
         if (!projectTag) return [];
 
-        const projectTasks = tasks.filter(task => {
+        const projectTasks = tasks.filter((task: any) => {
             // Must have the "project" tag
             if (!task.tags.includes(projectTag.id)) return false;
             // Must not be deleted or logged
             if (task.status === 'deleted' || task.status === 'logged') return false;
             // Must have children
-            const hasChildren = tasks.some(t => t.parent_id === task.id && t.status !== 'deleted');
+            const hasChildren = tasks.some((t: any) => t.parent_id === task.id && t.status !== 'deleted');
             return hasChildren;
         });
 
         return projectTasks.map(task => {
-            const childCount = tasks.filter(t => t.parent_id === task.id && t.status !== 'deleted').length;
-            const completedCount = tasks.filter(t => t.parent_id === task.id && t.status === 'completed').length;
+            const childCount = tasks.filter((t: any) => t.parent_id === task.id && t.status !== 'deleted').length;
+            const completedCount = tasks.filter((t: any) => t.parent_id === task.id && t.status === 'completed').length;
             return {
                 id: task.id,
                 title: task.title,
@@ -907,7 +907,6 @@ const DraggableProjectCard = ({
     isDropTarget,
     onSelect,
     onDoubleClick,
-    onDelete,
     onDragStart,
     onDragEnd,
     registerRef,
