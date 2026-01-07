@@ -21,7 +21,11 @@ interface WeekData {
     firstDate: Date;
 }
 
-export const ContinuousWeekCalendar = () => {
+interface ContinuousWeekCalendarProps {
+    onDateClick?: (date: Date) => void;
+}
+
+export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarProps) => {
     const {
         tasks,
         batchUpdateTasks,
@@ -217,6 +221,9 @@ export const ContinuousWeekCalendar = () => {
             }
             setPlacedDateFlash(dateKey);
             setTimeout(() => setPlacedDateFlash(null), 600);
+        } else if (onDateClick) {
+            // 非施工模式：觸發日期點擊回調（用於導航到日程視圖）
+            onDateClick(date);
         }
     };
 

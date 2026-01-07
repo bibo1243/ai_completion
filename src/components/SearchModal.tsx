@@ -58,7 +58,7 @@ interface SearchModalProps {
 }
 
 export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
-    const { tasks, tags, searchHistory, addSearchHistory, deleteSearchHistory, setEditingTaskId, editingTaskId, setView, navigateToTask } = useContext(AppContext);
+    const { tasks, tags, searchHistory, addSearchHistory, deleteSearchHistory, setEditingTaskId, editingTaskId, navigateToTask } = useContext(AppContext);
     const [query, setQuery] = useState('');
     const [filters, setFilters] = useState<SearchFilters>({
         tags: [],
@@ -488,8 +488,8 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
 
                                         const goToTask = () => {
                                             setEditingTaskId(null);
-                                            setView('allview');
-                                            navigateToTask(task.id);
+                                            // navigateToTask now automatically determines the correct view
+                                            navigateToTask(task.id, true);
                                             onClose();
                                         };
 

@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 :root {
-    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    /* System Font Stack - Modern, Clean, Apple-like */
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
     -webkit-tap-highlight-color: transparent;
     --safe-area-inset-top: env(safe-area-inset-top, 0px);
     --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
@@ -11,11 +12,20 @@
     --safe-area-inset-right: env(safe-area-inset-right, 0px);
 }
 
-/* Global Arial font for all elements (except code blocks for markdown) */
+/* Global Font inheritance */
+body,
 *,
 *::before,
 *::after {
-    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+/* Exception: Note/Description fields retain specific font (Arial as previously used) */
+textarea,
+.note-editor-wrapper *,
+.ProseMirror *,
+div[contenteditable="true"] {
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif !important;
 }
 
 /* Preserve monospace font for code blocks and markdown code */
@@ -39,10 +49,10 @@ pre,
     /* gray-100 */
     --text-primary: #111827;
     /* gray-900 */
-    --text-secondary: #4b5563;
-    /* gray-600 */
-    --text-tertiary: #9ca3af;
-    /* gray-400 */
+    --text-secondary: #374151;
+    /* gray-700 (previously 600) */
+    --text-tertiary: #6b7280;
+    /* gray-500 (previously 400) */
     --border-color: #e5e7eb;
     /* gray-200 */
     --accent-color: #6366f1;

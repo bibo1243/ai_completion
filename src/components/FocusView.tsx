@@ -2,7 +2,7 @@ import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { ContinuousWeekCalendar } from './ContinuousWeekCalendar';
 import { ScheduleView } from './ScheduleView';
-import { GripVertical, CheckCircle2, Hammer, Calendar, Clock } from 'lucide-react';
+import { GripVertical, CheckCircle2, Hammer, Calendar, Clock, ArrowLeft } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 
 export const FocusView = () => {
@@ -11,7 +11,8 @@ export const FocusView = () => {
         viewTagFilters, setEditingTaskId,
         focusSplitWidth, setFocusSplitWidth, themeSettings, setSelectedTaskIds,
         constructionModeEnabled, setConstructionModeEnabled,
-        deleteTask, editingTaskId, batchDeleteTasks
+        deleteTask, editingTaskId, batchDeleteTasks,
+        setCalendarDate
     } = useContext(AppContext);
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -22,6 +23,9 @@ export const FocusView = () => {
         const saved = localStorage.getItem('focus_calendar_mode');
         return (saved as 'calendar' | 'schedule') || 'calendar';
     });
+
+    // Selected date for navigation from calendar to schedule
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
     // Persist calendar mode
     useEffect(() => {
@@ -262,30 +266,61 @@ export const FocusView = () => {
             <div className="flex-1 h-full min-w-0 relative overflow-hidden flex flex-col">
                 {/* Tab Header */}
                 <div className="flex items-center justify-between px-3 py-2 border-b border-theme bg-theme-header flex-shrink-0">
-                    <div className="flex items-center gap-1 bg-theme-hover p-0.5 rounded-lg">
-                        <button
-                            onClick={() => setCalendarMode('calendar')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'calendar' ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
-                        >
-                            <Calendar size={14} />
-                            行事曆
-                        </button>
-                        <button
-                            onClick={() => setCalendarMode('schedule')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'schedule' ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
-                        >
-                            <Clock size={14} />
-                            日程表
-                        </button>
+                    <div className="flex items-center gap-2">
+                        {/* Back button when viewing a specific date */}
+                        {selectedDate && (
+                            <button
+                                onClick={() => {
+                                    setSelectedDate(null);
+                                    setCalendarMode('calendar');
+                                }}
+                                className="flex items-center gap-1 px-2 py-1.5 rounded-md text-xs font-medium text-theme-secondary hover:text-theme-primary hover:bg-theme-hover transition-all"
+                                title="返回行事曆"
+                            >
+                                <ArrowLeft size={14} />
+                                返回
+                            </button>
+                        )}
+                        <div className="flex items-center gap-1 bg-theme-hover p-0.5 rounded-lg">
+                            <button
+                                onClick={() => {
+                                    setCalendarMode('calendar');
+                                    setSelectedDate(null);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'calendar' && !selectedDate ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
+                            >
+                                <Calendar size={14} />
+                                行事曆
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setCalendarMode('schedule');
+                                    setSelectedDate(null);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${calendarMode === 'schedule' || selectedDate ? 'bg-theme-card text-indigo-500 shadow-sm' : 'text-theme-tertiary hover:text-theme-secondary'}`}
+                            >
+                                <Clock size={14} />
+                                日程表
+                            </button>
+                        </div>
+                        {/* Show selected date */}
+                        {selectedDate && (
+                            <span className="text-sm font-medium text-indigo-600">
+                                {selectedDate.getMonth() + 1}月{selectedDate.getDate()}日 ({['日', '一', '二', '三', '四', '五', '六'][selectedDate.getDay()]})
+                            </span>
+                        )}
                     </div>
                     <div className="text-[10px] text-gray-400">
-                        {calendarMode === 'schedule' ? '按數字鍵 1-9 切換天數' : '滾動查看更多週'}
+                        {selectedDate ? '點擊返回回到行事曆' : (calendarMode === 'schedule' ? '按數字鍵 1-9 切換天數' : '點擊日期查看該日日程')}
                     </div>
                 </div>
 
                 <div className="flex-1 relative z-10 h-full overflow-hidden">
-                    {calendarMode === 'calendar' ? (
-                        <ContinuousWeekCalendar />
+                    {calendarMode === 'calendar' && !selectedDate ? (
+                        <ContinuousWeekCalendar onDateClick={(date) => {
+                            setSelectedDate(date);
+                            setCalendarDate(date);
+                        }} />
                     ) : (
                         <ScheduleView />
                     )}

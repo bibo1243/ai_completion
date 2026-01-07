@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Sparkles, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, CalendarDays, Layers, Search, FolderKanban, Crosshair, Lightbulb } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -27,7 +27,7 @@ interface TagTreeItem {
 }
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId } = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, setSelectedTaskIds }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
@@ -67,7 +67,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [editName, setEditName] = useState('');
     const [popoverId, setPopoverId] = useState<string | null>(null);
     const [popoverPosition, setPopoverPosition] = useState<{ top: number, left: number } | null>(null);
+
     const [searchOpen, setSearchOpen] = useState(false);
+    const [isTagsExpanded, setIsTagsExpanded] = useState(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const settingsRef = useRef<HTMLDivElement>(null);
@@ -127,13 +129,25 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         all: tasks.filter(t => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
 
-            // Exclude if task has prompt, journal, or inspiration tag
+            // Exclude if task has prompt, journal, inspiration, or note tag
             const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
             const journalTag = tags.find(tg => tg.name.trim().toLowerCase() === 'journal');
             const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
+            const noteTag = tags.find(tg => tg.name.trim().toLowerCase() === 'note');
+            const projectTag = tags.find(tg => tg.name.trim().toLowerCase() === 'project');
+            const hashPromptTag = tags.find(tg => tg.name === '#prompt');
+
             if (promptTag && t.tags.includes(promptTag.id)) return false;
             if (journalTag && t.tags.includes(journalTag.id)) return false;
             if (inspirationTag && t.tags.includes(inspirationTag.id)) return false;
+            if (noteTag && t.tags.includes(noteTag.id)) return false;
+            if (hashPromptTag && t.tags.includes(hashPromptTag.id)) return false;
+
+            // Exclude Project tasks (have 'project' tag AND have children)
+            if (projectTag && t.tags.includes(projectTag.id)) {
+                const hasChildren = tasks.some(child => child.parent_id === t.id && child.status !== 'deleted');
+                if (hasChildren) return false;
+            }
 
             // Exclude if task has dates
             if (t.start_date || t.due_date) return false;
@@ -152,8 +166,8 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
             return true;
         }).length,
-        todayOverdue: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.due_date || t.start_date)).length,
-        todayScheduled: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.due_date || t.start_date) && (isToday(t.due_date) || isToday(t.start_date))).length,
+        todayOverdue: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date)).length,
+        todayScheduled: tasks.filter(t => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && (isToday(t.start_date || t.due_date))).length,
         prompt: tasks.filter(t => {
             const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
             return t.status !== 'deleted' && t.status !== 'logged' && promptTag && t.tags.includes(promptTag.id) && !t.reviewed_at;
@@ -164,7 +178,12 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
             return (t.status === 'waiting' || (inspirationTag && t.tags.includes(inspirationTag.id))) && !t.reviewed_at;
         }).length,
-        trash: tasks.filter(t => t.status === 'deleted').length
+        trash: tasks.filter(t => t.status === 'deleted').length,
+        note: tasks.filter(t => {
+            if (t.status === 'deleted' || t.status === 'logged') return false;
+            const noteTag = tags.find(tg => tg.name.trim().toLowerCase() === 'note');
+            return noteTag && t.tags.includes(noteTag.id);
+        }).length
     };
 
     const sidebarTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
@@ -179,7 +198,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         setEditingViewId(null);
     };
 
-    const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon }: any) => {
+    const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon, color }: any) => {
         const allowSettings = ['focus', 'waiting', 'journal', 'prompt'].includes(id);
         const [isHovered, setIsHovered] = useState(false);
         const filter = viewTagFilters[id] || { include: [] as string[], exclude: [] as string[] };
@@ -190,6 +209,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         const displayLabel = viewNames[id] || label;
         const isEditing = editingViewId === id;
 
+        // Use custom color if provided, otherwise use accent color when active
+        const iconColor = color || (active ? 'var(--accent-color)' : undefined);
+
         return (
             <div
                 className="relative group/nav-wrapper"
@@ -197,17 +219,25 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 onMouseLeave={() => setIsHovered(false)}
             >
                 <button
-                    onClick={() => { if (!isEditing) { setView(id); setTagFilter(null); } }}
+                    onClick={() => {
+                        if (!isEditing) {
+                            setView(id);
+                            setTagFilter(null);
+                            // Clear focus and selection when switching views
+                            setFocusedTaskId(null);
+                            setSelectedTaskIds([]);
+                        }
+                    }}
                     onDoubleClick={(e) => {
                         e.stopPropagation();
                         setEditingViewId(id);
                         setEditingViewName(displayLabel);
                     }}
-                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1.5 rounded-lg mb-1 md:mb-0.5 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-theme-hover text-theme-primary font-bold' : 'text-theme-tertiary hover:bg-theme-hover hover:text-theme-primary active:bg-theme-hover'}`}
+                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1 rounded-lg mb-1 md:mb-0 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-theme-hover text-theme-primary font-bold' : 'text-theme-secondary font-medium hover:bg-theme-hover hover:text-theme-primary active:bg-theme-hover'}`}
                     title={sidebarCollapsed ? displayLabel : ''}
                 >
                     <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
-                        {Icon && <Icon size={16} style={{ color: active ? 'var(--accent-color)' : undefined }} className={active ? '' : 'text-theme-tertiary'} />}
+                        {Icon && <Icon size={16} style={{ color: iconColor }} className={!color && !active ? 'text-theme-tertiary' : ''} />}
                         {!sidebarCollapsed && (
                             isEditing ? (
                                 <input
@@ -231,7 +261,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
                         )}
                     </div>
-                    {!sidebarCollapsed && <div className="flex gap-1.5 items-center"> {overdueCount > 0 && <span className="text-[10px] font-bold text-red-500">{overdueCount}</span>} {normalCount > 0 && <span className="text-[10px] text-gray-400">{normalCount}</span>} </div>}
+                    {!sidebarCollapsed && <div className="flex gap-2 items-center">
+                        {overdueCount > 0 && <span className="text-[11px] font-semibold text-white bg-rose-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{overdueCount}</span>}
+                        {normalCount > 0 && <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>}
+                    </div>}
                 </button>
 
                 {!sidebarCollapsed && allowSettings && isAltPressed && isHovered && (
@@ -477,7 +510,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     onDragOver={(e) => handleDragOver(e, tag.id)}
                     onDrop={(e) => handleDrop(e, tag.id)}
                     onDragLeave={() => setDropTarget(null)}
-                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all select-none outline-none ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-400 font-bold' : 'text-theme-tertiary hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
+                    className={`relative group flex items-center gap-0.5 py-0.5 rounded pr-1 transition-all select-none outline-none ${tagTextClass} ${sidebarFontClass} ${tagFilter === tag.id ? 'bg-theme-hover text-indigo-600 font-bold' : 'text-theme-secondary font-medium hover:text-theme-primary hover:bg-theme-hover'} ${borderClass} ${sidebarCollapsed ? 'justify-center pl-0' : ''}`}
                     style={{ paddingLeft: sidebarCollapsed ? '0' : `${tag.depth * 6 + 6}px` }}
                     onClick={() => {
                         if (!isEditing) activateTag(tag.id);
@@ -634,33 +667,52 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     </button>
                 </div>
             </div>
-            <nav className="flex-1 space-y-6 overflow-y-auto no-scrollbar">
-                <div>
-                    {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">COLLECT</p>}
-                    <NavItem id="all" label={t('inbox')} normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} />
-                    <NavItem id="allview" label="All" active={view === 'allview' && !tagFilter} icon={Layers} />
-                    <NavItem id="newtable" label="新表格" active={view === 'newtable' && !tagFilter} icon={Star} />
+            <nav className="flex-1 overflow-y-auto no-scrollbar py-2">
+                {/* Inbox - Separated */}
+                <div className="mb-6">
+                    <NavItem id="all" label={t('inbox')} normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} color="#1badf8" />
                 </div>
-                <div>
-                    {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ARRANGE</p>}
-                    <NavItem id="focus" label={t('focus')} active={view === 'focus'} icon={Target} />
-                    <NavItem id="project" label="Projects" active={view === 'project'} icon={FolderKanban} />
-                    <NavItem id="upcoming" label="Upcoming" active={view === 'upcoming' && !tagFilter} icon={CalendarDays} />
+
+                {/* Today & All Views */}
+                <div className="mb-6">
+                    <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today' && !tagFilter} icon={Star} color="#f5c94c" />
+                    <NavItem id="allview" label="All" active={view === 'allview' && !tagFilter} icon={Layers} color="#10b981" />
+                    <NavItem id="matrix" label="重要性" active={view === 'matrix'} icon={Layout} color="#6366f1" />
                 </div>
-                <div>
-                    {!sidebarCollapsed && <p className="text-[10px] font-bold text-gray-300 mb-2 px-3">ORGANIZE</p>}
-                    <NavItem id="waiting" label={t('someday')} normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} />
-                    <NavItem id="journal" label={t('journal')} active={view === 'journal' && !tagFilter} icon={Book} />
-                    <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Sparkles} />
-                    <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} />
-                    <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} />
+
+                {/* Projects & Focus */}
+                <div className="mb-6">
+                    <NavItem id="focus" label={t('focus')} active={view === 'focus'} icon={Target} color="#ef4444" />
+                    <NavItem id="project" label="Projects" active={view === 'project'} icon={FolderKanban} color="#f97316" />
+                    <NavItem id="annualplan" label="年度計畫" active={view === 'annualplan'} icon={Crosshair} color="#eab308" />
+                </div>
+
+                {/* Ideas & Notes */}
+                <div className="mb-6">
+                    <NavItem id="waiting" label={t('someday')} normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" />
+                    <NavItem id="journal" label={t('journal')} normalCount={counts.note} active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" />
+                    <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Lightbulb} color="#fbbf24" />
+                </div>
+
+                {/* Logbook & Trash - Separated */}
+                <div className="mb-6">
+                    <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} color="#a16207" />
+                    <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} color="#9ca3af" />
                 </div>
                 {!sidebarCollapsed && (
                     <div className="mt-2">
-                        <div className="flex items-center justify-between px-3 mb-2 group/tagheader">
-                            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">TAGS</p>
+                        <div
+                            className="flex items-center justify-between px-3 mb-2 group/tagheader cursor-pointer select-none"
+                            onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                        >
+                            <div className="flex items-center gap-2">
+                                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">TAGS</p>
+                                <span className="text-gray-300 transition-transform duration-200" style={{ transform: isTagsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+                                    <ChevronDown size={10} />
+                                </span>
+                            </div>
                             <button
-                                onClick={() => setIsAddingTag(true)}
+                                onClick={(e) => { e.stopPropagation(); setIsAddingTag(true); if (!isTagsExpanded) setIsTagsExpanded(true); }}
                                 className="opacity-0 group-hover/tagheader:opacity-100 p-0.5 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-all flex items-center justify-center"
                                 title="快速新增標籤"
                             >
@@ -668,55 +720,52 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                             </button>
                         </div>
 
-                        <AnimatePresence>
-                            {isAddingTag && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0, scale: 0.95 }}
-                                    animate={{ height: 'auto', opacity: 1, scale: 1 }}
-                                    exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                                    className="px-3 overflow-hidden mb-2"
-                                >
-                                    <form onSubmit={handleAddTagAction} className="relative">
-                                        <input
-                                            ref={newTagInputRef}
-                                            value={newTagName}
-                                            onChange={(e) => setNewTagName(e.target.value)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Escape') setIsAddingTag(false);
-                                                e.stopPropagation();
-                                            }}
-                                            onBlur={() => {
-                                                if (!newTagName.trim()) setIsAddingTag(false);
-                                            }}
-                                            placeholder="輸入標籤名稱..."
-                                            className="w-full text-xs py-1.5 px-2 bg-indigo-50/50 border border-indigo-100 rounded-md outline-none focus:ring-1 focus:ring-indigo-300 transition-all font-medium text-gray-700 placeholder:text-gray-300"
-                                        />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                                            {newTagName.trim() && (
-                                                <button type="submit" className="text-indigo-500 hover:text-indigo-600">
-                                                    <Check size={12} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </form>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        {isTagsExpanded && (
+                            <div className="overflow-hidden">
+                                {isAddingTag && (
+                                    <div className="px-3 overflow-hidden mb-2">
+                                        <form onSubmit={handleAddTagAction} className="relative">
+                                            <input
+                                                ref={newTagInputRef}
+                                                value={newTagName}
+                                                onChange={(e) => setNewTagName(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Escape') setIsAddingTag(false);
+                                                    e.stopPropagation();
+                                                }}
+                                                onBlur={() => {
+                                                    if (!newTagName.trim()) setIsAddingTag(false);
+                                                }}
+                                                placeholder="輸入標籤名稱..."
+                                                className="w-full text-xs py-1.5 px-2 bg-indigo-50/50 border border-indigo-100 rounded-md outline-none focus:ring-1 focus:ring-indigo-300 transition-all font-medium text-gray-700 placeholder:text-gray-300"
+                                            />
+                                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                                {newTagName.trim() && (
+                                                    <button type="submit" className="text-indigo-500 hover:text-indigo-600">
+                                                        <Check size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </form>
+                                    </div>
+                                )}
 
-                        <div className="space-y-0">
-                            {tagTree.map(tag => renderTag(tag))}
+                                <div className="space-y-0">
+                                    {tagTree.map(tag => renderTag(tag))}
 
-                            {/* Ghost Tag Integration */}
-                            {!isAddingTag && (
-                                <button
-                                    onClick={() => setIsAddingTag(true)}
-                                    className="w-full group flex items-center gap-1.5 px-3 py-1 text-gray-300 hover:text-gray-400 text-xs transition-colors transition-opacity opacity-0 hover:opacity-100"
-                                >
-                                    <Plus size={10} />
-                                    <span className="font-medium">{t('addTagPlaceholder')}</span>
-                                </button>
-                            )}
-                        </div>
+                                    {/* Ghost Tag Integration */}
+                                    {!isAddingTag && (
+                                        <button
+                                            onClick={() => setIsAddingTag(true)}
+                                            className="w-full group flex items-center gap-1.5 px-3 py-1 text-gray-300 hover:text-gray-400 text-xs transition-colors transition-opacity opacity-0 hover:opacity-100"
+                                        >
+                                            <Plus size={10} />
+                                            <span className="font-medium">{t('addTagPlaceholder')}</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </nav>
@@ -781,6 +830,15 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                         className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                                     />
                                     <span className="text-xs font-medium text-gray-600">{t('showTaiwanHolidays')}</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={themeSettings.showRelationshipLines !== false}
+                                        onChange={(e) => setThemeSettings({ ...themeSettings, showRelationshipLines: e.target.checked })}
+                                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                    />
+                                    <span className="text-xs font-medium text-gray-600">顯示任務關連線</span>
                                 </label>
                             </div>
 

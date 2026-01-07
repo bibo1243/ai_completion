@@ -429,13 +429,71 @@ export const generateSEOTitle = async (noteContent: string, customInstruction?: 
       .trim()
       .replace(/^["「『]/g, '')
       .replace(/["」』]$/g, '')
-      .replace(/^\d+[\.\、\s]+/, '')
+      .replace(/^\d+[\.、\s]+/, '')
       .replace(/^標題[:：]\s*/i, '')
       .trim();
     return cleanedResult || result.trim();
   } catch (error) {
     console.error("Generate SEO Title Error:", error);
     throw error; // Let the UI handle the error instead of returning a bad fallback
+  }
+};
+
+export interface SEOKeywordsResult {
+  keywords: string[];
+}
+
+export const generateSEOKeywords = async (noteContent: string, existingKeywordTags: string[]): Promise<string[]> => {
+  // Truncate content if too long (avoid token limits)
+  const truncatedContent = noteContent.length > 3000
+    ? noteContent.slice(0, 3000) + '...'
+    : noteContent;
+
+  const existingKeywordsStr = existingKeywordTags.length > 0
+    ? `\n現有的關鍵字標籤（如果與此文章相關，可以優先使用）：${existingKeywordTags.join(', ')}`
+    : '';
+
+  const prompt = `你是一位SEO和內容行銷專家。
+
+【任務說明】
+請「僅根據以下提供的單一文章內容」提取最適合用於搜尋引擎優化(SEO)的關鍵字。
+請勿參考任何其他來源或資料，只分析這一篇文章。
+${existingKeywordsStr}
+
+【重要規則】
+1. 只分析下方「---」之間的文章內容
+2. 提取的關鍵字必須直接來自或高度相關於此文章
+3. 關鍵字數量控制在 3-7 個
+4. 每個關鍵字不超過 10 個中文字
+5. 使用繁體中文
+6. 只輸出關鍵字，每個關鍵字用逗號分隔
+7. 不要輸出任何解釋或其他文字
+
+【文章內容】
+---
+${truncatedContent}
+---
+
+請直接輸出此文章的關鍵字（用逗號分隔）：`;
+
+  console.log("Generating SEO keywords for content length:", noteContent.length);
+  console.log("Content preview:", noteContent.slice(0, 200));
+
+  try {
+    const result = await executeSimpleAIRequest(prompt);
+    console.log("SEO Keywords AI result:", result);
+
+    // Parse the comma-separated keywords
+    const keywords = result
+      .split(/[,，、\n]/)
+      .map((k: string) => k.trim())
+      .filter((k: string) => k.length > 0 && k.length <= 20)
+      .slice(0, 7); // Limit to 7 keywords
+
+    return keywords;
+  } catch (error) {
+    console.error("Generate SEO Keywords Error:", error);
+    throw error;
   }
 };
 
@@ -511,5 +569,75 @@ JSON Format:
   } catch (error) {
     console.error("Mission 72 Planning Error:", error);
     throw new Error("AI 無法生成任務計畫，請稍後再試。");
+  }
+};
+
+/**
+ * Find the best parent keyword tag for a new keyword based on semantic similarity
+ * @param newKeyword The new keyword to be categorized (without # prefix)
+ * @param existingKeywords Array of existing keyword tags with their hierarchy info
+ * @returns The ID of the best parent tag, or null if it should be a top-level keyword
+ */
+export interface KeywordHierarchy {
+  id: string;
+  name: string; // without # prefix
+  parentId: string | null;
+  depth: number;
+}
+
+export const findBestParentKeyword = async (
+  newKeyword: string,
+  existingKeywords: KeywordHierarchy[]
+): Promise<string | null> => {
+  if (existingKeywords.length === 0) {
+    return null;
+  }
+
+  // Build a representation of the keyword hierarchy for the AI
+  const keywordList = existingKeywords
+    .map(k => `- ${k.name} (ID: ${k.id}, 層級: ${k.depth})`)
+    .join('\n');
+
+  const prompt = `你是一位語義分析專家。請判斷新關鍵字「${newKeyword}」應該歸屬於哪個現有關鍵字之下（成為其子關鍵字）。
+
+現有的關鍵字列表：
+${keywordList}
+
+判斷規則：
+1. 如果新關鍵字是某個現有關鍵字的具體細分、子類別、或相關延伸，則選擇該關鍵字作為父關鍵字
+2. 例如：「咖啡」可以是「飲品」的子關鍵字；「行銷策略」可以是「行銷」的子關鍵字
+3. 如果沒有任何現有關鍵字適合作為父關鍵字，請回答 "NONE"
+4. 優先選擇語義上最接近、最具體的父關鍵字
+
+請只輸出一個關鍵字的 ID，或輸出 "NONE"。不要輸出任何解釋文字。`;
+
+  try {
+    const result = await executeSimpleAIRequest(prompt);
+    const cleanResult = result.trim().replace(/["""'']/g, '');
+
+    // Check if the result is a valid ID from the existing keywords
+    if (cleanResult === 'NONE' || cleanResult.toLowerCase() === 'none') {
+      return null;
+    }
+
+    // Verify the ID exists in our keyword list
+    const matchedKeyword = existingKeywords.find(k => k.id === cleanResult);
+    if (matchedKeyword) {
+      return matchedKeyword.id;
+    }
+
+    // Try to match by name if ID wasn't returned directly
+    const matchByName = existingKeywords.find(
+      k => cleanResult.toLowerCase().includes(k.name.toLowerCase()) ||
+        k.name.toLowerCase().includes(cleanResult.toLowerCase())
+    );
+    if (matchByName) {
+      return matchByName.id;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Find Best Parent Keyword Error:", error);
+    return null;
   }
 };

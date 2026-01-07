@@ -1,87 +1,19 @@
-import React, { useRef, useEffect, useContext, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useContext, useMemo, useState, useCallback } from 'react';
 import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { INDENT_SIZE } from '../constants';
 import { TaskInput } from './TaskInput';
 import { TaskItem } from './TaskItem';
-import { DragGhost } from './DragGhost';
 import { DropIndicator } from './DropIndicator';
+import { RelationshipLines } from './RelationshipLines';
+import { DateSeparator, generateDateSeparators, isDateToday, isDateTomorrow } from './DateSeparator';
 import { TaskColor } from '../types';
 
-// Date separator helper functions
-const getDateKey = (dateStr: string | null): string => {
-    if (!dateStr) return 'no-date';
-    const date = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const taskDate = new Date(date);
-    taskDate.setHours(0, 0, 0, 0);
-
-    const diffDays = Math.floor((taskDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) return 'overdue';
-    if (diffDays === 0) return 'today';
-    if (diffDays === 1) return 'tomorrow';
-    if (diffDays <= 7) return `day-${diffDays}`;
-
-    // Get week number
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay());
-    const taskWeekStart = new Date(taskDate);
-    taskWeekStart.setDate(taskDate.getDate() - taskDate.getDay());
-    const weekDiff = Math.floor((taskWeekStart.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24 * 7));
-
-    if (weekDiff <= 4) return `week-${weekDiff}`;
-
-    // Group by month
-    return `month-${taskDate.getFullYear()}-${taskDate.getMonth()}`;
-};
-
-const getDateLabel = (key: string): string => {
-    const today = new Date();
-    const weekdays = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
-    const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-
-    if (key === 'overdue') return '已過期';
-    if (key === 'today') return '今天';
-    if (key === 'tomorrow') return '明天';
-    if (key.startsWith('day-')) {
-        const dayOffset = parseInt(key.split('-')[1]);
-        const date = new Date(today);
-        date.setDate(today.getDate() + dayOffset);
-        return `${weekdays[date.getDay()]} · ${date.getMonth() + 1}/${date.getDate()}`;
-    }
-    if (key.startsWith('week-')) {
-        const weekOffset = parseInt(key.split('-')[1]);
-        if (weekOffset === 1) return '下週';
-        if (weekOffset === 2) return '兩週後';
-        return `${weekOffset} 週後`;
-    }
-    if (key.startsWith('month-')) {
-        const [, year, month] = key.split('-');
-        const thisYear = today.getFullYear();
-        if (parseInt(year) === thisYear) return months[parseInt(month)];
-        return `${year}年 ${months[parseInt(month)]}`;
-    }
-    return key;
-};
-
-const DateSeparator = ({ label, isOverdue, count }: { label: string; isOverdue: boolean; count: number }) => (
-    <div className={`flex items-center gap-3 mt-8 mb-4 px-2 first:mt-0`}>
-        <div className={`text-[13px] font-bold tracking-wide ${isOverdue ? 'text-red-500' : 'text-gray-700'}`}>
-            {label}
-        </div>
-        <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${isOverdue ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-500'}`}>
-            {count}
-        </span>
-        <div className={`flex-1 h-[2px] rounded-full ${isOverdue ? 'bg-gradient-to-r from-red-200 to-transparent' : 'bg-gradient-to-r from-gray-200 to-transparent'}`} />
-    </div>
-);
-
 export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
-    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks } = useContext(AppContext);
+    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks, batchUpdateTasks, themeSettings } = useContext(AppContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollInterval = useRef<any>(null);
+    const emptyDropZoneDateRef = useRef<string | null>(null); // Track if we're over an empty drop zone
 
     // Store the task ID that was focused BEFORE opening the new task editor
     const priorFocusIdRef = useRef<string | null>(null);
@@ -134,37 +66,41 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
     }, [visibleTasks, rootParentId, tasks, expandedTaskIds, view]);
 
     // Use filtered or full visibleTasks
-    const effectiveVisibleTasks = rootParentId ? filteredVisibleTasks : visibleTasks;
+    let effectiveVisibleTasks = rootParentId ? filteredVisibleTasks : visibleTasks;
 
-    // Group tasks by date for upcoming view
-    const groupedTasks = useMemo(() => {
-        if (view !== 'upcoming' || rootParentId) return null;
+    // Local selection handler that uses effectiveVisibleTasks for range calculation
+    // This fixes shift-selection in upcoming view where tasks are sorted differently
+    const selectionAnchorRef = useRef<string | null>(null);
 
-        const groups: { key: string; label: string; tasks: typeof effectiveVisibleTasks }[] = [];
-        const seen = new Set<string>();
+    const handleSelectionLocal = useCallback((e: React.MouseEvent | React.KeyboardEvent, id: string) => {
+        setFocusedTaskId(id);
+        const isShift = (e as React.MouseEvent).shiftKey || (e as React.KeyboardEvent).shiftKey;
+        const isCtrl = (e as React.MouseEvent).ctrlKey || (e as React.MouseEvent).metaKey;
 
-        // Sort tasks by date first
-        const sortedTasks = [...effectiveVisibleTasks].sort((a, b) => {
-            const dateA = a.data.start_date || a.data.due_date || '';
-            const dateB = b.data.start_date || b.data.due_date || '';
-            return dateA.localeCompare(dateB);
-        });
+        if (isShift) {
+            const anchor = selectionAnchorRef.current || focusedTaskId || id;
+            selectionAnchorRef.current = anchor;
 
-        for (const task of sortedTasks) {
-            const dateStr = task.data.start_date || task.data.due_date;
-            const key = getDateKey(dateStr);
+            // Use effectiveVisibleTasks for range calculation (respects upcoming sort order)
+            const startIdx = effectiveVisibleTasks.findIndex(t => t.data.id === anchor);
+            const endIdx = effectiveVisibleTasks.findIndex(t => t.data.id === id);
 
-            if (!seen.has(key)) {
-                seen.add(key);
-                groups.push({ key, label: getDateLabel(key), tasks: [] });
+            if (startIdx !== -1 && endIdx !== -1) {
+                const [lower, upper] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+                const range = effectiveVisibleTasks.slice(lower, upper + 1).map(t => t.data.id);
+                setSelectedTaskIds(range);
             }
-
-            const group = groups.find(g => g.key === key);
-            if (group) group.tasks.push(task);
+        } else if (isCtrl) {
+            selectionAnchorRef.current = id;
+            setSelectedTaskIds(prev => prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id]);
+        } else {
+            selectionAnchorRef.current = id;
+            setSelectedTaskIds([id]);
         }
+    }, [effectiveVisibleTasks, focusedTaskId, setFocusedTaskId, setSelectedTaskIds]);
 
-        return groups;
-    }, [visibleTasks, view]);
+    // Use local handler for upcoming view, global handler for others
+    const effectiveHandleSelection = view === 'upcoming' ? handleSelectionLocal : handleSelection;
 
     useEffect(() => {
         const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -187,8 +123,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
             }
             const idx = effectiveVisibleTasks.findIndex(item => item.data.id === focusedTaskId);
             if (e.metaKey || e.ctrlKey) {
-                if (e.key === 'ArrowUp') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[0]; setFocusedTaskId(target.data.id); handleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
-                if (e.key === 'ArrowDown') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[effectiveVisibleTasks.length - 1]; setFocusedTaskId(target.data.id); handleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
+                if (e.key === 'ArrowUp') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[0]; setFocusedTaskId(target.data.id); effectiveHandleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
+                if (e.key === 'ArrowDown') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[effectiveVisibleTasks.length - 1]; setFocusedTaskId(target.data.id); effectiveHandleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
             }
             if (e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                 e.preventDefault();
@@ -196,23 +132,28 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 if (e.key === 'ArrowDown') nextIdx = Math.min(idx + 1, effectiveVisibleTasks.length - 1);
                 if (e.key === 'ArrowUp') nextIdx = Math.max(idx - 1, 0);
                 const nextTask = effectiveVisibleTasks[nextIdx];
-                if (nextTask) { setFocusedTaskId(nextTask.data.id); handleSelection({ shiftKey: true, preventDefault: () => { } } as any, nextTask.data.id); }
+                if (nextTask) { setFocusedTaskId(nextTask.data.id); effectiveHandleSelection({ shiftKey: true, preventDefault: () => { } } as any, nextTask.data.id); }
                 return;
             }
-            if (e.key === 'ArrowDown' && !e.altKey) { e.preventDefault(); const nextIdx = idx + 1; if (nextIdx < effectiveVisibleTasks.length) { const next = effectiveVisibleTasks[nextIdx]; setFocusedTaskId(next.data.id); handleSelection({ shiftKey: false, ctrlKey: false } as any, next.data.id); } }
-            else if (e.key === 'ArrowUp' && !e.altKey) { e.preventDefault(); const prevIdx = idx - 1; if (prevIdx >= 0) { const prev = effectiveVisibleTasks[prevIdx]; setFocusedTaskId(prev.data.id); handleSelection({ shiftKey: false, ctrlKey: false } as any, prev.data.id); } }
+            if (e.key === 'ArrowDown' && !e.altKey) { e.preventDefault(); const nextIdx = idx + 1; if (nextIdx < effectiveVisibleTasks.length) { const next = effectiveVisibleTasks[nextIdx]; setFocusedTaskId(next.data.id); effectiveHandleSelection({ shiftKey: false, ctrlKey: false } as any, next.data.id); } }
+            else if (e.key === 'ArrowUp' && !e.altKey) { e.preventDefault(); const prevIdx = idx - 1; if (prevIdx >= 0) { const prev = effectiveVisibleTasks[prevIdx]; setFocusedTaskId(prev.data.id); effectiveHandleSelection({ shiftKey: false, ctrlKey: false } as any, prev.data.id); } }
             else if (e.key === 'Enter') { if (idx !== -1 && !editingTaskId && !e.altKey && view !== 'trash') { e.preventDefault(); setEditingTaskId(effectiveVisibleTasks[idx].data.id); } }
             else if (e.key === ' ' && !editingTaskId && view !== 'trash') {
                 e.preventDefault();
                 if (idx !== -1) {
+                    // Create sibling task after current task
                     priorFocusIdRef.current = focusedTaskId;
                     const currentTask = effectiveVisibleTasks[idx];
                     const parentId = currentTask.data.parent_id;
                     const getOrderValue = (t: any) => {
                         if (t.view_orders && t.view_orders[view] !== undefined) return t.view_orders[view];
+                        // For today view, use timestamp-based fallback
+                        if (view === 'today') {
+                            const timestamp = new Date(t.created_at).getTime();
+                            return 900000000 + (timestamp / 1000);
+                        }
                         return t.order_index || 0;
                     };
-                    // ... (rest of logic not needed to re-write entirely if I can target '}')
                     const currentOrder = getOrderValue(currentTask.data);
                     let nextSiblingOrder: number | null = null;
                     for (let i = idx + 1; i < effectiveVisibleTasks.length; i++) {
@@ -226,10 +167,76 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     const promptTag = tags.find(tg => tg.name.toLowerCase() === 'prompt');
                     const newData: any = { title: '', parent_id: parentId, status: currentTask.data.status, tags: view === 'prompt' && promptTag ? [promptTag.id] : currentTask.data.tags, color: currentTask.data.color, start_date: currentTask.data.start_date, order_index: newOrderValue, view_orders: { [view]: newOrderValue } };
                     addTask(newData).then(newId => { setEditingTaskId(newId); });
-                } else if (effectiveVisibleTasks.length === 0) {
+                } else {
+                    // No task selected - create new task at the end based on current view
+                    const today = new Date().toISOString().split('T')[0];
                     const promptTag = tags.find(tg => tg.name.toLowerCase() === 'prompt');
-                    const newData: any = { title: '', parent_id: null, status: view === 'prompt' ? 'active' : 'inbox', tags: view === 'prompt' && promptTag ? [promptTag.id] : [], order_index: 10000, view_orders: { [view]: 10000 } };
-                    addTask(newData).then(newId => { setEditingTaskId(newId); setFocusedTaskId(newId); });
+                    const noteTag = tags.find(tg => tg.name.toLowerCase() === 'note');
+                    const journalTag = tags.find(tg => tg.name.toLowerCase() === 'journal');
+                    const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
+
+                    // Calculate order value - add after the last task
+                    const getOrderValue = (t: any) => {
+                        if (t.view_orders && t.view_orders[view] !== undefined) return t.view_orders[view];
+                        // For today view, use timestamp-based fallback
+                        if (view === 'today') {
+                            const timestamp = new Date(t.created_at).getTime();
+                            return 900000000 + (timestamp / 1000);
+                        }
+                        return t.order_index || 0;
+                    };
+                    let newOrderValue = 10000;
+                    if (effectiveVisibleTasks.length > 0) {
+                        // Find the last root-level task (no parent) to add after
+                        const rootTasks = effectiveVisibleTasks.filter(t => !t.data.parent_id);
+                        if (rootTasks.length > 0) {
+                            const lastRootTask = rootTasks[rootTasks.length - 1];
+                            newOrderValue = getOrderValue(lastRootTask.data) + 10000;
+                        } else {
+                            // If all tasks have parents, add after the last visible task
+                            const lastTask = effectiveVisibleTasks[effectiveVisibleTasks.length - 1];
+                            newOrderValue = getOrderValue(lastTask.data) + 10000;
+                        }
+                    }
+
+                    // Build task data based on view
+                    const newData: any = {
+                        title: '',
+                        parent_id: null,
+                        status: 'inbox',
+                        tags: [],
+                        order_index: newOrderValue,
+                        view_orders: { [view]: newOrderValue }
+                    };
+
+                    // Set view-specific properties
+                    if (view === 'today') {
+                        newData.start_date = today;
+                        newData.status = 'active';
+                    } else if (view === 'prompt') {
+                        newData.status = 'active';
+                        if (promptTag) newData.tags = [promptTag.id];
+                    } else if (view === 'journal') {
+                        newData.status = 'active';
+                        if (noteTag) newData.tags = [noteTag.id];
+                        else if (journalTag) newData.tags = [journalTag.id];
+                    } else if (view === 'waiting') {
+                        newData.status = 'waiting';
+                        if (inspirationTag) newData.tags = [inspirationTag.id];
+                    } else if (view === 'focus') {
+                        newData.status = 'active';
+                    } else if (view === 'upcoming') {
+                        // For upcoming, set start_date to tomorrow
+                        const tomorrow = new Date();
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        newData.start_date = tomorrow.toISOString().split('T')[0];
+                        newData.status = 'active';
+                    }
+
+                    addTask(newData).then(newId => {
+                        setEditingTaskId(newId);
+                        setFocusedTaskId(newId);
+                    });
                 }
             } else if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTaskId) {
                 if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
@@ -250,7 +257,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, handleSelection, view, tags, selectedTaskIds, batchDeleteTasks]);
+    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, effectiveHandleSelection, view, tags, selectedTaskIds, batchDeleteTasks]);
 
     const isReviewView = view === 'waiting' || view === 'prompt' || view === 'logbook' || view === 'log';
     const pendingReviewCount = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at).length : 0;
@@ -260,6 +267,13 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         e.preventDefault();
         if (!dragState.isDragging || !containerRef.current) return;
         updateGhostPosition(e.clientX, e.clientY);
+
+        // If we're over an empty drop zone, don't update drop state
+        if (emptyDropZoneDateRef.current) {
+            updateDropState({ dropIndex: null, indicatorTop: 0 });
+            return;
+        }
+
         const containerRect = containerRef.current.getBoundingClientRect();
         const clientX = e.clientX;
         const clientY = e.clientY;
@@ -272,15 +286,16 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         if (closestIndex === -1) { const firstEl = containerRef.current?.querySelector('[data-task-index]:first-child'); if (firstEl) { const rect = firstEl.getBoundingClientRect(); if (clientY < rect.top) { closestIndex = 0; closestRect = rect; } } if (closestIndex === -1) return; }
 
         let targetDropIndex = closestIndex;
-        if (closestRect) { const centerY = closestRect.top + closestRect.height / 2; if (clientY > centerY) { if (closestIndex < effectiveVisibleTasks.length) targetDropIndex = closestIndex + 1; } }
+        let anchorTaskIndex = closestIndex;  // The task the indicator is "attached" to
+        if (closestRect) { const centerY = closestRect.top + closestRect.height / 2; if (clientY > centerY) { if (closestIndex < effectiveVisibleTasks.length) targetDropIndex = closestIndex + 1; /* anchorTaskIndex stays at closestIndex - indicator is at BOTTOM of this task */ } else { /* anchorTaskIndex stays at closestIndex - indicator is at TOP of this task */ } }
 
         // Block dropping into or reordering within the Review Zone
         if (isReviewView && targetDropIndex <= pendingReviewCount) {
-            updateDropState({ dropIndex: null });
+            updateDropState({ dropIndex: null, anchorTaskIndex: null });
             return;
         }
 
-        const virtualLeft = x - dragState.dragOffsetX;
+        const virtualLeft = x - dragState.dragOffsetX + (dragState.originalDepth * INDENT_SIZE);
         let targetDepth = Math.floor(virtualLeft / INDENT_SIZE);
         if (targetDepth < 0) targetDepth = 0;
         const prevTask = effectiveVisibleTasks[targetDropIndex - 1];
@@ -291,10 +306,10 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         let indicatorLeft = targetDepth * INDENT_SIZE + 40;
         let indicatorWidth = containerRect.width - indicatorLeft - 20;
         if (view === 'today') { targetDepth = 0; indicatorLeft = 40; indicatorWidth = containerRect.width - 60; }
-        updateDropState({ dropIndex: targetDropIndex, dropDepth: targetDepth, indicatorTop, indicatorLeft, indicatorWidth });
+        updateDropState({ dropIndex: targetDropIndex, dropDepth: targetDepth, indicatorTop, indicatorLeft, indicatorWidth, anchorTaskIndex });
     };
 
-    const handleDragEnd = () => { if (scrollInterval.current) { clearInterval(scrollInterval.current); scrollInterval.current = null; } endDrag(); };
+    const handleDragEnd = () => { if (scrollInterval.current) { clearInterval(scrollInterval.current); scrollInterval.current = null; } endDrag(effectiveVisibleTasks); };
 
     const handleCloseEdit = (nextFocusId: string | null) => {
         const targetId = nextFocusId || priorFocusIdRef.current || focusedTaskId;
@@ -308,8 +323,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         if (pendingFocusTaskId) setPendingFocusTaskId(null);
     };
 
-    const draggedTask = dragState.draggedId ? tasks.find(t => t.id === dragState.draggedId) : null;
-    const dragCount = selectedTaskIds.includes(dragState.draggedId || '') ? selectedTaskIds.length : 1;
     const getIndicatorColor = (): TaskColor => { if (dragState.dropIndex === null || dragState.dropIndex === 0) return 'blue'; const prevTask = effectiveVisibleTasks[dragState.dropIndex - 1]; return prevTask?.data.color || 'blue'; };
 
     const pendingReview = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at) : [];
@@ -388,6 +401,232 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     if (effectiveVisibleTasks.length === 0 && (view !== 'allview' || archivedFlatTasks.length === 0)) return <div className="text-center py-20 opacity-20"><Inbox size={48} className="mx-auto" /><p className="text-xs mt-2">No tasks</p></div>;
 
+    // Get effective date string for a task
+    const getTaskDateString = (task: typeof effectiveVisibleTasks[0]['data']): string => {
+        if (task.start_date) {
+            return new Date(task.start_date).toISOString().split('T')[0];
+        }
+        if (task.due_date) {
+            return new Date(task.due_date).toISOString().split('T')[0];
+        }
+        // No date - treat as today
+        return new Date().toISOString().split('T')[0];
+    };
+
+    // Render Today view with date separators
+    const renderTodayViewWithDates = () => {
+        // Generate dates for next 7 days
+        const dates = generateDateSeparators(new Date(), 8); // Today + 7 days
+
+        // Group tasks by date
+        const tasksByDate = new Map<string, typeof effectiveVisibleTasks>();
+        const overdueTasks: typeof effectiveVisibleTasks = [];
+        const futureTasks: typeof effectiveVisibleTasks = [];
+        const today = new Date().toISOString().split('T')[0];
+
+        effectiveVisibleTasks.forEach(item => {
+            const dateStr = getTaskDateString(item.data);
+            // Past dates (before today) go into "overdue" group
+            if (dateStr < today) {
+                overdueTasks.push(item);
+            } else if (dates.includes(dateStr)) {
+                if (!tasksByDate.has(dateStr)) tasksByDate.set(dateStr, []);
+                tasksByDate.get(dateStr)!.push(item);
+            } else {
+                // Far future (beyond 7 days)
+                futureTasks.push(item);
+            }
+        });
+
+        return (
+            <>
+                {/* Overdue tasks section - displayed first */}
+                {overdueTasks.length > 0 && (
+                    <div data-date-group="overdue">
+                        <div className="flex items-center gap-3 pt-2 pb-2 px-1 select-none">
+                            <div className="flex items-baseline gap-2">
+                                <span className="text-[13px] font-semibold text-red-500">
+                                    逾期
+                                </span>
+                                <span className="text-[11px] text-red-400 font-normal">
+                                    {overdueTasks.length} 項未完成
+                                </span>
+                            </div>
+                            <div className="flex-1 h-[1px] bg-red-200" />
+                        </div>
+                        {overdueTasks.map(item => (
+                            <React.Fragment key={item.data.id}>
+                                {editingTaskId === item.data.id
+                                    ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
+                                    : (
+                                        <div className="relative group">
+                                            <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
+                                        </div>
+                                    )
+                                }
+                            </React.Fragment>
+                        ))}
+                    </div>
+                )}
+
+                {/* Date sections for next 7 days */}
+                {dates.map(dateStr => {
+                    const tasksForDate = tasksByDate.get(dateStr) || [];
+                    // Always show all 7 days, even if no tasks
+                    return (
+                        <div key={dateStr} data-date-group={dateStr}>
+                            <DateSeparator
+                                date={dateStr}
+                                isToday={isDateToday(dateStr)}
+                                isTomorrow={isDateTomorrow(dateStr)}
+                                taskCount={tasksForDate.length}
+                            />
+                            {tasksForDate.length === 0 ? (
+                                /* Empty drop zone for dates with no tasks */
+                                <div
+                                    className="h-12 mx-2 mb-2 border-2 border-dashed border-gray-200 rounded-lg flex items-center justify-center text-gray-300 text-xs transition-all hover:border-gray-300 hover:bg-gray-50"
+                                    data-empty-drop-zone={dateStr}
+                                    onDragEnter={(e) => {
+                                        e.preventDefault();
+                                        emptyDropZoneDateRef.current = dateStr;
+                                        e.currentTarget.classList.add('border-blue-400', 'bg-blue-50', 'text-blue-400');
+                                    }}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        // Don't stopPropagation - let parent's handleDragOver run to update ghost position
+                                        e.dataTransfer.dropEffect = 'move';
+                                        emptyDropZoneDateRef.current = dateStr;
+                                        // Also update ghost position here for smoother tracking
+                                        updateGhostPosition(e.clientX, e.clientY);
+                                    }}
+                                    onDragLeave={(e) => {
+                                        emptyDropZoneDateRef.current = null;
+                                        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50', 'text-blue-400');
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50', 'text-blue-400');
+
+                                        // Clear the ref immediately
+                                        const targetDate = emptyDropZoneDateRef.current || dateStr;
+                                        emptyDropZoneDateRef.current = null;
+
+                                        // Try to get dragged task IDs from dataTransfer first
+                                        let draggedIds: string[] = [];
+                                        try {
+                                            const jsonData = e.dataTransfer.getData('application/json');
+                                            if (jsonData) {
+                                                draggedIds = JSON.parse(jsonData);
+                                            }
+                                        } catch {
+                                            // Fallback to plain text
+                                        }
+
+                                        if (draggedIds.length === 0) {
+                                            const singleId = e.dataTransfer.getData('text/plain');
+                                            if (singleId) draggedIds = [singleId];
+                                        }
+
+                                        // Fallback: use context state
+                                        if (draggedIds.length === 0 && dragState.draggedId) {
+                                            draggedIds = selectedTaskIds.includes(dragState.draggedId)
+                                                ? selectedTaskIds
+                                                : [dragState.draggedId];
+                                        }
+
+                                        // Update all dragged tasks to the new date
+                                        if (draggedIds.length > 0) {
+                                            batchUpdateTasks(draggedIds.map((id: string) => ({
+                                                id,
+                                                data: { start_date: targetDate, is_all_day: true }
+                                            })));
+                                        }
+
+                                        // Reset drag state
+                                        endDrag();
+                                    }}
+                                >
+                                    拖放任務到此處
+                                </div>
+                            ) : (
+                                tasksForDate.map(item => (
+                                    <React.Fragment key={item.data.id}>
+                                        {editingTaskId === item.data.id
+                                            ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
+                                            : (
+                                                <div className="relative group">
+                                                    <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
+                                                </div>
+                                            )
+                                        }
+                                    </React.Fragment>
+                                ))
+                            )}
+                        </div>
+                    );
+                })}
+
+                {/* Future tasks beyond 7 days - grouped by month */}
+                {futureTasks.length > 0 && (() => {
+                    // Group by month-year
+                    const monthGroups = new Map<string, typeof futureTasks>();
+                    futureTasks.forEach(item => {
+                        const dateStr = getTaskDateString(item.data);
+                        const d = new Date(dateStr + 'T12:00:00');
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        if (!monthGroups.has(key)) monthGroups.set(key, []);
+                        monthGroups.get(key)!.push(item);
+                    });
+
+                    // Sort keys chronologically
+                    const sortedKeys = Array.from(monthGroups.keys()).sort();
+
+                    return sortedKeys.map(key => {
+                        const [year, month] = key.split('-');
+                        const monthName = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'][parseInt(month) - 1];
+                        const tasksInMonth = monthGroups.get(key)!;
+                        const currentYear = new Date().getFullYear();
+                        const showYear = parseInt(year) !== currentYear;
+
+                        return (
+                            <div key={key} data-date-group={key}>
+                                <div className="flex items-center gap-3 pt-6 pb-2 px-1 select-none">
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-[13px] font-semibold text-gray-400">
+                                            {monthName}
+                                        </span>
+                                        {showYear && (
+                                            <span className="text-[11px] text-gray-300 font-normal">
+                                                {year}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 h-[1px] bg-gray-200" />
+                                    <span className="text-[10px] text-gray-400 tabular-nums">
+                                        {tasksInMonth.length}
+                                    </span>
+                                </div>
+                                {tasksInMonth.map(item => (
+                                    <React.Fragment key={item.data.id}>
+                                        {editingTaskId === item.data.id
+                                            ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
+                                            : (
+                                                <div className="relative group">
+                                                    <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
+                                                </div>
+                                            )
+                                        }
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        );
+                    });
+                })()}
+            </>
+        );
+    };
+
     const renderTaskGroup = (items: typeof effectiveVisibleTasks) => items.map((item) => (
         <React.Fragment key={item.data.id}>
             {editingTaskId === item.data.id
@@ -411,9 +650,21 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     return (
         <>
-            {dragState.isDragging && draggedTask && view !== 'focus' && view !== 'upcoming' && (<DragGhost task={draggedTask} position={dragState.ghostPosition} count={dragCount} />)}
             <div ref={containerRef} className="pb-20 relative min-h-[500px]" onDragOver={handleDragOver} onDrop={(e) => { e.preventDefault(); handleDragEnd(); }} onDragEnd={handleDragEnd} >
-                <DropIndicator show={dragState.isDragging && dragState.dropIndex !== null && view !== 'upcoming'} top={dragState.indicatorTop} left={dragState.indicatorLeft} width={dragState.indicatorWidth} depth={dragState.dropDepth} color={getIndicatorColor()} />
+                {/* Relationship lines for Today view */}
+                {view === 'today' && themeSettings.showRelationshipLines !== false && (
+                    <RelationshipLines
+                        containerRef={containerRef}
+                        tasks={effectiveVisibleTasks.map(t => ({
+                            data: {
+                                id: t.data.id,
+                                parent_id: t.data.parent_id,
+                                color: t.data.color
+                            }
+                        }))}
+                    />
+                )}
+                <DropIndicator show={dragState.isDragging && dragState.dropIndex !== null} top={dragState.indicatorTop} left={dragState.indicatorLeft} width={dragState.indicatorWidth} depth={dragState.dropDepth} color={getIndicatorColor()} />
 
                 {view === 'trash' && (
                     <div className="flex items-center justify-between mb-6 px-4 py-3 bg-gray-50 rounded-lg border border-dashed border-gray-200">
@@ -451,13 +702,25 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     </div>
                 )}
 
-                {/* Upcoming view with date separators */}
-                {view === 'upcoming' && groupedTasks ? (
-                    groupedTasks.map(group => (
-                        <div key={group.key}>
-                            <DateSeparator label={group.label} isOverdue={group.key === 'overdue'} count={group.tasks.length} />
-                            {renderTaskGroup(group.tasks)}
-                        </div>
+                {/* Today view with date separators */}
+                {view === 'today' ? (
+                    renderTodayViewWithDates()
+                ) : view === 'upcoming' ? (
+                    effectiveVisibleTasks.map((item, idx) => (
+                        <React.Fragment key={item.data.id}>
+                            {editingTaskId === item.data.id
+                                ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
+                                : (
+                                    <div className="relative group">
+                                        {/* Debug index badge */}
+                                        <span className="absolute -left-6 top-1/2 -translate-y-1/2 text-[9px] font-mono text-gray-300 select-none">
+                                            {idx + 1}
+                                        </span>
+                                        <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} onSelect={handleSelectionLocal} />
+                                    </div>
+                                )
+                            }
+                        </React.Fragment>
                     ))
                 ) : view === 'allview' ? (
                     <>

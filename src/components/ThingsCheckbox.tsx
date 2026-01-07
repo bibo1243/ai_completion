@@ -1,8 +1,8 @@
 import React from 'react';
-import { Check } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { TaskColor } from '../types';
 
-export const ThingsCheckbox = ({ checked, onChange, size = 18, color = 'blue', isRoot = false }: { checked: boolean, onChange: (e: React.MouseEvent) => void, size?: number, color?: TaskColor, isRoot?: boolean }) => {
+export const ThingsCheckbox = ({ checked, isCanceled = false, onChange, size = 18, color = 'blue', isRoot = false }: { checked: boolean, isCanceled?: boolean, onChange: (e: React.MouseEvent) => void, size?: number, color?: TaskColor, isRoot?: boolean }) => {
     const colorStyles: Record<string, { root: string, sub: string, hover: string, border: string }> = {
         gray: { root: 'bg-gray-500 border-gray-500 text-white', sub: 'bg-gray-100 border-gray-200 text-gray-500', hover: 'hover:border-gray-500', border: 'border-gray-400' },
         blue: { root: 'bg-blue-500 border-blue-500 text-white', sub: 'bg-blue-100 border-blue-200 text-blue-500', hover: 'hover:border-blue-500', border: 'border-blue-400' },
@@ -28,10 +28,14 @@ export const ThingsCheckbox = ({ checked, onChange, size = 18, color = 'blue', i
     return (
         <div
             onClick={onChange}
-            className={`group relative cursor-pointer flex items-center justify-center transition-all duration-200 ease-out border shadow-sm ${checked ? checkedClass : uncheckedClass}`}
+            className={`group relative cursor-pointer flex items-center justify-center transition-all duration-200 ease-out border shadow-sm ${checked || isCanceled ? checkedClass : uncheckedClass}`}
             style={{ width: size, height: size, borderRadius: size * 0.25 }}
         >
-            <Check size={size * 0.7} className={`transition-all duration-300 ease-back-out ${checked ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`} strokeWidth={3} />
+            {isCanceled ? (
+                <X size={size * 0.7} className="text-current scale-100 opacity-100" strokeWidth={3} />
+            ) : (
+                <Check size={size * 0.7} className={`transition-all duration-300 ease-back-out ${checked ? 'scale-100 opacity-100' : 'scale-50 opacity-0'}`} strokeWidth={3} />
+            )}
         </div>
     );
 };

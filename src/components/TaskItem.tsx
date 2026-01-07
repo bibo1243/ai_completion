@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useContext, useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Repeat2 } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
 import { INDENT_SIZE, COLOR_THEMES } from '../constants';
@@ -7,7 +7,7 @@ import { isToday, isOverdue, getRelativeDateString } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
-export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void }) => {
+export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void, onSelect?: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void }) => {
     const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
@@ -20,7 +20,9 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
 
     const isExpanded = flatTask.isExpanded;
     const hasChildren = flatTask.hasChildren;
-    const isDone = !!task.completed_at;
+    const isDone = !!task.completed_at && task.status === 'completed';
+    const isCanceled = task.status === 'canceled';
+    const isCompletedOrCanceled = isDone || isCanceled;
     const isSelected = selectedTaskIds.includes(task.id);
 
     const getEffectiveColor = (t: TaskData): TaskColor => {
@@ -42,12 +44,164 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         }
     }, [isFocused]);
 
-    const toggleCompletion = () => { updateTask(task.id, { completed_at: isDone ? null : new Date().toISOString() }); };
+    const toggleCompletion = (targetStatus?: 'completed' | 'canceled') => {
+        if (targetStatus) {
+            // Explicit set
+            if (task.status === targetStatus) {
+                // Toggle off if already in that status
+                updateTask(task.id, { status: 'active', completed_at: null });
+            } else {
+                updateTask(task.id, { status: targetStatus, completed_at: new Date().toISOString() });
+            }
+        } else {
+            // Default toggle (active <-> completed)
+            // If currently canceled, also mark active.
+            if (isDone || isCanceled) {
+                updateTask(task.id, { status: 'active', completed_at: null });
+            } else {
+                updateTask(task.id, { status: 'completed', completed_at: new Date().toISOString() });
+            }
+        }
+    };
+
+    // Get effective date for task
+    const getTaskEffectiveDate = (t: TaskData): string => {
+        if (t.start_date) return new Date(t.start_date).toISOString().split('T')[0];
+        if (t.due_date) return new Date(t.due_date).toISOString().split('T')[0];
+        return new Date().toISOString().split('T')[0];
+    };
+
+    // Check if the selection is at the boundary of its date group in Today view
+    // Returns true if ALL selected tasks (from top for 'up', from bottom for 'down') are at boundary
+    const isAtDateBoundary = (direction: 'up' | 'down'): boolean => {
+        if (view !== 'today') return false;
+
+        // Get all selected task IDs (or just current task if not selected)
+        const tasksToCheck = selectedTaskIds.includes(task.id) ? selectedTaskIds : [task.id];
+
+        // Get indices and sort
+        const indices = tasksToCheck
+            .map(id => visibleTasks.findIndex(t => t.data.id === id))
+            .filter(idx => idx !== -1)
+            .sort((a, b) => a - b);
+
+        if (indices.length === 0) return false;
+
+        if (direction === 'up') {
+            // Check if the first selected task is at boundary
+            const firstIdx = indices[0];
+            if (firstIdx === 0) return true;
+            const firstTask = visibleTasks[firstIdx].data;
+            const prevTask = visibleTasks[firstIdx - 1].data;
+            return getTaskEffectiveDate(prevTask) !== getTaskEffectiveDate(firstTask);
+        } else {
+            // Check if the last selected task is at boundary
+            const lastIdx = indices[indices.length - 1];
+            if (lastIdx === visibleTasks.length - 1) return true;
+            const lastTask = visibleTasks[lastIdx].data;
+            const nextTask = visibleTasks[lastIdx + 1].data;
+            return getTaskEffectiveDate(nextTask) !== getTaskEffectiveDate(lastTask);
+        }
+    };
+
+    // Jump task(s) to next/previous day - handles batch selection
+    const jumpToDate = (direction: 'up' | 'down') => {
+        // Get all tasks to move
+        const tasksToMove = selectedTaskIds.includes(task.id) ? selectedTaskIds : [task.id];
+
+        // Find all task data and sort by current view_orders.today
+        const taskDataList = tasksToMove
+            .map(id => tasks.find((t: TaskData) => t.id === id))
+            .filter((t): t is TaskData => t !== undefined)
+            .sort((a, b) => {
+                const aOrder = a.view_orders?.today ?? 0;
+                const bOrder = b.view_orders?.today ?? 0;
+                return aOrder - bOrder;
+            });
+
+        if (taskDataList.length === 0) return;
+
+        // Use the first task's date as reference for computing new date
+        const referenceTask = taskDataList[0];
+        const currentDate = referenceTask.start_date ? new Date(referenceTask.start_date) : new Date();
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() + (direction === 'up' ? -1 : 1));
+        const newDateStr = newDate.toISOString().split('T')[0];
+
+        // Find tasks already in the target date to determine insertion point
+        const targetDateTasks = tasks
+            .filter((t: TaskData) => {
+                const taskDate = t.start_date?.split('T')[0] || t.due_date?.split('T')[0];
+                return taskDate === newDateStr && !tasksToMove.includes(t.id);
+            })
+            .sort((a: TaskData, b: TaskData) => {
+                const aOrder = a.view_orders?.today ?? 0;
+                const bOrder = b.view_orders?.today ?? 0;
+                return aOrder - bOrder;
+            });
+
+        // Calculate new view_orders
+        // For 'up': place at END of target date (after existing tasks - you dropped down into this day)
+        // For 'down': place at BEGINNING of target date (before existing tasks - you came up into this day)
+        let baseOrder: number;
+        if (direction === 'up') {
+            // Moving to previous day - place at END of that day (after all existing tasks)
+            const maxOrder = targetDateTasks.reduce((max: number, t: TaskData) =>
+                Math.max(max, t.view_orders?.today ?? 0), 0);
+            baseOrder = maxOrder + 10000;
+        } else {
+            // Moving to next day - place at BEGINNING of that day (before all existing tasks)
+            const minOrder = targetDateTasks.reduce((min: number, t: TaskData) =>
+                Math.min(min, t.view_orders?.today ?? 900000000), 900000000);
+            baseOrder = minOrder - (taskDataList.length + 1) * 10000;
+        }
+
+        // Batch update all tasks: update date and view_orders.today
+        batchUpdateTasks(taskDataList.map((t, index) => ({
+            id: t.id,
+            data: {
+                start_date: newDateStr,
+                is_all_day: true,
+                view_orders: { ...(t.view_orders || {}), today: baseOrder + (index * 10000) }
+            }
+        })));
+    };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.altKey && !e.ctrlKey && !e.metaKey) {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); }
-            if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
+            // Focus and review zones are fully disabled
+            if (view === 'focus' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
+
+            // Today view: Alt+Up/Down at date boundary jumps to prev/next day
+            if (view === 'today') {
+                if (e.key === 'ArrowUp') {
+                    if (isAtDateBoundary('up')) {
+                        jumpToDate('up');
+                        return;
+                    }
+                    keyboardMove(task.id, 'up');
+                    return;
+                }
+                if (e.key === 'ArrowDown') {
+                    if (isAtDateBoundary('down')) {
+                        jumpToDate('down');
+                        return;
+                    }
+                    keyboardMove(task.id, 'down');
+                    return;
+                }
+                // Allow left/right for hierarchy changes in Today view
+                if (e.key === 'ArrowRight') { keyboardMove(task.id, 'right'); return; }
+                if (e.key === 'ArrowLeft') { if (canNavigateBack) { navigateBack(); } else { keyboardMove(task.id, 'left'); } return; }
+            }
+
+            // Upcoming: allow up/down, but not left/right (no hierarchy changes)
+            if (view === 'upcoming') {
+                if (e.key === 'ArrowUp') { keyboardMove(task.id, 'up'); return; }
+                if (e.key === 'ArrowDown') { keyboardMove(task.id, 'down'); return; }
+                return; // Block left/right in upcoming
+            }
             if (e.key === 'ArrowUp') { keyboardMove(task.id, 'up'); return; }
             if (e.key === 'ArrowDown') { keyboardMove(task.id, 'down'); return; }
             if (e.key === 'ArrowRight') { keyboardMove(task.id, 'right'); return; }
@@ -109,44 +263,80 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             return;
         }
 
-        if (e.ctrlKey && e.key === '.') { e.preventDefault(); e.stopPropagation(); toggleCompletion(); return; }
+        if ((e.ctrlKey || e.metaKey) && e.key === '.') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.shiftKey) {
+                toggleCompletion('canceled');
+            } else {
+                toggleCompletion('completed');
+            }
+            return;
+        }
         if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onEdit(); }
         if (e.key === ' ' && (view === 'all' || view === 'today' || view === 'schedule' || view === 'waiting' || view === 'focus')) {
             e.preventDefault(); e.stopPropagation();
-            const parentId = task.parent_id;
             const currentIdx = visibleTasks.findIndex(t => t.data.id === task.id);
 
             // Use view_orders[view] if available (matches drag reorder logic), otherwise order_index
             const getOrderValue = (t: any) => {
                 if (t.view_orders && t.view_orders[view] !== undefined) return t.view_orders[view];
+                // For today view, use timestamp-based fallback
+                if (view === 'today') {
+                    const timestamp = new Date(t.created_at).getTime();
+                    return 900000000 + (timestamp / 1000);
+                }
                 return t.order_index || 0;
             };
 
             const currentOrder = getOrderValue(task);
 
-            // Find next sibling in VISUAL order
-            let nextSiblingOrder: number | null = null;
+            // For today view, tasks are displayed flat - add at visual position without parent
+            // For other views, add as sibling under same parent
+            const useParentId = (view === 'today') ? null : task.parent_id;
+
+            // Find next task in VISUAL order (for today view) or next sibling (for other views)
+            let nextOrder: number | null = null;
             for (let i = currentIdx + 1; i < visibleTasks.length; i++) {
                 const candidate = visibleTasks[i];
-                if (candidate.depth <= flatTask.depth && candidate.data.parent_id !== parentId) break;
-                if (candidate.data.parent_id === parentId) {
-                    nextSiblingOrder = getOrderValue(candidate.data);
+                if (view === 'today') {
+                    // Today view: just find the next task in visual order
+                    nextOrder = getOrderValue(candidate.data);
                     break;
+                } else {
+                    // Other views: find next sibling
+                    if (candidate.depth <= flatTask.depth && candidate.data.parent_id !== useParentId) break;
+                    if (candidate.data.parent_id === useParentId) {
+                        nextOrder = getOrderValue(candidate.data);
+                        break;
+                    }
                 }
             }
 
             let newOrderValue = currentOrder + 10000;
-            if (nextSiblingOrder !== null) {
-                newOrderValue = (currentOrder + nextSiblingOrder) / 2;
+            if (nextOrder !== null) {
+                newOrderValue = (currentOrder + nextOrder) / 2;
             }
 
-            addTask({
+            // Build new task data based on view
+            const newTaskData: any = {
                 title: '',
-                status: 'inbox',
-                parent_id: parentId,
+                status: view === 'waiting' ? 'waiting' : 'inbox',
+                parent_id: useParentId,
                 order_index: newOrderValue,
                 view_orders: { [view]: newOrderValue }
-            }, [], undefined).then(newId => {
+            };
+
+            // Set view-specific properties
+            if (view === 'today') {
+                // Inherit date from current task
+                const inheritedDate = getTaskEffectiveDate(task);
+                newTaskData.start_date = inheritedDate;
+                newTaskData.status = 'active';
+                newTaskData.is_all_day = true;
+            }
+
+            addTask(newTaskData, [], undefined).then(newId => {
                 if (newId) {
                     setPendingFocusTaskId(newId);
                     setEditingTaskId(newId);
@@ -170,7 +360,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const isDraggingSelf = view !== 'focus' && (dragState.draggedId === task.id || (dragState.isDragging && isSelected));
     const selectionStyle = isSelected ? 'bg-theme-selection' : '';
     const focusStyle = (isFocused && !isSelected && !isDraggingSelf) ? `bg-theme-hover` : '';
-    const completedStyle = (isDone && view !== 'logbook' && view !== 'trash') ? 'bg-emerald-50/30' : (isDone ? 'opacity-60 grayscale' : '');
+    const completedStyle = (isCompletedOrCanceled && view !== 'logbook' && view !== 'trash') ? 'bg-emerald-50/30' : (isCompletedOrCanceled ? 'opacity-60 grayscale' : '');
     const draggingStyle = isDraggingSelf ? 'opacity-40 scale-[0.98] blur-[0.5px] transition-all duration-200' : 'opacity-100 scale-100 transition-all duration-200';
     const animationStyle = 'transition-all duration-200 ease-in-out';
 
@@ -181,26 +371,46 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
     const finalClass = `group relative ${focusViewMargin} rounded-lg outline-none select-none cursor-default ${focusViewPadding} ${selectionStyle} ${!isSelected && !isDraggingSelf && focusStyle} ${completedStyle} ${draggingStyle} ${animationStyle} hover-effect active:bg-theme-hover touch-manipulation`;
 
     const renderDateBadge = () => {
-        if (!task.start_date && !task.start_time) return null;
-        // if (isCmdPressed) block removed per user request
-        if (!task.start_date) return null;
-        const is_Today = isToday(task.start_date);
-        const is_Overdue = isOverdue(task.start_date) && !isDone;
-        let badgeStyle = "bg-theme-hover text-theme-secondary";
-        if (is_Today) badgeStyle = "bg-yellow-50 text-yellow-600 font-medium";
-        else if (is_Overdue) badgeStyle = "bg-red-50 text-red-600 font-medium";
-        return (<span className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}> <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day, language)} </span>);
+        const badges = [];
+
+        // Repeat indicator
+        if (task.repeat_rule) {
+            badges.push(
+                <span key="repeat" className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 flex items-center gap-0.5" title={task.repeat_rule.originalText || '重複任務'}>
+                    <Repeat2 size={10} />
+                </span>
+            );
+        }
+
+        // Date badge
+        if (task.start_date) {
+            const is_Today = isToday(task.start_date);
+            const is_Overdue = isOverdue(task.start_date) && !isCompletedOrCanceled;
+            let badgeStyle = "bg-theme-hover text-theme-secondary";
+            if (is_Today) badgeStyle = "bg-yellow-50 text-yellow-600 font-medium";
+            else if (is_Overdue) badgeStyle = "bg-red-50 text-red-600 font-medium";
+            badges.push(
+                <span key="date" className={`text-[10px] px-1.5 py-0.5 rounded border border-transparent ${badgeStyle} flex items-center gap-1`}>
+                    <Calendar size={10} /> {getRelativeDateString(task.start_date, !task.is_all_day, language)}
+                </span>
+            );
+        }
+
+
+
+        if (badges.length === 0) return null;
+        return <>{badges}</>;
     };
 
-    const titleFontClass = isFocusView ? 'font-extralight' : (themeSettings.fontWeight === 'thin' ? 'font-extralight' : 'font-medium');
+    const titleFontClass = isFocusView ? 'font-extralight' : (themeSettings.fontWeight === 'thin' ? 'font-extralight' : 'font-semibold');
     const textSizeClass = { small: 'text-sm', normal: 'text-base', large: 'text-lg' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-base';
 
     // Generate breadcrumb path for Focus and Today views
-    const getBreadcrumbData = (): { path: string; color: string } | null => {
+    const getBreadcrumbData = (): { items: { title: string }[], rootColor: string } | null => {
         if (view !== 'focus' && view !== 'today') return null;
         if (!task.parent_id) return null; // Root tasks don't need breadcrumbs
 
-        const pathParts: string[] = [];
+        const items: { title: string }[] = [];
         let curr = tasks.find(t => t.id === task.parent_id);
         let rootColor = 'blue';
         const visited = new Set<string>();
@@ -208,7 +418,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
         while (curr) {
             if (visited.has(curr.id)) break;
             visited.add(curr.id);
-            pathParts.unshift(curr.title || 'Untitled');
+            items.unshift({ title: curr.title || 'Untitled' });
             if (!curr.parent_id) {
                 // This is the root - capture its color
                 rootColor = curr.color || 'blue';
@@ -216,8 +426,8 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             curr = tasks.find(t => t.id === curr!.parent_id);
         }
 
-        if (pathParts.length === 0) return null;
-        return { path: pathParts.join(' > '), color: rootColor };
+        if (items.length === 0) return null;
+        return { items, rootColor };
     };
 
     const breadcrumbData = getBreadcrumbData();
@@ -276,8 +486,8 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             ref={itemRef}
             data-task-id={task.id}
             data-task-index={flatTask.index}
-            draggable={!isMobile && view !== 'schedule' && view !== 'focus' && view !== 'upcoming' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
-            onDragStart={(e: any) => { if (view === 'focus' || view === 'upcoming' || isInReviewZone || (view === 'allview' && task.status === 'logged')) { e.preventDefault(); return; } startDrag(e, flatTask); }}
+            draggable={!isMobile && view !== 'schedule' && view !== 'focus' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
+            onDragStart={(e: any) => { if (view === 'focus' || isInReviewZone || (view === 'allview' && task.status === 'logged')) { e.preventDefault(); return; } startDrag(e, flatTask); }}
             className={`${finalClass} ${isLongPressing ? 'scale-[1.02] shadow-lg z-50' : ''}`}
             style={{ marginLeft: `${view === 'today' ? 0 : flatTask.depth * INDENT_SIZE}px` }}
             tabIndex={0}
@@ -292,8 +502,9 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                         setTimeout(() => setEditingTaskId(task.id), 50);
                     }
                 } else {
-                    // Desktop: select on click
-                    handleSelection(e, task.id);
+                    // Desktop: select on click - use onSelect if provided, otherwise global handleSelection
+                    const selectionHandler = onSelect || handleSelection;
+                    selectionHandler(e, task.id);
                 }
             }}
             onDoubleClick={(e: any) => {
@@ -308,22 +519,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
             onTouchEnd={handleTouchEnd}
         >
             <div className={`flex flex-col ${isFocusView ? 'px-1' : 'px-3'}`}>
-                {/* Breadcrumb for Focus/Today View - Styled Bubble */}
-                {breadcrumbData && (
-                    <div className={`flex items-center gap-1 mb-0.5 ${isFocusView ? 'ml-[36px]' : 'ml-[52px]'}`}>
-                        <span
-                            className={`${isFocusView ? 'text-[8px]' : 'text-[9px]'} font-bold px-2 py-0.5 rounded-full truncate max-w-[200px] border`}
-                            style={{
-                                backgroundColor: (COLOR_THEMES[breadcrumbData.color as keyof typeof COLOR_THEMES]?.color || '#6366f1') + '15',
-                                color: COLOR_THEMES[breadcrumbData.color as keyof typeof COLOR_THEMES]?.color || '#6366f1',
-                                borderColor: (COLOR_THEMES[breadcrumbData.color as keyof typeof COLOR_THEMES]?.color || '#6366f1') + '30'
-                            }}
-                            title={breadcrumbData.path}
-                        >
-                            {breadcrumbData.path}
-                        </span>
-                    </div>
-                )}
+
                 <div className="flex items-center gap-3">
                     {view === 'trash' ? (
                         <>
@@ -347,10 +543,64 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                         <>
                             <div className="flex items-center gap-1">
                                 {hasChildren && view !== 'today' ? <button onClick={(e) => { e.stopPropagation(); toggleExpansion(task.id) }} className="text-slate-400 hover:text-slate-800 transition-transform">{isExpanded ? <ChevronDown size={checkboxSize} /> : <ChevronRight size={checkboxSize} />}</button> : <div className={`${isFocusView ? 'w-[12px]' : 'w-[16px]'}`} />}
-                                <ThingsCheckbox checked={isDone} onChange={(e) => { e.stopPropagation(); toggleCompletion(); }} color={getEffectiveColor(task)} isRoot={!task.parent_id} size={isFocusView ? 14 : 18} />
+                                <ThingsCheckbox
+                                    checked={isDone}
+                                    isCanceled={isCanceled}
+                                    onChange={(e) => {
+                                        e.stopPropagation();
+                                        if (e.altKey) {
+                                            toggleCompletion('canceled');
+                                        } else {
+                                            toggleCompletion();
+                                        }
+                                    }}
+                                    color={getEffectiveColor(task)}
+                                    isRoot={!task.parent_id}
+                                    size={isFocusView ? 14 : 18}
+                                />
+                                {/* Importance indicator */}
+                                {task.importance && (
+                                    <span
+                                        className={`w-2 h-2 rounded-full flex-shrink-0 ${task.importance === 'urgent' ? 'bg-red-500' :
+                                            task.importance === 'planned' ? 'bg-yellow-400' :
+                                                task.importance === 'delegated' ? 'bg-green-500' :
+                                                    'bg-gray-300'
+                                            }`}
+                                        title={
+                                            task.importance === 'urgent' ? '立刻去做' :
+                                                task.importance === 'planned' ? '計畫去做' :
+                                                    task.importance === 'delegated' ? '交辦去做' :
+                                                        '未規劃'
+                                        }
+                                    />
+                                )}
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
-                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isDone ? 'opacity-30' : 'text-theme-secondary'} mr-2 truncate block flex-shrink`}>{task.title}</span>
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink`}>
+                                    {task.title}
+                                </span>
+                                {/* Debug Info for Sorting Issues */}
+
+                                {breadcrumbData && (
+                                    <div className="flex items-center gap-0.5 mr-2 flex-shrink-0">
+                                        {/* Separator from title if needed, or just margin */}
+                                        {breadcrumbData.items.map((item, index) => (
+                                            <React.Fragment key={index}>
+                                                {index > 0 && <ChevronRight size={10} className="text-gray-300 flex-shrink-0" strokeWidth={1.5} />}
+                                                <span
+                                                    className={`${isFocusView ? 'text-[8px]' : 'text-[9px]'} font-semibold px-1.5 py-[1px] rounded transition-colors duration-200 truncate max-w-[150px]`}
+                                                    style={{
+                                                        backgroundColor: (COLOR_THEMES[breadcrumbData.rootColor as keyof typeof COLOR_THEMES]?.color || '#6366f1') + '15',
+                                                        color: COLOR_THEMES[breadcrumbData.rootColor as keyof typeof COLOR_THEMES]?.color || '#6366f1',
+                                                    }}
+                                                    title={item.title}
+                                                >
+                                                    {item.title}
+                                                </span>
+                                            </React.Fragment>
+                                        ))}
+                                    </div>
+                                )}
                                 {(task.tags || []).length > 0 && (
                                     <>
                                         {/* Desktop: Full Tag Names */}
@@ -358,10 +608,14 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                             {(task.tags || []).map(tid => {
                                                 const tName = tags.find(t => t.id === tid)?.name;
                                                 if (!tName) return null;
+                                                const isKeyword = tName.startsWith('#');
                                                 return (
                                                     <div key={tid} className="relative flex-shrink-0">
-                                                        <span className={`${tagTextSize} font-light border border-theme rounded-md px-1.5 py-px ${isDone ? 'text-theme-tertiary bg-theme-hover' : 'text-theme-secondary bg-theme-hover'} whitespace-nowrap`}>
-                                                            #{tName}
+                                                        <span className={`${tagTextSize} border rounded-md px-1.5 py-px whitespace-nowrap ${isKeyword
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                            : `border-theme ${isDone ? 'text-theme-tertiary bg-theme-hover' : 'text-theme-secondary bg-theme-hover'}`
+                                                            }`}>
+                                                            {tName}
                                                         </span>
                                                     </div>
                                                 );
@@ -375,7 +629,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit }: { flatTask: FlatTask, 
                                     </>
                                 )}
                                 {task.description && <FileText size={12} className="text-slate-400 mr-2 flex-shrink-0" />}
-                                <div className={`ml-auto ${isDone ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
+                                <div className={`ml-auto ${isCompletedOrCanceled ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
                             </div>
                             <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">
                                 <button onClick={(e) => {

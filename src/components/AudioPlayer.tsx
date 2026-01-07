@@ -161,26 +161,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
                                     className="h-full bg-indigo-500 transition-all duration-100 rounded-full"
                                     style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                                 />
-                                {/* Render Markers */}
-                                {duration > 0 && markers.map((m, i) => {
-                                    // time is in ms, duration is in seconds
-                                    const pct = (m.time / 1000 / duration) * 100;
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-amber-400 border border-white shadow-sm z-20 cursor-pointer hover:scale-150 transition-transform pointer-events-auto"
-                                            style={{ left: `${Math.min(pct, 100)}%` }}
-                                            title={`跳轉至 ${formatTime(m.time / 1000)}`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                // Jump to 4 seconds before the marker
-                                                jumpToTime(Math.max(0, m.time - 4000));
-                                                onMarkerClick?.(m);
-                                            }}
-                                            onMouseDown={(e) => e.stopPropagation()}
-                                        />
-                                    )
-                                })}
+                                {/* Markers removed per user request */}
                             </div>
                         </div>
                         <input

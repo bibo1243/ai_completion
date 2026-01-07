@@ -1,25 +1,28 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus, BookOpen } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
 import { JournalView } from './JournalView';
 import { FocusView } from './FocusView';
 import { ProjectView } from './ProjectView';
+import { AnnualPlanView } from './AnnualPlanView';
 import { AdvancedFilterBar } from './AdvancedFilterBar';
 import { Toast } from './Toast';
 import { Mission72Manager } from './Mission72Manager';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { MobileTaskEditor } from './MobileTaskEditor';
-import GTDGuide from './GTDGuide';
+import { MatrixView } from './MatrixView';
+import { DragGhost } from './DragGhost';
+// import GTDGuide from './GTDGuide'; // Temporarily disabled
 
 export const MainLayout = () => {
-  const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds } = useContext(AppContext);
+  const { user, logout, syncStatus, view, setView, tagFilter, setTagFilter, tasks, tags, toast, setToast, undo, redo, canUndo, canRedo, canNavigateBack, navigateBack, archiveCompletedTasks, editingTaskId, setEditingTaskId, themeSettings, sidebarWidth, setSidebarWidth, sidebarCollapsed, selectedTaskIds, dragState } = useContext(AppContext);
   const [localQuickAdd, setLocalQuickAdd] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMission72, setShowMission72] = useState(false);
-  const [showGTDGuide, setShowGTDGuide] = useState(false);
+  // const [showGTDGuide, setShowGTDGuide] = useState(false); // Temporarily disabled
 
   // Detect mobile
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
@@ -125,8 +128,12 @@ export const MainLayout = () => {
     return view.charAt(0).toUpperCase() + view.slice(1);
   };
 
+  const draggedTask = dragState?.draggedId ? tasks.find((t: any) => t.id === dragState.draggedId) : null;
+  const dragCount = selectedTaskIds.includes(dragState?.draggedId || '') ? selectedTaskIds.length : 1;
+
   return (
     <div data-theme={themeSettings.themeMode && themeSettings.themeMode !== 'light' ? themeSettings.themeMode : undefined} className={`flex h-screen bg-theme-main text-theme-primary ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
+      {dragState?.isDragging && draggedTask && (<DragGhost task={draggedTask} position={dragState.ghostPosition} count={dragCount} />)}
       {/* Desktop Sidebar */}
       <div style={{ width: sidebarCollapsed ? 64 : sidebarWidth }} className="relative flex-shrink-0 hidden md:block transition-all duration-300 ease-in-out">
         <Sidebar view={view} setView={setView} tagFilter={tagFilter} setTagFilter={setTagFilter} />
@@ -201,13 +208,17 @@ export const MainLayout = () => {
           </div>
         </header>
         <AdvancedFilterBar />
-        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar prevent-pull-refresh ${view !== 'focus' && view !== 'project' ? 'p-4 md:p-8' : ''}`}>
+        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar prevent-pull-refresh ${view !== 'focus' && view !== 'project' && view !== 'annualplan' ? 'p-4 md:p-8' : ''}`}>
           {view === 'journal' ? (
             <JournalView />
           ) : view === 'focus' ? (
             <FocusView />
           ) : view === 'project' ? (
             <ProjectView />
+          ) : view === 'annualplan' ? (
+            <AnnualPlanView />
+          ) : view === 'matrix' ? (
+            <MatrixView />
           ) : (
             <div className="w-full md:w-[calc(100%-100px)] mx-auto mt-2 md:mt-8">
               <TaskList />
@@ -260,7 +271,7 @@ export const MainLayout = () => {
 
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
-        {/* GTD Guide Button */}
+        {/* GTD Guide Button - temporarily disabled
         <button
           onClick={() => setShowGTDGuide(true)}
           className="fixed bottom-6 right-6 md:right-24 z-30 h-10 w-10 md:h-12 md:w-12 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
@@ -269,9 +280,11 @@ export const MainLayout = () => {
           <BookOpen size={18} className="md:hidden" />
           <BookOpen size={22} className="hidden md:block" />
         </button>
+        */}
 
-        {/* GTD Guide Modal */}
+        {/* GTD Guide Modal - temporarily disabled
         <GTDGuide isOpen={showGTDGuide} onClose={() => setShowGTDGuide(false)} />
+        */}
 
         {/* Mobile Task Editor - uses createPortal internally */}
         {editingTaskId && isMobile && (

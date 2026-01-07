@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { RotateCcw, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { RotateCcw, CheckCircle, AlertCircle, Info, ExternalLink } from 'lucide-react';
 
 interface ToastProps {
     toast: {
         msg: string;
         type?: 'info' | 'error';
         undo?: () => void;
+        onClick?: () => void; // New: allows toast to be clickable
+        actionLabel?: string; // New: label for the action button
     };
     onClose: () => void;
 }
@@ -32,6 +34,13 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
         return <Info size={16} />;
     };
 
+    const handleClick = () => {
+        if (toast.onClick) {
+            toast.onClick();
+            onClose();
+        }
+    };
+
     return (
         <div
             className={`
@@ -40,21 +49,33 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
                 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}
             `}
         >
-            <div className={`
-                px-4 py-2.5 rounded-full shadow-lg flex items-center gap-3 backdrop-blur-md
-                ${toast.type === 'error'
-                    ? 'bg-red-500/90 text-white'
-                    : 'bg-gray-900/90 text-white'
-                }
-            `}>
+            <div
+                className={`
+                    px-4 py-2.5 rounded-full shadow-lg flex items-center gap-3 backdrop-blur-md
+                    ${toast.type === 'error'
+                        ? 'bg-red-500/90 text-white'
+                        : 'bg-gray-900/90 text-white'
+                    }
+                    ${toast.onClick ? 'cursor-pointer hover:bg-gray-800/95 transition-colors' : ''}
+                `}
+                onClick={toast.onClick ? handleClick : undefined}
+            >
                 <div className="flex items-center gap-2">
                     {getIcon()}
                     <span className="text-sm font-medium">{toast.msg}</span>
                 </div>
 
+                {toast.onClick && !toast.undo && (
+                    <div className="flex items-center gap-1 text-xs text-white/70">
+                        <ExternalLink size={12} />
+                        <span>{toast.actionLabel || '查看'}</span>
+                    </div>
+                )}
+
                 {toast.undo && (
                     <button
-                        onClick={() => {
+                        onClick={(e) => {
+                            e.stopPropagation();
                             toast.undo?.();
                             onClose();
                         }}

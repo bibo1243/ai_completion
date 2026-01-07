@@ -1,8 +1,10 @@
 import { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
+import { RecordingProvider } from './context/RecordingContext';
 import { MainLayout } from './components/MainLayout';
 import { Login } from './components/Login';
+import { GlobalRecordingCapsule } from './components/GlobalRecordingCapsule';
 
 const AppRoutes = () => {
   const { user, loading } = useContext(AppContext);
@@ -45,8 +47,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppProvider>
-        <AppRoutes />
+        <RecordingProvider>
+          <AppRoutes />
+          <GlobalRecordingCapsule />
+        </RecordingProvider>
+
       </AppProvider>
-    </BrowserRouter>
+    </BrowserRouter >
   );
 }

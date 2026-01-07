@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, MoreHorizontal, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2 } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2, Repeat2 } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import { AppContext } from '../context/AppContext';
+import { RecordingContext } from '../context/RecordingContext';
 import { useClickOutside } from '../hooks/useClickOutside';
-import { TaskData, TaskColor, AIHistoryEntry } from '../types';
+import { TaskData, TaskColor, AIHistoryEntry, RepeatRule, RepeatType, ImportanceLevel } from '../types';
 import { COLOR_THEMES, ThemeColor } from '../constants';
 import { isDescendant } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
@@ -14,7 +15,7 @@ import { TagChip } from './TagChip';
 import { supabase } from '../supabaseClient';
 import imageCompression from 'browser-image-compression';
 import NoteEditor from './NoteEditor';
-import { askAIAssistant, generatePromptTitle, generateSEOTitle } from '../services/ai';
+import { askAIAssistant, generatePromptTitle, generateSEOTitle, generateSEOKeywords, findBestParentKeyword, KeywordHierarchy } from '../services/ai';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // Helper to format AI response (Markdown) to HTML for Tiptap
@@ -102,7 +103,7 @@ const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對�
 
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false }: any) => {
-    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t } = useContext(AppContext);
+    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
     const [dueDate, setDueDate] = useState<string | null>(initialData?.due_date || null);
@@ -115,10 +116,28 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [childIds, setChildIds] = useState<string[]>([]);
     const [isProject, setIsProject] = useState(initialData?.is_project || false);
     const [color, setColor] = useState<TaskColor>(initialData?.color || 'gray');
+    const [importance, setImportance] = useState<ImportanceLevel | undefined>(initialData?.importance || 'unplanned');
     const [isAllDay, setIsAllDay] = useState(initialData?.is_all_day !== undefined ? initialData.is_all_day : true);
-    const [startTime, setStartTime] = useState(initialData?.start_time || '09:00');
-    const [endTime, setEndTime] = useState(initialData?.end_time || '10:00');
+    // Extract time from start_date if not all-day, otherwise use defaults
+    const [startTime, setStartTime] = useState(() => {
+        if (initialData?.start_date && !initialData?.is_all_day) {
+            const d = new Date(initialData.start_date);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+        return '09:00';
+    });
+    const [endTime, setEndTime] = useState(() => {
+        if (initialData?.start_date && !initialData?.is_all_day) {
+            const d = new Date(initialData.start_date);
+            // Default end time is 1 hour after start
+            d.setHours(d.getHours() + 1);
+            return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+        return '10:00';
+    });
     const [duration, setDuration] = useState<number | string>(initialData?.duration || '');
+    const [repeatRule, setRepeatRule] = useState<RepeatRule | null>(initialData?.repeat_rule || null);
+    const [showRepeatPicker, setShowRepeatPicker] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -146,6 +165,86 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [searchResultsCount, setSearchResultsCount] = useState(0);
     const [saveToLibrary, setSaveToLibrary] = useState(false);
     const [polishModal, setPolishModal] = useState<{ isOpen: boolean, title: string, content: string, history: { title: string, content: string }[], historyIndex: number }>({ isOpen: false, title: '', content: '', history: [], historyIndex: -1 });
+
+    // Keyword generation states
+    const [isGeneratingKeywords, setIsGeneratingKeywords] = useState(false);
+    const [showKeywordModal, setShowKeywordModal] = useState(false);
+    const [generatedKeywords, setGeneratedKeywords] = useState<string[]>([]);
+
+
+    const { isRecording, startRecording, stopRecording, recordingTaskId, recordingTime } = useContext(RecordingContext);
+
+    // Format helper
+    const formatDuration = (ms: number) => {
+        const seconds = Math.floor(ms / 1000);
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const handleSaveAudio = async (file: File, markers: any[], recordingId?: string) => {
+        console.log("TaskInput handleSaveAudio called with:", file.name, markers, recordingId);
+        if (!supabase) return;
+
+        const fileName = `${Date.now()}_${crypto.randomUUID()}.${file.name.split('.').pop()}`;
+        const userId = user?.id || 'anonymous';
+        const filePath = `${userId}/${fileName}`;
+
+        try {
+            const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
+                contentType: file.type,
+                upsert: false
+            });
+
+            if (uploadError) {
+                console.error('Upload voice error:', uploadError);
+                setToast?.({ msg: '錄音儲存失敗', type: 'error' });
+                return;
+            }
+
+            const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
+            if (data) {
+                const fileData = {
+                    name: file.name,
+                    url: data.publicUrl,
+                    size: file.size,
+                    type: file.type,
+                    markers: markers,
+                    recordingId: recordingId // Store the recording ID with the attachment
+                };
+
+                const updatedAttachments = [...attachments, fileData];
+                setAttachments(updatedAttachments);
+
+                if (initialData) {
+                    updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
+                }
+                setToast?.({ msg: '錄音已儲存', type: 'info' });
+            }
+        } catch (err) {
+            console.error(err);
+            setToast?.({ msg: '錄音儲存發生錯誤', type: 'error' });
+        }
+    };
+
+    // Listen for global recording completion - update local attachments state
+    useEffect(() => {
+        const handleRecordingSaved = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail && detail.taskId === initialData?.id && detail.attachment) {
+                console.log("[TaskInput] Recording saved event - updating local attachments state");
+                // Check if attachment is not already in the list (avoid duplicates)
+                setAttachments(prev => {
+                    const exists = prev.some(a => a.url === detail.attachment.url);
+                    if (exists) return prev;
+                    return [...prev, detail.attachment];
+                });
+            }
+        };
+
+        window.addEventListener('recording-saved', handleRecordingSaved);
+        return () => window.removeEventListener('recording-saved', handleRecordingSaved);
+    }, [initialData?.id]);
 
     const [aiHistory, setAiHistory] = useState<AIHistoryEntry[]>(initialData?.ai_history || []);
     const [historyIndex, setHistoryIndex] = useState<number>(initialData?.ai_history ? initialData.ai_history.length - 1 : -1);
@@ -281,6 +380,23 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         }, 1000);
         return () => clearTimeout(timer);
     }, [title, desc, initialData, updateTask, isQuickAdd]);
+
+    // Shortcut: Cmd+Shift+V to toggle Voice Recording
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'v' || e.key === 'V')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isRecording) {
+                    stopRecording();
+                } else {
+                    startRecording(initialData?.id);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isRecording, startRecording, stopRecording, initialData?.id]);
 
 
 
@@ -523,6 +639,203 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         setGeneratedTitle('');
     };
 
+    // Get existing keyword tags (tags that start with #)
+    const existingKeywordTags = useMemo(() => {
+        return tags.filter(t => t.name.startsWith('#')).map(t => t.name.slice(1));
+    }, [tags]);
+
+    // Execute keyword generation using AI - only uses current task's note content
+    const executeKeywordGeneration = async () => {
+        // Get content ONLY from the current task's editor/description
+        let noteContent = '';
+
+        // Priority 1: Get from the active editor if available
+        if (editorRef.current && typeof editorRef.current.getText === 'function') {
+            noteContent = editorRef.current.getText();
+        }
+
+        // Priority 2: Fall back to the desc state (current task's description)
+        if (!noteContent || !noteContent.trim()) {
+            // Strip HTML tags and normalize whitespace
+            noteContent = desc.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+
+        // Validate we have content to analyze
+        if (!noteContent || !noteContent.trim()) {
+            setToast?.({ msg: '請先輸入備註內容再生成關鍵字', type: 'error' });
+            return;
+        }
+
+        // Log for debugging
+        console.log('Generating keywords for current task content:', noteContent.slice(0, 100) + (noteContent.length > 100 ? '...' : ''));
+
+        setIsGeneratingKeywords(true);
+
+        try {
+            const keywords = await generateSEOKeywords(noteContent, existingKeywordTags);
+            setGeneratedKeywords(keywords);
+            setShowKeywordModal(true);
+            console.log('Generated keywords:', keywords);
+        } catch (error) {
+            console.error('Generate keywords error:', error);
+            setToast?.({ msg: '生成關鍵字失敗', type: 'error' });
+        } finally {
+            setIsGeneratingKeywords(false);
+        }
+    };
+
+    // Add keyword as a tag with # prefix, organized under #關鍵字 parent
+    const handleAddKeywordAsTag = async (keyword: string) => {
+        const tagName = `#${keyword}`;
+        // Check if tag already exists
+        let existingTag = tags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+
+        try {
+            if (existingTag) {
+                // Tag already exists, just add it to selection
+                if (!selectedTags.includes(existingTag.id)) {
+                    setSelectedTags(prev => [...prev, existingTag!.id]);
+                    setToast?.({ msg: `已套用關鍵字標籤: ${tagName}`, type: 'info' });
+                } else {
+                    setToast?.({ msg: `標籤 ${tagName} 已存在`, type: 'info' });
+                }
+            } else {
+                // Need to create a new tag - first ensure #關鍵字 root exists
+                let rootKeywordTag = tags.find(t => t.name === '#關鍵字');
+                let rootKeywordId: string;
+
+                if (!rootKeywordTag) {
+                    // Create the root #關鍵字 tag
+                    const newRootId = await addTag('#關鍵字');
+                    if (!newRootId) throw new Error('Failed to create root keyword tag');
+                    rootKeywordId = newRootId;
+                } else {
+                    rootKeywordId = rootKeywordTag.id;
+                }
+
+                // Build hierarchy of existing keyword tags (those under #關鍵字)
+                const getKeywordDepth = (tagId: string, depth: number = 0): number => {
+                    const tag = tags.find(t => t.id === tagId);
+                    if (!tag || !tag.parent_id) return depth;
+                    if (tag.parent_id === rootKeywordId) return depth;
+                    return getKeywordDepth(tag.parent_id, depth + 1);
+                };
+
+                const existingKeywordChildren: KeywordHierarchy[] = tags
+                    .filter(t => {
+                        // Include tags that are descendants of #關鍵字
+                        if (t.parent_id === rootKeywordId) return true;
+                        // Check if it's a deeper descendant
+                        let currentTag = t;
+                        const visited = new Set<string>();
+                        while (currentTag.parent_id && !visited.has(currentTag.id)) {
+                            visited.add(currentTag.id);
+                            if (currentTag.parent_id === rootKeywordId) return true;
+                            const parentTag = tags.find(pt => pt.id === currentTag.parent_id);
+                            if (!parentTag) break;
+                            currentTag = parentTag;
+                        }
+                        return false;
+                    })
+                    .map(t => ({
+                        id: t.id,
+                        name: t.name.replace(/^#/, ''), // Remove # prefix for AI analysis
+                        parentId: t.parent_id,
+                        depth: getKeywordDepth(t.id)
+                    }));
+
+                let parentIdForNewTag = rootKeywordId;
+
+                // Use AI to find the best parent keyword if there are existing keywords
+                if (existingKeywordChildren.length > 0) {
+                    setToast?.({ msg: '正在分析最佳分類...', type: 'info' });
+                    const bestParentId = await findBestParentKeyword(keyword, existingKeywordChildren);
+                    if (bestParentId) {
+                        parentIdForNewTag = bestParentId;
+                        const parentTag = tags.find(t => t.id === bestParentId);
+                        console.log(`AI suggested parent for "${keyword}": ${parentTag?.name}`);
+                    }
+                }
+
+                // Create the new keyword tag under the determined parent
+                const newTagId = await addTag(tagName, parentIdForNewTag);
+                if (newTagId) {
+                    if (!selectedTags.includes(newTagId)) {
+                        setSelectedTags(prev => [...prev, newTagId]);
+                    }
+                    const parentTag = tags.find(t => t.id === parentIdForNewTag);
+                    const parentName = parentTag?.name || '#關鍵字';
+                    setToast?.({ msg: `已新增關鍵字標籤: ${tagName} (歸類於 ${parentName})`, type: 'info' });
+                } else {
+                    throw new Error('Failed to create tag');
+                }
+            }
+
+            // Remove from generated list
+            setGeneratedKeywords(prev => prev.filter(k => k !== keyword));
+        } catch (error) {
+            console.error('Error adding keyword tag:', error);
+            setToast?.({ msg: '新增關鍵字標籤失敗', type: 'error' });
+        }
+    };
+
+
+    // Add all keywords as tags (batch mode - adds directly under #關鍵字 for speed)
+    const handleAddAllKeywordsAsTags = async () => {
+        const keywordsToAdd = [...generatedKeywords];
+        let successCount = 0;
+
+        // First ensure #關鍵字 root exists
+        let rootKeywordTag = tags.find(t => t.name === '#關鍵字');
+        let rootKeywordId: string | null = null;
+
+        if (!rootKeywordTag) {
+            const newRootId = await addTag('#關鍵字');
+            if (newRootId) {
+                rootKeywordId = newRootId;
+            }
+        } else {
+            rootKeywordId = rootKeywordTag.id;
+        }
+
+        for (const keyword of keywordsToAdd) {
+            const tagName = `#${keyword}`;
+            let existingTag = tags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+
+            try {
+                if (!existingTag) {
+                    // Create under #關鍵字 root (batch mode skips AI matching for speed)
+                    const newTagId = await addTag(tagName, rootKeywordId);
+                    if (newTagId && !selectedTags.includes(newTagId)) {
+                        setSelectedTags(prev => [...prev, newTagId]);
+                        successCount++;
+                    }
+                } else {
+                    if (!selectedTags.includes(existingTag.id)) {
+                        setSelectedTags(prev => [...prev, existingTag!.id]);
+                        successCount++;
+                    }
+                }
+            } catch (error) {
+                console.error('Error adding keyword tag:', keyword, error);
+            }
+        }
+
+        setGeneratedKeywords([]);
+        setShowKeywordModal(false);
+
+        if (successCount > 0) {
+            setToast?.({ msg: `已新增 ${successCount} 個關鍵字標籤（歸類於 #關鍵字）`, type: 'info' });
+        } else {
+            setToast?.({ msg: '所有關鍵字標籤已存在', type: 'info' });
+        }
+    };
+
+    // Remove keyword from generated list
+    const handleRemoveKeyword = (keyword: string) => {
+        setGeneratedKeywords(prev => prev.filter(k => k !== keyword));
+    };
+
     const getEffectiveColor = (pid: string | null): TaskColor => {
         if (!pid) return color;
         let curr = tasks.find(t => t.id === pid);
@@ -537,7 +850,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const effectiveColor = useMemo(() => getEffectiveColor(parentId), [parentId, tasks, color]);
     const theme: ThemeColor = COLOR_THEMES[effectiveColor] || COLOR_THEMES.blue;
 
-    useClickOutside(containerRef, () => {
+    useClickOutside(containerRef, (event) => {
         // Disable click outside for quick add (draggable modal)
         if (isQuickAdd) return;
 
@@ -546,6 +859,18 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         if (showAnalysis && polishPosition) return;
         if (showTitlePreview) return;
         if (showTitlePromptSelection) return;
+
+        // Don't close for keyword modal
+        if (showKeywordModal) return;
+
+        // Don't close if clicking on the recording capsule (when this task is being recorded)
+        if (event && isRecording && recordingTaskId === initialData?.id) {
+            const target = event.target as HTMLElement;
+            // Check if click is within the recording capsule
+            if (target.closest('[data-recording-capsule]')) {
+                return;
+            }
+        }
 
         if (initialData && onClose) {
             if (title.trim()) handleSubmit();
@@ -622,19 +947,33 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
         if (!finalTitle) return;
 
+        // Merge time into start_date if not all-day
+        let finalStartDate = startDate;
+        if (startDate && !isAllDay && startTime) {
+            const d = new Date(startDate);
+            const [hours, mins] = startTime.split(':').map(Number);
+            d.setHours(hours, mins, 0, 0);
+            finalStartDate = d.toISOString();
+        } else if (startDate && isAllDay) {
+            // For all-day, set to noon to avoid timezone issues
+            const d = new Date(startDate);
+            d.setHours(12, 0, 0, 0);
+            finalStartDate = d.toISOString();
+        }
+
         const data = {
-            title: finalTitle, description: desc, due_date: dueDate, start_date: startDate,
+            title: finalTitle, description: desc, due_date: dueDate, start_date: finalStartDate,
             parent_id: parentId, is_project: isProject || childIds.length > 0,
             tags: selectedTags, status: initialData?.status || 'inbox',
             color: effectiveColor,
+            importance: importance,
             images,
             is_all_day: isAllDay,
-            start_time: isAllDay ? null : startTime,
-            end_time: isAllDay ? null : endTime,
             duration: duration ? Number(duration) : null,
             attachments: attachments,
             attachment_links: attachmentLinks,
-            ai_history: aiHistory
+            ai_history: aiHistory,
+            repeat_rule: repeatRule
         };
 
         if (onClose) {
@@ -649,7 +988,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         else { const newId = await addTask(data, childIds); setFocusedTaskId(newId); setSelectedTaskIds([newId]); }
     };
 
-    const resetForm = () => { setTitle(''); setDesc(''); setDueDate(null); setStartDate(null); setSelectedTags([]); setImages([]); setAttachments([]); setParentId(null); setChildIds([]); setIsProject(false); setIsAllDay(true); setStartTime('09:00'); setEndTime('10:00'); setDuration(''); };
+    const resetForm = () => { setTitle(''); setDesc(''); setDueDate(null); setStartDate(null); setSelectedTags([]); setImages([]); setAttachments([]); setParentId(null); setChildIds([]); setIsProject(false); setIsAllDay(true); setStartTime('09:00'); setEndTime('10:00'); setDuration(''); setRepeatRule(null); };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
         let files: File[] = [];
@@ -815,7 +1154,21 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         }
     };
 
+    // Track pending deletions for undo
+    const pendingDeletionRef = useRef<{ url: string; attachment: typeof attachments[0]; timeoutId: NodeJS.Timeout } | null>(null);
+
     const handleRemoveAttachment = async (url: string) => {
+        // Find the attachment being deleted for potential undo
+        const deletedAttachment = attachments.find(a => a.url === url);
+        if (!deletedAttachment) return;
+
+        // Clear any previous pending deletion
+        if (pendingDeletionRef.current) {
+            clearTimeout(pendingDeletionRef.current.timeoutId);
+            // Execute the previous pending deletion
+            executeDeletion(pendingDeletionRef.current.url);
+        }
+
         const newAttachments = attachments.filter(a => a.url !== url);
         const newImages = images.filter(i => i !== url);
 
@@ -826,6 +1179,55 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             updateTask(initialData.id, { attachments: newAttachments, images: newImages }, [], { skipHistory: true });
         }
 
+        // Set up undo with delayed deletion from storage
+        const timeoutId = setTimeout(() => {
+            executeDeletion(url);
+            // Add to undo stack for later Ctrl+Z
+            attachmentUndoStackRef.current.push({ type: 'delete', attachment: deletedAttachment });
+            // Clear redo stack when a new action is performed
+            attachmentRedoStackRef.current = [];
+            pendingDeletionRef.current = null;
+        }, 10000); // Match toast duration
+
+        pendingDeletionRef.current = { url, attachment: deletedAttachment, timeoutId };
+
+        // Show toast with undo option
+        const fileName = deletedAttachment.name || '附件';
+        setToast?.({
+            msg: `已刪除: ${fileName.length > 20 ? fileName.slice(0, 20) + '...' : fileName}`,
+            type: 'info',
+            undo: () => {
+                // Restore the attachment
+                if (pendingDeletionRef.current && pendingDeletionRef.current.url === url) {
+                    clearTimeout(pendingDeletionRef.current.timeoutId);
+                    pendingDeletionRef.current = null;
+
+                    // Restore to local state
+                    setAttachments(prev => [...prev, deletedAttachment]);
+                    if (deletedAttachment.type?.startsWith('image/')) {
+                        setImages(prev => [...prev, deletedAttachment.url]);
+                    }
+
+                    // Restore to database
+                    if (initialData) {
+                        const restoredAttachments = [...newAttachments, deletedAttachment];
+                        const restoredImages = deletedAttachment.type?.startsWith('image/')
+                            ? [...newImages, deletedAttachment.url]
+                            : newImages;
+                        updateTask(initialData.id, {
+                            attachments: restoredAttachments,
+                            images: restoredImages
+                        }, [], { skipHistory: true });
+                    }
+
+                    setToast?.({ msg: '已還原附件', type: 'info' });
+                }
+            }
+        });
+    };
+
+    // Execute the actual deletion from storage
+    const executeDeletion = async (url: string) => {
         if (supabase) {
             try {
                 const urlObj = new URL(url);
@@ -833,12 +1235,127 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                 if (pathMatch) {
                     const filePath = pathMatch[1];
                     await supabase.storage.from('attachments').remove([filePath]);
+                    console.log('[TaskInput] Attachment deleted from storage:', filePath);
                 }
             } catch (err) {
                 console.warn('Failed to delete attachment from storage:', err);
             }
         }
     };
+
+    // Attachment undo/redo stack
+    const attachmentUndoStackRef = useRef<Array<{ type: 'delete' | 'add'; attachment: typeof attachments[0] }>>([]);
+    const attachmentRedoStackRef = useRef<Array<{ type: 'delete' | 'add'; attachment: typeof attachments[0] }>>([]);
+
+    // Undo attachment action
+    const undoAttachmentAction = () => {
+        // First check if there's a pending deletion that can be undone via toast
+        if (pendingDeletionRef.current) {
+            const { attachment, timeoutId } = pendingDeletionRef.current;
+            clearTimeout(timeoutId);
+            pendingDeletionRef.current = null;
+
+            // Restore the attachment
+            setAttachments(prev => {
+                const exists = prev.some(a => a.url === attachment.url);
+                if (exists) return prev;
+                return [...prev, attachment];
+            });
+            if (attachment.type?.startsWith('image/')) {
+                setImages(prev => {
+                    const exists = prev.includes(attachment.url);
+                    if (exists) return prev;
+                    return [...prev, attachment.url];
+                });
+            }
+
+            // Restore to database
+            if (initialData) {
+                const currentAttachments = attachments;
+                const restoredAttachments = [...currentAttachments, attachment];
+                updateTask(initialData.id, { attachments: restoredAttachments }, [], { skipHistory: true });
+            }
+
+            setToast?.({ msg: '已還原附件', type: 'info' });
+            return true;
+        }
+
+        // Otherwise check the undo stack (for previously completed deletions)
+        if (attachmentUndoStackRef.current.length > 0) {
+            const action = attachmentUndoStackRef.current.pop()!;
+            attachmentRedoStackRef.current.push(action);
+
+            if (action.type === 'delete') {
+                // Undo a delete = add it back
+                setAttachments(prev => [...prev, action.attachment]);
+                if (action.attachment.type?.startsWith('image/')) {
+                    setImages(prev => [...prev, action.attachment.url]);
+                }
+                if (initialData) {
+                    updateTask(initialData.id, {
+                        attachments: [...attachments, action.attachment]
+                    }, [], { skipHistory: true });
+                }
+                setToast?.({ msg: '已還原附件', type: 'info' });
+            }
+            return true;
+        }
+        return false;
+    };
+
+    // Redo attachment action
+    const redoAttachmentAction = () => {
+        if (attachmentRedoStackRef.current.length > 0) {
+            const action = attachmentRedoStackRef.current.pop()!;
+            attachmentUndoStackRef.current.push(action);
+
+            if (action.type === 'delete') {
+                // Redo a delete = remove it again
+                setAttachments(prev => prev.filter(a => a.url !== action.attachment.url));
+                setImages(prev => prev.filter(i => i !== action.attachment.url));
+                if (initialData) {
+                    updateTask(initialData.id, {
+                        attachments: attachments.filter(a => a.url !== action.attachment.url),
+                        images: images.filter(i => i !== action.attachment.url)
+                    }, [], { skipHistory: true });
+                }
+                // Schedule actual deletion
+                executeDeletion(action.attachment.url);
+                setToast?.({ msg: '已重做刪除', type: 'info' });
+            }
+            return true;
+        }
+        return false;
+    };
+
+    // Listen for Ctrl+Z / Ctrl+Shift+Z within TaskInput
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check if we're focused within this TaskInput
+            if (!containerRef.current?.contains(document.activeElement)) return;
+
+            // Ctrl+Z (Undo)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+                const handled = undoAttachmentAction();
+                if (handled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+
+            // Ctrl+Shift+Z (Redo)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+                const handled = redoAttachmentAction();
+                if (handled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [attachments, images, initialData]);
 
     const formatFileSize = (bytes: number): string => {
         if (bytes < 1024) return bytes + ' B';
@@ -1451,6 +1968,29 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                 <div className="flex-1 space-y-4 relative pr-6">
                     <div className="flex items-end justify-between">
                         <div className="flex-1 relative space-y-2">
+                            {/* Parent Task Link */}
+                            {parentId && (() => {
+                                const parentTask = tasks.find(t => t.id === parentId);
+                                if (!parentTask) return null;
+                                return (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Save current task first
+                                            if (initialData && title.trim()) {
+                                                handleSubmit();
+                                            }
+                                            // Navigate to parent task
+                                            navigateToTask(parentId, true);
+                                        }}
+                                        className="flex items-center gap-1.5 text-xs text-theme-tertiary hover:text-indigo-600 transition-colors group/parent"
+                                    >
+                                        <ChevronUp size={12} className="opacity-50 group-hover/parent:opacity-100" />
+                                        <span className="truncate max-w-[200px] group-hover/parent:underline">{parentTask.title || '母任務'}</span>
+                                    </button>
+                                );
+                            })()}
                             {/* Title input row with AI generate button */}
                             <div className="flex items-center relative">
                                 <input
@@ -1569,6 +2109,110 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 document.body
                             )}
 
+                            {/* Keyword Modal - rendered via portal */}
+                            {showKeywordModal && createPortal(
+                                <div
+                                    className="fixed inset-0 z-[9999999] flex items-center justify-center bg-black/20 backdrop-blur-sm"
+                                    onClick={(e) => { e.stopPropagation(); setShowKeywordModal(false); }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    <div
+                                        className="bg-white rounded-xl shadow-2xl border border-slate-200 p-5 w-[450px] max-w-[90vw] animate-in fade-in zoom-in-95 duration-200"
+                                        onClick={(e) => e.stopPropagation()}
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+                                            <div className="flex items-center gap-2 text-slate-700">
+                                                <Tag size={16} className="text-emerald-500" />
+                                                <h3 className="font-bold text-sm">AI 關鍵字生成</h3>
+                                            </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setShowKeywordModal(false); }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                className="text-slate-400 hover:text-slate-600"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+
+                                        {/* Generated Keywords */}
+                                        {generatedKeywords.length > 0 && (
+                                            <div className="mb-4">
+                                                <p className="text-xs text-slate-500 mb-2">生成的 SEO 關鍵字（點擊 ✓ 添加）：</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {generatedKeywords.map((keyword, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="group flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200 hover:bg-emerald-100 transition-all"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                        >
+                                                            <span className="text-emerald-500">#</span>
+                                                            <span>{keyword}</span>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleAddKeywordAsTag(keyword); }}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                className="ml-1 text-emerald-600 hover:text-emerald-800 p-0.5 hover:bg-emerald-200 rounded"
+                                                                title="添加此關鍵字"
+                                                            >
+                                                                <Check size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); handleRemoveKeyword(keyword); }}
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                className="text-slate-400 hover:text-red-500 p-0.5 hover:bg-red-100 rounded"
+                                                                title="移除此關鍵字"
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Loading State */}
+                                        {isGeneratingKeywords && (
+                                            <div className="flex items-center justify-center py-6 text-slate-500">
+                                                <Loader2 size={20} className="animate-spin mr-2" />
+                                                <span className="text-sm">正在生成關鍵字...</span>
+                                            </div>
+                                        )}
+
+                                        {/* Action Buttons */}
+                                        <div className="flex gap-2 justify-end mt-4 pt-3 border-t border-slate-100">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setShowKeywordModal(false); }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                className="px-4 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                            >
+                                                取消
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); executeKeywordGeneration(); }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                disabled={isGeneratingKeywords}
+                                                className="px-4 py-2 text-xs bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg transition-colors font-medium disabled:opacity-50 flex items-center gap-1"
+                                            >
+                                                {isGeneratingKeywords ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                                重新生成
+                                            </button>
+                                            {generatedKeywords.length > 0 && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleAddAllKeywordsAsTags(); }}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    className="px-4 py-2 text-xs bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg transition-colors font-medium flex items-center gap-1"
+                                                >
+                                                    <Check size={12} />
+                                                    全部添加
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>,
+                                document.body
+                            )}
+
                             {showSuggestions && (
                                 <div className="w-full mt-1 mb-2">
                                     <div className="bg-theme-hover rounded-lg overflow-hidden border border-theme">
@@ -1604,6 +2248,17 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 >
                                     {isGeneratingTitle ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
                                     <span>AI 標題</span>
+                                </button>
+                                {/* AI Generate Keywords Button */}
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowKeywordModal(true); executeKeywordGeneration(); }}
+                                    disabled={isGeneratingKeywords}
+                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingKeywords ? 'bg-emerald-500/20 text-emerald-400 font-bold shadow-sm ring-1 ring-emerald-500/30' : 'text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 font-medium'}`}
+                                    title="從備註內容生成 SEO 關鍵字"
+                                >
+                                    {isGeneratingKeywords ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />}
+                                    <span>AI 關鍵字</span>
                                 </button>
                                 {renderPromptModal()}
                             </div>
@@ -1642,50 +2297,24 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         textSizeClass={textSizeClass}
                                         descFontClass={descFontClass}
                                         className="h-full"
-                                        onSaveAudio={async (file, markers) => {
-                                            console.log("TaskInput onSaveAudio called with:", file.name, markers);
-                                            if (!supabase) return;
-                                            // Unique file path
-                                            const fileName = `${Date.now()}_${crypto.randomUUID()}.${file.name.split('.').pop()}`;
-                                            const filePath = `${user.id}/${fileName}`;
-
-                                            try {
-                                                const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, file, {
-                                                    contentType: file.type,
-                                                    upsert: false
-                                                });
-
-                                                if (uploadError) {
-                                                    console.error('Upload voice error:', uploadError);
-                                                    setToast?.({ msg: '錄音儲存失敗', type: 'error' });
+                                        onSaveAudio={handleSaveAudio}
+                                        onAudioMarkerClick={(time, recordingId) => {
+                                            // Find the audio file matching the recordingId
+                                            if (recordingId) {
+                                                const matchingAudio = attachments.find((a: any) => a.recordingId === recordingId);
+                                                if (matchingAudio) {
+                                                    // Set this audio as the active player
+                                                    setPlayedAudio({
+                                                        url: matchingAudio.url,
+                                                        name: matchingAudio.name,
+                                                        markers: matchingAudio.markers
+                                                    });
+                                                    // Seek to the time (-4s buffer)
+                                                    setAudioSeekTime(Math.max(0, time - 4000));
                                                     return;
                                                 }
-
-                                                const { data } = supabase.storage.from('attachments').getPublicUrl(filePath);
-                                                if (data) {
-                                                    const fileData = {
-                                                        name: file.name, // Use the formatted date-time name from recording
-                                                        url: data.publicUrl,
-                                                        size: file.size,
-                                                        type: file.type,
-                                                        markers: markers // Save markers here if needed
-                                                    };
-
-                                                    const updatedAttachments = [...attachments, fileData];
-                                                    setAttachments(updatedAttachments);
-
-                                                    if (initialData) {
-                                                        updateTask(initialData.id, { attachments: updatedAttachments }, [], { skipHistory: true });
-                                                    }
-                                                    setToast?.({ msg: '錄音已儲存', type: 'info' });
-                                                }
-                                            } catch (err) {
-                                                console.error(err);
-                                                setToast?.({ msg: '錄音儲存發生錯誤', type: 'error' });
                                             }
-                                        }}
-                                        onAudioMarkerClick={(time) => {
-                                            // Jump the audio player to 4 seconds before this time
+                                            // Fallback: just seek if audio is already playing
                                             setAudioSeekTime(Math.max(0, time - 4000));
                                         }}
                                         activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
@@ -1923,9 +2552,40 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                                         <button
                                                                             onClick={() => {
                                                                                 const newContent = aiHistory[historyIndex]?.content || '';
+                                                                                const userPrompt = aiHistory[historyIndex]?.prompt || '';
                                                                                 const formattedContent = formatAIResponseToHtml(newContent);
-                                                                                // Append as HTML
-                                                                                setDesc((prev: string) => prev + "<p><br><strong>--- AI 建議 ---</strong></p>" + formattedContent);
+
+                                                                                // Generate dynamic title based on the prompt
+                                                                                let aiTitle = 'AI 建議';
+                                                                                if (userPrompt) {
+                                                                                    // Extract first few characters of the prompt to create a concise title
+                                                                                    const cleanPrompt = userPrompt.replace(/<[^>]*>/g, '').trim();
+                                                                                    if (cleanPrompt.includes('規劃') || cleanPrompt.includes('計畫') || cleanPrompt.includes('安排')) {
+                                                                                        aiTitle = 'AI 規劃';
+                                                                                    } else if (cleanPrompt.includes('總結') || cleanPrompt.includes('摘要') || cleanPrompt.includes('歸納')) {
+                                                                                        aiTitle = 'AI 總結';
+                                                                                    } else if (cleanPrompt.includes('搞笑') || cleanPrompt.includes('幽默') || cleanPrompt.includes('有趣')) {
+                                                                                        aiTitle = 'AI 搞笑解釋';
+                                                                                    } else if (cleanPrompt.includes('分析') || cleanPrompt.includes('解析')) {
+                                                                                        aiTitle = 'AI 分析';
+                                                                                    } else if (cleanPrompt.includes('翻譯') || cleanPrompt.includes('英文') || cleanPrompt.includes('translate')) {
+                                                                                        aiTitle = 'AI 翻譯';
+                                                                                    } else if (cleanPrompt.includes('潤飾') || cleanPrompt.includes('修改') || cleanPrompt.includes('優化')) {
+                                                                                        aiTitle = 'AI 潤飾';
+                                                                                    } else if (cleanPrompt.includes('建議') || cleanPrompt.includes('推薦')) {
+                                                                                        aiTitle = 'AI 建議';
+                                                                                    } else if (cleanPrompt.includes('解釋') || cleanPrompt.includes('說明')) {
+                                                                                        aiTitle = 'AI 解釋';
+                                                                                    } else if (cleanPrompt.includes('列出') || cleanPrompt.includes('清單')) {
+                                                                                        aiTitle = 'AI 清單';
+                                                                                    } else if (cleanPrompt.length > 0) {
+                                                                                        // Use first 6 characters of the prompt as title
+                                                                                        aiTitle = 'AI ' + cleanPrompt.slice(0, 6).replace(/[。，！？、]/g, '');
+                                                                                    }
+                                                                                }
+
+                                                                                // Append as HTML with dynamic title
+                                                                                setDesc((prev: string) => prev + `<p><br><strong>--- ${aiTitle} ---</strong></p>` + formattedContent);
                                                                                 setToast?.({ msg: '內容已插入備註', type: 'info' });
                                                                                 setShowAnalysis(false);
                                                                             }}
@@ -2169,45 +2829,55 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                     </div>
 
                     <div className="flex items-center justify-between pt-1 flex-col items-start gap-2">
-                        {selectedTags.length > 0 && (
-                            <div className="flex flex-wrap gap-1 px-1 w-full">
-                                {selectedTags.length > 3 ? (
-                                    <>
-                                        <div className="flex gap-1">
-                                            {selectedTags.slice(0, 3).map(tid => {
+                        {selectedTags.length > 0 && (() => {
+                            // Separate regular tags and keyword tags
+                            const regularTags = selectedTags.filter(tid => {
+                                const t = tags.find(tag => tag.id === tid);
+                                return t && !t.name.startsWith('#');
+                            });
+                            const keywordTags = selectedTags.filter(tid => {
+                                const t = tags.find(tag => tag.id === tid);
+                                return t && t.name.startsWith('#');
+                            });
+
+                            return (
+                                <div className="flex flex-col gap-2 px-1 w-full">
+                                    {/* Regular Tags Row */}
+                                    {regularTags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                            {regularTags.map(tid => {
                                                 const t = tags.find(tag => tag.id === tid);
                                                 return t ? <TagChip key={tid} tag={t} onRemove={() => setSelectedTags(prev => prev.filter(x => x !== tid))} /> : null;
                                             })}
-                                            <div className="group relative">
-                                                <button
-                                                    type="button"
-                                                    className="h-5 px-1.5 rounded-full border border-gray-200 text-gray-400 bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors"
-                                                    title={`${selectedTags.length - 3} more tags`}
-                                                >
-                                                    <MoreHorizontal size={12} />
-                                                </button>
-                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:flex flex-col gap-1 bg-white p-2 rounded-lg shadow-xl border border-gray-100 z-50 min-w-[120px]">
-                                                    {selectedTags.slice(3).map(tid => {
-                                                        const t = tags.find(tag => tag.id === tid);
-                                                        return t ? (
-                                                            <div key={tid} className="flex items-center justify-between gap-2 text-xs text-gray-600 px-1">
-                                                                <span>{t.name}</span>
-                                                                <button onClick={() => setSelectedTags(prev => prev.filter(x => x !== tid))} className="hover:text-red-500"><X size={10} /></button>
-                                                            </div>
-                                                        ) : null;
-                                                    })}
-                                                </div>
-                                            </div>
                                         </div>
-                                    </>
-                                ) : (
-                                    selectedTags.map(tid => {
-                                        const t = tags.find(tag => tag.id === tid);
-                                        return t ? <TagChip key={tid} tag={t} onRemove={() => setSelectedTags(prev => prev.filter(x => x !== tid))} /> : null;
-                                    })
-                                )}
-                            </div>
-                        )}
+                                    )}
+
+                                    {/* Keyword Tags Row - with different styling */}
+                                    {keywordTags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 pt-1 border-t border-emerald-100">
+                                            {keywordTags.map(tid => {
+                                                const t = tags.find(tag => tag.id === tid);
+                                                return t ? (
+                                                    <div
+                                                        key={tid}
+                                                        className="flex items-center gap-1 h-5 px-2 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                                    >
+                                                        <span>{t.name}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedTags(prev => prev.filter(x => x !== tid))}
+                                                            className="hover:text-red-500 transition-colors"
+                                                        >
+                                                            <X size={10} />
+                                                        </button>
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
 
                         {/* Bottom Section: Metadata and Actions */}
@@ -2272,6 +2942,194 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         }
                                     }}
                                 />
+
+                                {/* Repeat Settings */}
+                                <div className="relative">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowRepeatPicker(!showRepeatPicker)}
+                                        className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-[10px] font-bold border transition-all ${repeatRule
+                                            ? 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-100'
+                                            : 'bg-transparent text-theme-tertiary border-theme hover:bg-theme-hover'
+                                            }`}
+                                        title="設定重複"
+                                    >
+                                        <Repeat2 size={12} />
+                                        {repeatRule ? (repeatRule.originalText || '重複') : '重複'}
+                                    </button>
+
+                                    {showRepeatPicker && (
+                                        <div className="absolute top-full left-0 mt-1 z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[280px]">
+                                            <div className="text-sm font-semibold text-gray-700 mb-3">重複設定</div>
+
+                                            {/* Repeat Type Selection */}
+                                            <div className="mb-3">
+                                                <div className="text-xs text-gray-500 mb-1">重複頻率</div>
+                                                <div className="grid grid-cols-4 gap-1">
+                                                    {[
+                                                        { type: 'daily' as RepeatType, label: '每天' },
+                                                        { type: 'weekly' as RepeatType, label: '每週' },
+                                                        { type: 'monthly' as RepeatType, label: '每月' },
+                                                        { type: 'yearly' as RepeatType, label: '每年' },
+                                                    ].map(opt => (
+                                                        <button
+                                                            key={opt.type}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setRepeatRule(prev => ({
+                                                                    ...prev,
+                                                                    type: opt.type,
+                                                                    interval: prev?.interval || 1,
+                                                                    originalText: `每${prev?.interval || 1}${opt.type === 'daily' ? '天' : opt.type === 'weekly' ? '週' : opt.type === 'monthly' ? '個月' : '年'}`,
+                                                                    triggerMode: prev?.triggerMode || 'on_complete'
+                                                                }));
+                                                            }}
+                                                            className={`px-2 py-1.5 rounded text-xs font-medium transition-colors ${repeatRule?.type === opt.type
+                                                                ? 'bg-purple-500 text-white'
+                                                                : 'bg-gray-100 text-gray-600 hover:bg-purple-100'
+                                                                }`}
+                                                        >
+                                                            {opt.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Interval Input */}
+                                            {repeatRule && (
+                                                <div className="mb-3">
+                                                    <div className="text-xs text-gray-500 mb-1">間隔</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-gray-600">每</span>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={365}
+                                                            value={repeatRule.interval}
+                                                            onChange={(e) => {
+                                                                const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                                setRepeatRule(prev => prev ? {
+                                                                    ...prev,
+                                                                    interval: val,
+                                                                    originalText: `每${val}${prev.type === 'daily' ? '天' : prev.type === 'weekly' ? '週' : prev.type === 'monthly' ? '個月' : '年'}`
+                                                                } : null);
+                                                            }}
+                                                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-purple-400 focus:outline-none"
+                                                        />
+                                                        <span className="text-sm text-gray-600">
+                                                            {repeatRule.type === 'daily' ? '天' : repeatRule.type === 'weekly' ? '週' : repeatRule.type === 'monthly' ? '個月' : '年'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Month Day Selection (for monthly only) */}
+                                            {repeatRule?.type === 'monthly' && (
+                                                <div className="mb-3">
+                                                    <div className="text-xs text-gray-500 mb-1">每月第幾天</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-gray-600">第</span>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={31}
+                                                            value={repeatRule.monthDay || 1}
+                                                            onChange={(e) => {
+                                                                const val = Math.min(31, Math.max(1, parseInt(e.target.value) || 1));
+                                                                setRepeatRule(prev => prev ? {
+                                                                    ...prev,
+                                                                    monthDay: val,
+                                                                    originalText: `每${prev.interval}個月第${val}日`
+                                                                } : null);
+                                                            }}
+                                                            className="w-16 px-2 py-1 border border-gray-300 rounded text-sm text-center focus:border-purple-400 focus:outline-none"
+                                                        />
+                                                        <span className="text-sm text-gray-600">日</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Trigger Mode */}
+                                            {repeatRule && (
+                                                <div className="mb-3">
+                                                    <div className="text-xs text-gray-500 mb-1">觸發模式</div>
+                                                    <div className="flex flex-col gap-1">
+                                                        <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-gray-50">
+                                                            <input
+                                                                type="radio"
+                                                                name="triggerMode"
+                                                                checked={repeatRule.triggerMode !== 'on_schedule'}
+                                                                onChange={() => setRepeatRule(prev => prev ? { ...prev, triggerMode: 'on_complete' } : null)}
+                                                                className="text-purple-500"
+                                                            />
+                                                            <div>
+                                                                <div className="text-xs font-medium text-gray-700">完成時生成</div>
+                                                                <div className="text-[10px] text-gray-400">只有完成任務後才會產生下一個</div>
+                                                            </div>
+                                                        </label>
+                                                        <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-gray-50">
+                                                            <input
+                                                                type="radio"
+                                                                name="triggerMode"
+                                                                checked={repeatRule.triggerMode === 'on_schedule'}
+                                                                onChange={() => setRepeatRule(prev => prev ? { ...prev, triggerMode: 'on_schedule' } : null)}
+                                                                className="text-purple-500"
+                                                            />
+                                                            <div>
+                                                                <div className="text-xs font-medium text-gray-700">時間到自動生成</div>
+                                                                <div className="text-[10px] text-gray-400">無論是否完成，時間到自動產生</div>
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* End Date */}
+                                            {repeatRule && (
+                                                <div className="mb-3">
+                                                    <div className="text-xs text-gray-500 mb-1">重複期限 (可選)</div>
+                                                    <input
+                                                        type="date"
+                                                        value={repeatRule.endDate || ''}
+                                                        onChange={(e) => setRepeatRule(prev => prev ? { ...prev, endDate: e.target.value || undefined } : null)}
+                                                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:border-purple-400 focus:outline-none"
+                                                        placeholder="不設期限"
+                                                    />
+                                                    {repeatRule.endDate && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setRepeatRule(prev => prev ? { ...prev, endDate: undefined } : null)}
+                                                            className="text-[10px] text-red-500 hover:underline mt-1"
+                                                        >
+                                                            清除期限
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Actions */}
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setRepeatRule(null);
+                                                        setShowRepeatPicker(false);
+                                                    }}
+                                                    className="text-xs text-red-500 hover:text-red-600 font-medium"
+                                                >
+                                                    取消重複
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowRepeatPicker(false)}
+                                                    className="px-3 py-1 bg-purple-500 text-white text-xs font-medium rounded hover:bg-purple-600 transition-colors"
+                                                >
+                                                    確定
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
 
 
                             </div>
@@ -2398,23 +3256,34 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
                                     {/* Voice Note Button */}
                                     {/* Voice Note Button */}
+                                    {/* Voice Note Button */}
                                     <button
                                         type="button"
                                         tabIndex={-1}
                                         onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => {
-                                            // Trigger recording on NoteEditor via ref
-                                            if (editorRef.current && (editorRef.current as any).toggleRecording) {
-                                                (editorRef.current as any).toggleRecording();
+                                            if (isRecording) {
+                                                if (recordingTaskId === initialData?.id) {
+                                                    stopRecording();
+                                                } else {
+                                                    setToast?.({ msg: "正在其他任務中錄音，請先結束該錄音", type: "warning" });
+                                                }
                                             } else {
-                                                setToast?.({ msg: "錄音功能尚未準備就緒", type: "error" });
+                                                // Start recording associated with this task
+                                                // Use initialData.id if available, else a temp usage (though global recording needs an ID ideally)
+                                                // If create mode, we can't easily associate yet.
+                                                if (initialData?.id) {
+                                                    startRecording(initialData.id);
+                                                } else {
+                                                    setToast?.({ msg: "請先儲存任務後再使用錄音功能", type: "warning" });
+                                                }
                                             }
                                         }}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-theme-card focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
-                                        title="開始錄音"
+                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-theme-card focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'} ${isRecording && recordingTaskId === initialData?.id ? 'text-red-500 animate-pulse' : ''}`}
+                                        title={isRecording ? "停止錄音" : "開始錄音"}
                                     >
-                                        <Mic size={13} />
-                                        <span>語音</span>
+                                        <Mic size={13} strokeWidth={isRecording && recordingTaskId === initialData?.id ? 3 : 2} />
+                                        <span>{isRecording && recordingTaskId === initialData?.id ? formatDuration(recordingTime) : '語音'}</span>
                                     </button>
 
                                     {/* Parent/Project Selection */}
@@ -2459,6 +3328,25 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         ))}
                                     </div>
                                 )}
+
+                                {/* Importance Picker */}
+                                <div className="flex gap-1 p-1 bg-theme-hover rounded-lg border border-theme" title="重要性">
+                                    {[
+                                        { level: 'urgent' as ImportanceLevel, color: 'bg-red-500', label: '立刻去做', icon: '🔴' },
+                                        { level: 'planned' as ImportanceLevel, color: 'bg-yellow-400', label: '計畫去做', icon: '🟡' },
+                                        { level: 'delegated' as ImportanceLevel, color: 'bg-green-500', label: '授權去做', icon: '🟢' },
+                                        { level: 'optional' as ImportanceLevel, color: 'bg-gray-400', label: '有空再做', icon: '⚪' },
+                                    ].map(({ level, color: bgColor, label }) => (
+                                        <button
+                                            key={level}
+                                            tabIndex={-1}
+                                            type="button"
+                                            onClick={() => setImportance(importance === level ? undefined : level)}
+                                            title={label}
+                                            className={`w-4 h-4 rounded-full ${bgColor} ${importance === level ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'opacity-50 hover:opacity-100 hover:scale-105'} transition-all`}
+                                        />
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     </div>

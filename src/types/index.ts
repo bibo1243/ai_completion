@@ -1,7 +1,27 @@
 
-export type TaskStatus = 'inbox' | 'active' | 'waiting' | 'someday' | 'reference' | 'completed' | 'deleted' | 'logged';
+export type TaskStatus = 'inbox' | 'active' | 'waiting' | 'someday' | 'reference' | 'completed' | 'deleted' | 'logged' | 'canceled';
 export type SyncStatus = 'synced' | 'syncing' | 'error';
 export type TaskColor = 'gray' | 'blue' | 'indigo' | 'red' | 'orange' | 'amber' | 'green' | 'teal' | 'cyan' | 'sky' | 'purple' | 'fuchsia' | 'pink' | 'rose';
+
+// Importance level for tasks (Eisenhower Matrix inspired)
+export type ImportanceLevel = 'urgent' | 'planned' | 'delegated' | 'unplanned';
+
+// Repeat/Recurring Task Support
+export type RepeatType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type RepeatTriggerMode = 'on_complete' | 'on_schedule'; // on_complete: generate next only when completed; on_schedule: auto-generate when time comes
+
+export interface RepeatRule {
+  type: RepeatType;           // daily, weekly, monthly, yearly
+  interval: number;           // every N days/weeks/months/years
+  weekdays?: number[];        // for weekly: 0=Sun, 1=Mon, ..., 6=Sat
+  monthDay?: number;          // for monthly: day of month (1-31)
+  yearMonth?: number;         // for yearly: month (1-12)
+  yearDay?: number;           // for yearly: day of that month
+  endDate?: string;           // optional end date for the recurrence (YYYY-MM-DD)
+  endCount?: number;          // optional: stop after N occurrences
+  triggerMode?: RepeatTriggerMode; // when to generate next task (default: on_complete)
+  originalText?: string;      // original text from Things 3 for reference
+}
 
 export interface TagData {
   id: string;
@@ -29,6 +49,7 @@ export interface TaskData {
   is_project: boolean;
   tags: string[];
   color: TaskColor;
+  importance?: ImportanceLevel;  // Importance level: urgent/planned/delegated/unplanned
   created_at: string;
   completed_at: string | null;
   order_index: number;
@@ -42,6 +63,7 @@ export interface TaskData {
   attachment_links?: AttachmentLink[];
   ai_history?: AIHistoryEntry[];
   reviewed_at: string | null;
+  repeat_rule?: RepeatRule | null;  // For recurring tasks
 }
 
 export interface AIHistoryEntry {
@@ -79,6 +101,7 @@ export interface DragState {
   indicatorLeft: number;
   indicatorWidth: number;
   ghostPosition: { x: number; y: number };
+  anchorTaskIndex: number | null;  // The task the indicator is "attached" to (for date detection)
 }
 
 export type HistoryActionType = 'ADD' | 'DELETE' | 'UPDATE' | 'BATCH_UPDATE' | 'ADD_TAG' | 'DELETE_TAG' | 'UPDATE_TAG' | 'ARCHIVE' | 'BATCH_DELETE';
@@ -101,6 +124,7 @@ export interface ThemeSettings {
   timeFormat?: '12h' | '24h';
   showLunar?: boolean;
   showTaiwanHolidays?: boolean;
+  showRelationshipLines?: boolean;  // Show/hide task relationship lines in Today view
   language?: 'zh' | 'en';
   themeMode?: 'light' | 'dark' | 'programmer';
 }
@@ -117,6 +141,7 @@ export interface AISettings {
 export interface NavRecord {
   view: string;
   focusedId: string | null;
+  editingId?: string | null;
 }
 
 export interface JournalEntry {
