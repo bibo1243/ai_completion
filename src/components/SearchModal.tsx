@@ -183,15 +183,20 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                     e.stopPropagation();
                 }
             }
-            // Escape to close
+            // Escape to close - but not if editing a task
             if (e.key === 'Escape') {
+                // If there's an active contenteditable or task editor, let it handle escape first
+                if (editingTaskId) {
+                    // Let the task editor handle the escape
+                    return;
+                }
                 onClose();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
         return () => window.removeEventListener('keydown', handleKeyDown, true);
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, editingTaskId]);
 
     if (!isOpen) return null;
 
@@ -496,10 +501,12 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                         return (
                                             <div key={task.id} className="rounded-xl hover:bg-theme-hover transition-colors border border-transparent hover:border-theme">
                                                 {isEditing ? (
-                                                    <TaskInput
-                                                        initialData={task}
-                                                        onClose={() => setEditingTaskId(null)}
-                                                    />
+                                                    <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                                                        <TaskInput
+                                                            initialData={task}
+                                                            onClose={() => setEditingTaskId(null)}
+                                                        />
+                                                    </div>
                                                 ) : (
                                                     <div className="p-3">
                                                         <div className="flex items-start gap-3">

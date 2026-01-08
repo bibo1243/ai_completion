@@ -275,27 +275,42 @@ interface TagMentionListRef {
 
 const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props, ref) => {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Filter items based on search term
+    const filteredItems = searchTerm
+        ? props.items.filter(item =>
+            item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.isCreateOption
+        )
+        : props.items;
 
     const selectItem = (index: number) => {
-        const item = props.items[index];
+        const item = filteredItems[index];
         if (item) {
             props.command(item);
         }
     };
 
     const upHandler = () => {
-        setSelectedIndex((selectedIndex + props.items.length - 1) % props.items.length);
+        setSelectedIndex((prev) => (prev + filteredItems.length - 1) % filteredItems.length);
     };
 
     const downHandler = () => {
-        setSelectedIndex((selectedIndex + 1) % props.items.length);
+        setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
     };
 
     const enterHandler = () => {
         selectItem(selectedIndex);
     };
 
-    useEffect(() => setSelectedIndex(0), [props.items]);
+    // Reset selection when items or search changes
+    useEffect(() => setSelectedIndex(0), [props.items, searchTerm]);
+
+    // Focus input on mount
+    useEffect(() => {
+        setTimeout(() => inputRef.current?.focus(), 50);
+    }, []);
 
     useImperativeHandle(ref, () => ({
         onKeyDown: ({ event }: { event: KeyboardEvent }) => {
@@ -311,64 +326,93 @@ const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props
                 enterHandler();
                 return true;
             }
+            // Let other keys pass through to the search input
             return false;
         },
     }));
 
-    if (props.items.length === 0) {
-        return (
-            <div
-                className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl p-3 text-xs font-light text-theme-tertiary"
-                onMouseDown={(e) => e.preventDefault()}
-            >
-                沒有找到標籤
-            </div>
-        );
-    }
-
     return (
         <div
-            className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto min-w-[180px]"
+            className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden min-w-[220px]"
             onMouseDown={(e) => e.preventDefault()}
         >
-            {props.items.map((item, index) => {
-                const isCreateOption = item.isCreateOption;
+            {/* Search Input */}
+            <div className="p-2 border-b border-theme">
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Stop all events from bubbling to prevent closing the editor
+                        e.stopPropagation();
 
-                // Calculate depth based on parent_id
-                const hasParent = !!item.parent_id;
-                const paddingLeft = hasParent ? 'pl-6' : 'pl-3';
-
-                return (
-                    <button
-                        key={item.id}
-                        type="button"
-                        onMouseDown={(e) => {
+                        if (e.key === 'ArrowUp') {
                             e.preventDefault();
-                            e.stopPropagation();
-                            selectItem(index);
-                        }}
-                        className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
-                            ? 'bg-theme-selection'
-                            : 'hover:bg-theme-hover'
-                            }`}
-                    >
-                        {isCreateOption ? (
-                            <div className="w-4 h-4 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0 text-indigo-400">
-                                <Plus size={10} strokeWidth={3} />
-                            </div>
-                        ) : (
-                            <div
-                                className="w-2 h-2 rounded-full flex-shrink-0"
-                                style={{ backgroundColor: item.color || '#6366f1' }}
-                            />
-                        )}
-                        <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-theme-primary' : 'text-theme-secondary'
-                            }`}>
-                            {item.name}
-                        </span>
-                    </button>
-                );
-            })}
+                            upHandler();
+                        } else if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            downHandler();
+                        } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            enterHandler();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            // Let the parent handle escape by NOT stopping propagation here
+                            // Actually we already stopped it above, so we need to handle escape differently
+                        }
+                    }}
+                    placeholder="搜尋標籤..."
+                    className="w-full px-2 py-1.5 text-sm bg-theme-hover rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-400 text-theme-primary placeholder-theme-tertiary"
+                    autoComplete="off"
+                />
+            </div>
+
+            {/* Tag List */}
+            <div className="max-h-52 overflow-y-auto">
+                {filteredItems.length === 0 ? (
+                    <div className="p-3 text-xs font-light text-theme-tertiary text-center">
+                        沒有找到標籤
+                    </div>
+                ) : (
+                    filteredItems.map((item, index) => {
+                        const isCreateOption = item.isCreateOption;
+                        const hasParent = !!item.parent_id;
+                        const paddingLeft = hasParent ? 'pl-6' : 'pl-3';
+
+                        return (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    selectItem(index);
+                                }}
+                                className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
+                                    ? 'bg-theme-selection'
+                                    : 'hover:bg-theme-hover'
+                                    }`}
+                            >
+                                {isCreateOption ? (
+                                    <div className="w-4 h-4 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0 text-indigo-400">
+                                        <Plus size={10} strokeWidth={3} />
+                                    </div>
+                                ) : (
+                                    <div
+                                        className="w-2 h-2 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: item.color || '#6366f1' }}
+                                    />
+                                )}
+                                <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-theme-primary' : 'text-theme-secondary'
+                                    }`}>
+                                    {item.name}
+                                </span>
+                            </button>
+                        );
+                    })
+                )}
+            </div>
         </div>
     );
 });
@@ -402,6 +446,10 @@ interface NoteEditorProps {
 // Custom extension to handle internal tab and Cmd+Enter exit
 interface NoteEditorHandle {
     toggleRecording: () => void;
+    chain: () => any;
+    focus: () => void;
+    insertContent: (content: any) => void;
+    getEditor: () => any;
 }
 
 const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
@@ -432,6 +480,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     // Refs to access latest values inside editor callbacks without triggering re-initialization
     const tagsRef = useRef(availableTags);
     const onCreateTagRef = useRef(onCreateTag);
+    const isMentionOpenRef = useRef(false);
 
     useEffect(() => {
         tagsRef.current = availableTags;
@@ -441,14 +490,6 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
         onCreateTagRef.current = onCreateTag;
     }, [onCreateTag]);
 
-    // Expose methods to parent via ref
-
-    useImperativeHandle(ref, () => ({
-        toggleRecording: () => {
-            // Managed globally now
-        }
-    }));
-
     // --- Attachment Link State ---
     const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
     const [attachmentPickerPosition, setAttachmentPickerPosition] = useState({ top: 0, left: 0 });
@@ -457,6 +498,15 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     const [showAttachmentPopup, setShowAttachmentPopup] = useState(false);
     const [attachmentPopupPosition, setAttachmentPopupPosition] = useState({ top: 0, left: 0 });
     const [linkedAttachmentUrls, setLinkedAttachmentUrls] = useState<string[]>([]);
+
+    // Expose editor methods to parent via ref
+    useImperativeHandle(ref, () => ({
+        toggleRecording: () => { /* Managed globally now */ },
+        chain: () => editorRef.current?.chain(),
+        focus: () => editorRef.current?.commands.focus(),
+        insertContent: (content: any) => editorRef.current?.commands.insertContent(content),
+        getEditor: () => editorRef.current,
+    }));
 
     // --- Audio Recording State ---
     // --- Audio Recording State from Context ---
@@ -616,9 +666,9 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                     char: '@',
                     items: ({ query }: { query: string }) => {
                         const currentTags = tagsRef.current;
+                        // Return all matching tags (no limit) since we have search in the dropdown
                         const results = currentTags
-                            .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()))
-                            .slice(0, 15);
+                            .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()));
 
                         // If query exists and no exact match found, offer to create new tag
                         if (query && !currentTags.some(tag => tag.name.toLowerCase() === query.toLowerCase())) {
@@ -629,7 +679,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                                 isCreateOption: true
                             } as any);
                         } else if (!query && results.length === 0) {
-                            return currentTags.slice(0, 15);
+                            return currentTags; // Return all tags if no query and no results
                         }
 
                         return results;
@@ -686,6 +736,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
 
                         return {
                             onStart: (props: any) => {
+                                isMentionOpenRef.current = true;
                                 component = new ReactRenderer(TagMentionList, {
                                     props,
                                     editor: props.editor,
@@ -721,6 +772,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                                 return component?.ref?.onKeyDown(props) ?? false;
                             },
                             onExit() {
+                                isMentionOpenRef.current = false;
                                 popup?.[0]?.destroy();
                                 component?.destroy();
                             },
@@ -793,20 +845,36 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
         if (!editor) return;
 
         const updateHandler = ({ transaction }: { transaction: any }) => {
-            if (isRecording && recordingTimeRef.current >= 0 && transaction.docChanged) {
-                // Determine if we need to apply a new timestamp mark
-                // We apply a new mark if:
-                // 1. There is no current timestamp mark active
-                // 2. Or the active timestamp mark is "stale" (e.g. > 2 seconds old)
+            // Skip if IME is composing (Chinese/Japanese input)
+            if ((window as any).__imeComposing) return;
 
+            if (isRecording && recordingTimeRef.current >= 0 && transaction.docChanged) {
                 const currentTime = recordingTimeRef.current;
                 const { selection } = editor.state;
 
                 // Don't apply marks to huge selections, only caret or typing
                 if (!selection.empty) return;
 
+                // Check if user is typing an @ mention
+                // Look backwards from cursor for @ without a space
+                const $from = selection.$from;
+                const textBefore = $from.parent.textContent.substring(0, $from.parentOffset);
+
+                // Find the last @ symbol
+                const lastAtIndex = textBefore.lastIndexOf('@');
+                if (lastAtIndex !== -1) {
+                    // Check if there's no space between @ and cursor (user is typing a mention)
+                    const textAfterAt = textBefore.substring(lastAtIndex + 1);
+                    if (!textAfterAt.includes(' ')) {
+                        // User is typing a mention, skip timestamp marking
+                        return;
+                    }
+                }
+
+                if (isMentionOpenRef.current) return;
+
                 // Check for existing timestamp mark at cursor
-                const currentMarks = selection.$from.marks();
+                const currentMarks = $from.marks();
                 const existingTimestampMark = currentMarks.find((m: any) => m.type.name === 'timestamp');
 
                 let shouldApplyNewMark = true;
@@ -827,12 +895,28 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             }
         };
 
+        // Track IME composition state (for Chinese/Japanese input methods)
+        const handleCompositionStart = () => {
+            (window as any).__imeComposing = true;
+        };
+        const handleCompositionEnd = () => {
+            (window as any).__imeComposing = false;
+        };
+
+        // Get the editor DOM element and attach composition listeners
+        const editorElement = editor.view.dom;
+        editorElement.addEventListener('compositionstart', handleCompositionStart);
+        editorElement.addEventListener('compositionend', handleCompositionEnd);
+
         editor.on('selectionUpdate', updateHandler); // Run on selection/input updates to keep mark active
         editor.on('update', updateHandler);
 
         return () => {
             editor.off('update', updateHandler);
             editor.off('selectionUpdate', updateHandler);
+            editorElement.removeEventListener('compositionstart', handleCompositionStart);
+            editorElement.removeEventListener('compositionend', handleCompositionEnd);
+            (window as any).__imeComposing = false;
         };
     }, [editor, isRecording]);
 

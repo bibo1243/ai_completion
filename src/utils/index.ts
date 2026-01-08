@@ -113,3 +113,25 @@ export const taskHasAnyTag = (task: TaskData, tagIds: string[]): boolean => {
   const mentionedIds = extractMentionedTagIds(task.description);
   return mentionedIds.some(id => tagIds.includes(id));
 };
+
+/**
+ * Find the root ancestor of a task.
+ * If task has no parent, returns the task itself.
+ */
+export const getRootTask = (task: TaskData, allTasks: TaskData[]): TaskData => {
+  let current = task;
+  let currentId = task.parent_id;
+  const visited = new Set([task.id]);
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const parent = allTasks.find(t => t.id === currentId);
+    if (parent) {
+      current = parent;
+      currentId = parent.parent_id;
+    } else {
+      break;
+    }
+  }
+  return current;
+};

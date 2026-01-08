@@ -1,8 +1,10 @@
 import { useState, useContext, useMemo, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, LayoutGroup } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
 import { TaskList } from './TaskList';
-import { ArrowLeft, Image, Settings2, GripVertical, ChevronRight, Edit3, X, FolderPlus, Trophy } from 'lucide-react';
+import { TaskPlanGantt } from './TaskPlanGantt';
+import { TaskPlan } from '../services/ai';
+import { ArrowLeft, Image, Settings2, GripVertical, ChevronRight, Edit3, X, FolderPlus, Trophy, List, GanttChartSquare } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 
 import { TaskInput } from './TaskInput';
@@ -29,12 +31,13 @@ interface ProjectData {
 
 
 export const ProjectView = () => {
-    const { tasks, tags, themeSettings, updateTask, setEditingTaskId, editingTaskId, addTask, addTag, setView } = useContext(AppContext);
+    const { tasks, tags, themeSettings, updateTask, setEditingTaskId, editingTaskId, addTask, addTag, setView, batchUpdateTasks, batchDeleteTasks } = useContext(AppContext);
 
     // State for project management
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
     const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
     const [previousView, setPreviousView] = useState<string | null>(null);
+    const [viewMode, setViewMode] = useState<'list' | 'gantt'>('list'); // View mode toggle
     const [cardSize, setCardSize] = useState(() => {
         const saved = localStorage.getItem('projectCardSize');
         return saved ? parseInt(saved) : 280;
@@ -298,7 +301,147 @@ export const ProjectView = () => {
         }
     }, [selectedProject?.id, selectedProject?.ai_history]);
 
-    // Compute frequent prompts from tasks with 'prompt' tag
+    // Transform TaskData to TaskPlan for Gantt
+    const ganttPlan = useMemo<TaskPlan[]>(() => {
+        if (!selectedProjectId) return [];
+
+        const projectTasks = tasks.filter(t => t.parent_id === selectedProjectId && t.status !== 'deleted');
+        // Sort by order
+        projectTasks.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+        const mapTaskToPlan = (taskId: string): TaskPlan[] => {
+            const children = tasks
+                .filter(t => t.parent_id === taskId && t.status !== 'deleted')
+                .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+            return children.map(t => ({
+                id: t.id,
+                title: t.title,
+                description: t.description || undefined,
+                start_date: t.start_date,
+                due_date: t.due_date,
+                dependencies: t.dependencies || [],
+                subtasks: mapTaskToPlan(t.id)
+            }));
+        };
+
+        // For the root project, we want its children as the top level of the Gantt
+        // Or should the Project itself be the root?
+        // Usually Gantt starts with the project. Let's make the Project the single root node.
+        const rootPlan: TaskPlan = {
+            id: selectedProjectId,
+            title: selectedProject?.title || "Project",
+            start_date: selectedProject?.start_date,
+            due_date: selectedProject?.due_date,
+            description: selectedProject?.description || undefined,
+            dependencies: [],
+            subtasks: mapTaskToPlan(selectedProjectId)
+        };
+
+        return [rootPlan];
+    }, [selectedProjectId, tasks, selectedProject]);
+
+    // Handle updates from Gantt Chart
+    const handleGanttUpdate = async (newPlan: TaskPlan[]) => {
+        // Flatten the new plan
+        const flatten = (nodes: TaskPlan[]): TaskPlan[] => {
+            let res: TaskPlan[] = [];
+            nodes.forEach(n => {
+                res.push(n);
+                if (n.subtasks) res = res.concat(flatten(n.subtasks));
+            });
+            return res;
+        };
+        const flatNew = flatten(newPlan);
+        const newIds = new Set(flatNew.map(n => n.id).filter(Boolean));
+
+
+        // If we want to support nested levels deeper than 1, we should find ALL descendants.
+        // But ProjectView currently gets direct children usually? 
+        // ganttPlan generator uses recursive mapTaskToPlan, so it includes all descendants.
+        // So we need all descendants here too for correct diffing.
+        const getAllDescendants = (parentId: string): typeof tasks => {
+            const children = tasks.filter(t => t.parent_id === parentId && t.status !== 'deleted');
+            let res = [...children];
+            children.forEach(c => {
+                res = res.concat(getAllDescendants(c.id));
+            });
+            return res;
+        };
+        const allCurrentTasks = getAllDescendants(selectedProjectId!);
+
+        // 1. Identify Deletions (Tasks in DB but missing in New Plan)
+        const toDeleteIds = allCurrentTasks
+            .filter(t => !newIds.has(t.id))
+            .map(t => t.id);
+
+        if (toDeleteIds.length > 0) {
+            await batchDeleteTasks(toDeleteIds);
+        }
+
+        // 2. Identify Updates
+        const updates: { id: string, data: any }[] = [];
+        for (const newNode of flatNew) {
+            if (!newNode.id) continue; // Skip creations here
+            if (newNode.id === selectedProjectId) continue; // Skip root project update for now (or handle separately)
+
+            const original = tasks.find(t => t.id === newNode.id);
+            if (!original) continue;
+
+            const updateData: any = {};
+            let hasChange = false;
+
+            if (newNode.start_date !== original.start_date) {
+                updateData.start_date = newNode.start_date;
+                hasChange = true;
+            }
+            if (newNode.due_date !== original.due_date) {
+                updateData.due_date = newNode.due_date;
+                hasChange = true;
+            }
+            // Dependencies
+            const newDeps = newNode.dependencies || [];
+            const oldDeps = original.dependencies || [];
+            // Simple array compare (assuming sorted or small enough)
+            const sortedNew = [...newDeps].sort();
+            const sortedOld = [...oldDeps].sort();
+            if (
+                sortedNew.length !== sortedOld.length ||
+                !sortedNew.every((val, index) => val === sortedOld[index])
+            ) {
+                updateData.dependencies = newNode.dependencies;
+                hasChange = true;
+            }
+
+            if (hasChange) {
+                updates.push({ id: newNode.id, data: updateData });
+            }
+        }
+
+        if (updates.length > 0) {
+            await batchUpdateTasks(updates);
+        }
+
+        // 3. Identify Creations (Nodes without ID)
+        // If TaskPlanGantt supports creating nodes (e.g. key press), they appear here.
+        const toCreate = flatNew.filter(n => !n.id);
+        for (const node of toCreate) {
+            // We need to infer parent. Flattening lost parent info? 
+            // Flatten needs to preserve parentId if we want to create correctly.
+            // But 'flatten' helper above didn't preserve it. 
+            // Actually, TaskPlan structure is nested. We can traverse to find parents.
+            // For now, if TaskPlanGantt doesn't strongly support creation, this might be rare.
+            // But let's handle it best effort (default to root project as parent).
+            await addTask({
+                title: node.title || 'New Task',
+                parent_id: selectedProjectId, // Fallback. 
+                start_date: node.start_date,
+                due_date: node.due_date,
+                status: 'todo'
+            });
+        }
+    };
+
     const frequentPrompts = useMemo(() => {
         const promptTag = tags.find(t => t.name.toLowerCase() === 'prompt');
         if (!promptTag) return [];
@@ -678,6 +821,23 @@ export const ProjectView = () => {
                         <Edit3 size={14} />
                         編輯專案
                     </button>
+                    {/* View Toggle */}
+                    <div className="flex items-center gap-1 bg-theme-hover p-0.5 rounded-lg ml-2">
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-500' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="列表視圖"
+                        >
+                            <List size={16} />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('gantt')}
+                            className={`p-1.5 rounded-md transition-all ${viewMode === 'gantt' ? 'bg-white shadow-sm text-indigo-500' : 'text-gray-400 hover:text-gray-600'}`}
+                            title="甘特圖視圖"
+                        >
+                            <GanttChartSquare size={16} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Collapsible Notes Section */}
@@ -747,9 +907,19 @@ export const ProjectView = () => {
                     </div>
                 )}
 
-                {/* Task List for this project (only children, not root) */}
-                <div className="flex-1 overflow-y-auto">
-                    <TaskList rootParentId={selectedProjectId} />
+                {/* Task List or Gantt Chart */}
+                <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
+                    {viewMode === 'list' ? (
+                        <TaskList rootParentId={selectedProjectId} />
+                    ) : (
+                        <div className="h-full w-full">
+                            <TaskPlanGantt
+                                plan={ganttPlan}
+                                onUpdatePlan={handleGanttUpdate}
+                                onEditTask={(id) => setEditingTaskId(id)}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* Root Task Editor Modal - Simplified Overlay */}
@@ -850,31 +1020,33 @@ export const ProjectView = () => {
                         </p>
                     </div>
                 ) : (
-                    <div
-                        className="flex flex-wrap gap-5"
-                        style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                    >
-                        {sortedProjects.map((project) => (
-                            <DraggableProjectCard
-                                key={project.id}
-                                project={project}
-                                size={cardSize}
-                                tags={tags}
-                                isSelected={focusedProjectId === project.id}
-                                isDragging={draggedId === project.id}
-                                isDropTarget={dropTargetId === project.id}
-                                onSelect={() => setFocusedProjectId(project.id)}
-                                onDoubleClick={() => setSelectedProjectId(project.id)}
-                                onDelete={() => handleDeleteProject(project.id)}
-                                onDragStart={() => setDraggedId(project.id)}
-                                onDragEnd={handleDragEnd}
-                                registerRef={registerCardRef}
-                                fontFamilyClass={fontFamilyClass}
-                            />
-                        ))}
-                    </div>
+                    <LayoutGroup>
+                        <div
+                            className="flex flex-wrap gap-5"
+                            style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                        >
+                            {sortedProjects.map((project) => (
+                                <DraggableProjectCard
+                                    key={project.id}
+                                    project={project}
+                                    size={cardSize}
+                                    tags={tags}
+                                    isSelected={focusedProjectId === project.id}
+                                    isDragging={draggedId === project.id}
+                                    isDropTarget={dropTargetId === project.id}
+                                    onSelect={() => setFocusedProjectId(project.id)}
+                                    onDoubleClick={() => setSelectedProjectId(project.id)}
+                                    onDelete={() => handleDeleteProject(project.id)}
+                                    onDragStart={() => setDraggedId(project.id)}
+                                    onDragEnd={handleDragEnd}
+                                    registerRef={registerCardRef}
+                                    fontFamilyClass={fontFamilyClass}
+                                />
+                            ))}
+                        </div>
+                    </LayoutGroup>
                 )}
             </div>
         </div>
@@ -934,12 +1106,24 @@ const DraggableProjectCard = ({
     };
 
     return (
-        <div
+        <motion.div
+            layout
+            layoutId={project.id}
+            transition={{
+                layout: {
+                    type: "spring",
+                    stiffness: 350,
+                    damping: 25,
+                    mass: 0.8
+                }
+            }}
             ref={(el) => registerRef(project.id, el)}
             draggable
-            onDragStart={handleDragStart}
-            onDragEnd={onDragEnd}
-            className={`relative transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : ''}`}
+            // @ts-ignore - Using native HTML5 drag events
+            onDragStart={handleDragStart as any}
+            // @ts-ignore - Using native HTML5 drag events
+            onDragEnd={onDragEnd as any}
+            className={`relative transition-opacity duration-200 ${isDragging ? 'opacity-50 scale-95' : ''}`}
             style={{
                 width: size,
                 ...(isDropTarget && {
@@ -1027,6 +1211,6 @@ const DraggableProjectCard = ({
                     </div>
                 </div>
             </motion.div>
-        </div>
+        </motion.div>
     );
 };

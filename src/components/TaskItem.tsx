@@ -25,7 +25,24 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
     const isCompletedOrCanceled = isDone || isCanceled;
     const isSelected = selectedTaskIds.includes(task.id);
 
+    // Map importance level to checkbox color
+    const getImportanceColor = (importance?: string): TaskColor | null => {
+        if (!importance) return null;
+        switch (importance) {
+            case 'urgent': return 'red';
+            case 'planned': return 'amber';
+            case 'delegated': return 'green';
+            case 'unplanned': return 'gray';
+            default: return null;
+        }
+    };
+
     const getEffectiveColor = (t: TaskData): TaskColor => {
+        // If task has importance, use importance-based color
+        const importanceColor = getImportanceColor(t.importance);
+        if (importanceColor) return importanceColor;
+
+        // Otherwise, fall back to parent color inheritance
         let curr = t;
         const visited = new Set<string>();
         while (curr.parent_id) {
@@ -170,8 +187,8 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.altKey && !e.ctrlKey && !e.metaKey) {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); }
-            // Focus and review zones are fully disabled
-            if (view === 'focus' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
+            // Focus, recent, and review zones are fully disabled for keyboard moving
+            if (view === 'focus' || view === 'recent' || isInReviewZone || (view === 'allview' && task.status === 'logged')) return;
 
             // Today view: Alt+Up/Down at date boundary jumps to prev/next day
             if (view === 'today') {
@@ -521,6 +538,12 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
             <div className={`flex flex-col ${isFocusView ? 'px-1' : 'px-3'}`}>
 
                 <div className="flex items-center gap-3">
+                    {/* Updated timestamp for recent view */}
+                    {view === 'recent' && (
+                        <span className="text-[10px] text-gray-300 font-light w-14 flex-shrink-0 tabular-nums">
+                            {task.updated_at ? new Date(task.updated_at).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                    )}
                     {view === 'trash' ? (
                         <>
                             <div className="w-[18px] flex justify-center">
@@ -558,22 +581,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                     isRoot={!task.parent_id}
                                     size={isFocusView ? 14 : 18}
                                 />
-                                {/* Importance indicator */}
-                                {task.importance && (
-                                    <span
-                                        className={`w-2 h-2 rounded-full flex-shrink-0 ${task.importance === 'urgent' ? 'bg-red-500' :
-                                            task.importance === 'planned' ? 'bg-yellow-400' :
-                                                task.importance === 'delegated' ? 'bg-green-500' :
-                                                    'bg-gray-300'
-                                            }`}
-                                        title={
-                                            task.importance === 'urgent' ? '立刻去做' :
-                                                task.importance === 'planned' ? '計畫去做' :
-                                                    task.importance === 'delegated' ? '交辦去做' :
-                                                        '未規劃'
-                                        }
-                                    />
-                                )}
+                                {/* Importance is now shown via checkbox color */}
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
                                 <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink`}>

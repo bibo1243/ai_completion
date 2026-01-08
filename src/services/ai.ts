@@ -498,11 +498,13 @@ ${truncatedContent}
 };
 
 export interface TaskPlan {
+  id?: string;
   title: string;
   description?: string;
   start_date?: string | null;
   due_date?: string | null;
   subtasks?: TaskPlan[];
+  dependencies?: string[];
 }
 
 export const planTaskBreakdown = async (
@@ -510,9 +512,21 @@ export const planTaskBreakdown = async (
   taskNote: string,
   taskStartDate: string | null,
   taskDueDate: string | null,
-  context: { today: string },
+  context: {
+    today: string;
+    existingSchedule?: string[];
+    pastExperiences?: string[];
+  },
   customInstruction?: string
 ): Promise<TaskPlan[]> => {
+  const scheduleContext = context.existingSchedule && context.existingSchedule.length > 0
+    ? `\nExisting Schedule (Potential Conflicts):\n${context.existingSchedule.join('\n')}`
+    : '';
+
+  const experienceContext = context.pastExperiences && context.pastExperiences.length > 0
+    ? `\nRelevant Past Experience:\n${context.pastExperiences.join('\n')}`
+    : '';
+
   const prompt = `
 Role: 行政總管 AI (Chief Administrative Officer)。你是一位經驗豐富、觀察入微的行政總管。你的任務是將一個大型任務拆解成可執行的子任務，並為每個子任務提供詳盡的執行說明與注意事項。
 
@@ -523,16 +537,20 @@ Source Task:
 - 到期日期: ${taskDueDate || '未指定'}
 - 今日日期: ${context.today}
 ${customInstruction ? `\n使用者指令: "${customInstruction}"` : ''}
+${scheduleContext}
+${experienceContext}
 
 Instructions:
 1. 仔細研讀標題與備註，識別需要執行的主題、步驟、細節需求。
-2. 將任務拆解成邏輯清晰的階層式子任務。
-3. 對於每個子任務：
-   - "title": 簡潔、動作導向的標題（例如「確認機票預算」而非「機票」）。
-   - "description": 【重要】必須提供與該子任務相關的「具體執行說明」或「注意事項」。不可與標題重複，也不可簡單複製原始備註。請以行政總管的角度，補充可能遺漏的細節、常見問題、或提醒事項。例如：「請確認是否需要特殊餐食、提前辦理線上報到可節省時間」。
-   - "start_date": YYYY-MM-DD 格式。若原文提及相對日期（如「三天後」），請依據開始日期或今日推算。若無法判斷則留空。
+2. 參考「過往經驗 (Relevant Past Experience)」(若有) 來優化執行步驟或避開常見錯誤。
+3. 參考「現有行事曆 (Existing Schedule)」(若有)，若新生成的子任務日期與現有強碰，請在 description 中加入「⚠️日期衝突警示」並建議調整。
+4. 將任務拆解成邏輯清晰的階層式子任務。
+5. 對於每個子任務：
+   - "title": 簡潔、動作導向的標題。
+   - "description": 【重要】具體執行說明、注意事項、或衝突警示。
+   - "start_date": YYYY-MM-DD 格式。
    - "due_date": YYYY-MM-DD 格式。
-4. "subtasks": 若該子任務可進一步細分，則提供巢狀子任務陣列；否則為空陣列。
+6. "subtasks": 若該子任務可進一步細分，則提供巢狀子任務陣列；否則為空陣列。
 
 Output Rules:
 - 輸出必須是嚴格有效的 JSON 陣列。

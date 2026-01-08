@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -26,8 +26,150 @@ interface TagTreeItem {
     data: any;
 }
 
+const SidebarNavItem = ({
+    id,
+    label,
+    active,
+    overdueCount,
+    normalCount,
+    icon: Icon,
+    color,
+    acceptsDrop,
+    // Props passed from parent
+    isEditing,
+    editingViewName,
+    setEditingViewName,
+    setEditingViewId,
+    saveViewName,
+    hasActiveFilters,
+    setHoveredDropTarget,
+    sidebarCollapsed,
+    sidebarTextClass,
+    sidebarFontClass,
+    setView,
+    setTagFilter
+}: any) => {
+    const { dragState, updateGhostPosition, endDrag, selectedTaskIds, moveTaskToView, setFocusedTaskId, setSelectedTaskIds }: any = useContext(AppContext);
+
+    // Use custom color if provided, otherwise use accent color when active
+    const iconColor = color || (active ? 'var(--accent-color)' : undefined);
+
+    const isDropTargetRef = useRef(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [isDropTarget, setIsDropTarget] = useState(false);
+
+    const handleDragOver = (e: React.DragEvent) => {
+        if (!acceptsDrop) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Only update state if it changed
+        if (!isDropTargetRef.current) {
+            isDropTargetRef.current = true;
+            setIsDropTarget(true);
+            setHoveredDropTarget(id);
+        }
+
+        updateGhostPosition(e.clientX, e.clientY);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        isDropTargetRef.current = false;
+        setIsDropTarget(false);
+        setHoveredDropTarget(null);
+    };
+
+    const handleDrop = async (e: React.DragEvent) => {
+        // Drop is mainly handled by Sidebar via hoveredDropTarget, 
+        // but we keep this for direct interactions if needed
+        e.preventDefault();
+        e.stopPropagation();
+        isDropTargetRef.current = false;
+        setIsDropTarget(false);
+        setHoveredDropTarget(null); // Clear hover state immediately
+
+        if (!acceptsDrop) {
+            endDrag();
+            return;
+        }
+
+        const taskIdsToMove = selectedTaskIds.length > 0
+            ? selectedTaskIds
+            : dragState?.draggedId ? [dragState.draggedId] : [];
+
+        if (taskIdsToMove.length > 0) {
+            await moveTaskToView(taskIdsToMove, id);
+        }
+        endDrag();
+    };
+
+    return (
+        <div
+            className={`relative group/nav-wrapper transition-all ${isDropTarget ? 'ring-2 ring-indigo-500 ring-inset rounded-lg bg-indigo-50 dark:bg-indigo-900/40' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
+            <button
+                onClick={() => {
+                    if (!isEditing && setView) {
+                        setView(id);
+                        if (setTagFilter) setTagFilter(null);
+                        setFocusedTaskId(null);
+                        setSelectedTaskIds([]);
+                    }
+                }}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (setEditingViewId) {
+                        setEditingViewId(id);
+                        setEditingViewName(label);
+                    }
+                }}
+                style={{
+                    pointerEvents: (acceptsDrop && dragState?.isDragging) ? 'none' : 'auto'
+                }}
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1 rounded-lg mb-1 md:mb-0 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-theme-hover text-theme-primary font-bold' : 'text-theme-secondary font-medium hover:bg-theme-hover hover:text-theme-primary active:bg-theme-hover'}`}
+                title={sidebarCollapsed ? label : ''}
+            >
+                <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
+                    {Icon && <Icon size={16} style={{ color: iconColor }} className={!color && !active ? 'text-theme-tertiary' : ''} />}
+                    {!sidebarCollapsed && (
+                        isEditing ? (
+                            <input
+                                autoFocus
+                                value={editingViewName}
+                                onChange={(e) => setEditingViewName(e.target.value)}
+                                onKeyDown={(e) => {
+                                    e.stopPropagation();
+                                    if (e.key === 'Enter') saveViewName(id, editingViewName);
+                                    else if (e.key === 'Escape') setEditingViewId(null);
+                                }}
+                                onBlur={() => saveViewName(id, editingViewName)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-theme-card border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-20 text-theme-primary"
+                            />
+                        ) : (
+                            <span>{label}</span>
+                        )
+                    )}
+                    {!sidebarCollapsed && hasActiveFilters && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
+                    )}
+                </div>
+                {!sidebarCollapsed && <div className="flex gap-2 items-center">
+                    {overdueCount > 0 && <span className="text-[11px] font-semibold text-white bg-rose-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{overdueCount}</span>}
+                    {normalCount > 0 && <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>}
+                </div>}
+            </button>
+        </div>
+    );
+};
+
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, setSelectedTaskIds }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, setSelectedTaskIds, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [isAltPressed, setIsAltPressed] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
@@ -69,7 +211,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [popoverPosition, setPopoverPosition] = useState<{ top: number, left: number } | null>(null);
 
     const [searchOpen, setSearchOpen] = useState(false);
-    const [isTagsExpanded, setIsTagsExpanded] = useState(true);
+    const [isTagsExpanded, setIsTagsExpanded] = useState(() => {
+        const saved = localStorage.getItem('sidebar_tags_expanded');
+        return saved !== null ? saved === 'true' : true;
+    });
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const settingsRef = useRef<HTMLDivElement>(null);
@@ -82,8 +227,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     // Keyboard shortcut for search (Cmd+K)
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+            // Cmd+Shift+F or Cmd+Shift+S to open search
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F' || e.key === 's' || e.key === 'S')) {
                 e.preventDefault();
+                e.stopPropagation();
                 setSearchOpen(true);
             }
             if (e.key === 'Escape' && searchOpen) {
@@ -169,19 +316,19 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         todayOverdue: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date)).length,
         todayScheduled: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && (isToday(t.start_date || t.due_date))).length,
         prompt: tasks.filter((t: any) => {
-            const promptTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'prompt');
+            const promptTag = tags.find((tg: any) => ['prompt', '提示詞'].some(n => tg.name.trim().toLowerCase() === n));
             return t.status !== 'deleted' && t.status !== 'logged' && promptTag && t.tags.includes(promptTag.id) && !t.reviewed_at;
         }).length,
         logbook: tasks.filter((t: any) => t.status === 'logged' && !t.reviewed_at).length,
         waiting: tasks.filter((t: any) => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
-            const inspirationTag = tags.find((tg: any) => tg.name.includes('靈感'));
+            const inspirationTag = tags.find((tg: any) => ['someday', 'inspiration', '靈感', '將來/靈感'].some(n => tg.name.trim().toLowerCase() === n));
             return (t.status === 'waiting' || (inspirationTag && t.tags.includes(inspirationTag.id))) && !t.reviewed_at;
         }).length,
         trash: tasks.filter((t: any) => t.status === 'deleted').length,
         note: tasks.filter((t: any) => {
             if (t.status === 'deleted' || t.status === 'logged') return false;
-            const noteTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'note');
+            const noteTag = tags.find((tg: any) => ['note', 'journal', '知識庫', '知識筆記'].some(n => tg.name.trim().toLowerCase() === n));
             return noteTag && t.tags.includes(noteTag.id);
         }).length
     };
@@ -198,90 +345,31 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         setEditingViewId(null);
     };
 
-    const NavItem = ({ id, label, active, overdueCount, normalCount, icon: Icon, color }: any) => {
-        const allowSettings = ['focus', 'waiting', 'journal', 'prompt'].includes(id);
-        const [isHovered, setIsHovered] = useState(false);
-        const filter = viewTagFilters[id] || { include: [] as string[], exclude: [] as string[] };
-        // Handle legacy
-        const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
-        const hasActiveFilters = include.length > 0 || exclude.length > 0;
+    // Track which NavItem is being hovered during drag
+    const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
 
-        const displayLabel = viewNames[id] || label;
-        const isEditing = editingViewId === id;
+    const handleSidebarDrop = async (e: React.DragEvent) => {
+        console.log('[Sidebar Drop] hoveredDropTarget:', hoveredDropTarget);
 
-        // Use custom color if provided, otherwise use accent color when active
-        const iconColor = color || (active ? 'var(--accent-color)' : undefined);
+        if (!hoveredDropTarget || !dragState.isDragging) return;
 
-        return (
-            <div
-                className="relative group/nav-wrapper"
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-            >
-                <button
-                    onClick={() => {
-                        if (!isEditing) {
-                            setView(id);
-                            setTagFilter(null);
-                            // Clear focus and selection when switching views
-                            setFocusedTaskId(null);
-                            setSelectedTaskIds([]);
-                        }
-                    }}
-                    onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        setEditingViewId(id);
-                        setEditingViewName(displayLabel);
-                    }}
-                    className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-3 md:py-1 rounded-lg mb-1 md:mb-0 transition-colors touch-manipulation ${sidebarTextClass} ${sidebarFontClass} ${active ? 'bg-theme-hover text-theme-primary font-bold' : 'text-theme-secondary font-medium hover:bg-theme-hover hover:text-theme-primary active:bg-theme-hover'}`}
-                    title={sidebarCollapsed ? displayLabel : ''}
-                >
-                    <div className={`flex items-center gap-2 ${sidebarCollapsed ? 'justify-center w-full' : ''}`}>
-                        {Icon && <Icon size={16} style={{ color: iconColor }} className={!color && !active ? 'text-theme-tertiary' : ''} />}
-                        {!sidebarCollapsed && (
-                            isEditing ? (
-                                <input
-                                    autoFocus
-                                    value={editingViewName}
-                                    onChange={(e) => setEditingViewName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        e.stopPropagation();
-                                        if (e.key === 'Enter') saveViewName(id, editingViewName);
-                                        else if (e.key === 'Escape') setEditingViewId(null);
-                                    }}
-                                    onBlur={() => saveViewName(id, editingViewName)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="bg-theme-card border border-indigo-300 rounded px-1 py-0.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 w-20 text-theme-primary"
-                                />
-                            ) : (
-                                <span>{displayLabel}</span>
-                            )
-                        )}
-                        {!sidebarCollapsed && hasActiveFilters && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
-                        )}
-                    </div>
-                    {!sidebarCollapsed && <div className="flex gap-2 items-center">
-                        {overdueCount > 0 && <span className="text-[11px] font-semibold text-white bg-rose-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{overdueCount}</span>}
-                        {normalCount > 0 && <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>}
-                    </div>}
-                </button>
+        e.preventDefault();
+        e.stopPropagation();
 
-                {!sidebarCollapsed && allowSettings && isAltPressed && isHovered && (
-                    <button
-                        className="absolute right-10 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-indigo-600 bg-theme-card hover:bg-theme-hover shadow-sm rounded-full border border-theme z-10"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingFilterView(id);
-                        }}
-                        title="設置標籤過濾"
-                    >
-                        <Settings size={10} />
-                    </button>
-                )}
-            </div>
-        );
+        const taskIdsToMove = selectedTaskIds.length > 0
+            ? selectedTaskIds
+            : dragState.draggedId ? [dragState.draggedId] : [];
+
+        console.log('[Sidebar Drop] Moving tasks:', taskIdsToMove, 'to:', hoveredDropTarget);
+
+        if (taskIdsToMove.length > 0) {
+            await moveTaskToView(taskIdsToMove, hoveredDropTarget);
+        }
+
+        setHoveredDropTarget(null);
+        endDrag();
     };
+
 
     const tagTree = useMemo(() => {
         const buildTree = (parentId: string | null, depth: number): TagTreeItem[] => {
@@ -646,8 +734,47 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         );
     };
 
+
+
+
+
+    const NavItem = (props: any) => {
+        const isEditing = editingViewId === props.id;
+        const filter = viewTagFilters[props.id] || { include: [] as string[], exclude: [] as string[] };
+        const { include = [], exclude = [] } = Array.isArray(filter) ? { include: filter, exclude: [] } : filter;
+        const hasActiveFilters = include.length > 0 || exclude.length > 0;
+
+        return (
+            <SidebarNavItem
+                {...props}
+                isEditing={isEditing}
+                hasActiveFilters={hasActiveFilters}
+                editingViewName={editingViewName}
+                setEditingViewName={setEditingViewName}
+                setEditingViewId={setEditingViewId}
+                saveViewName={saveViewName}
+                setHoveredDropTarget={setHoveredDropTarget}
+                sidebarCollapsed={sidebarCollapsed}
+                sidebarTextClass={sidebarTextClass}
+                sidebarFontClass={sidebarFontClass}
+                setView={setView}
+                setTagFilter={setTagFilter}
+            />
+        );
+    };
+
+
     return (
-        <aside className="w-full bg-theme-sidebar border-r border-theme h-screen flex flex-col p-5 sticky top-0 overflow-hidden">
+        <aside
+            className="w-full bg-theme-sidebar border-r border-theme h-screen flex flex-col p-5 sticky top-0 overflow-hidden"
+            onDragOver={(e) => {
+                if (dragState.isDragging) {
+                    e.preventDefault();
+                    updateGhostPosition(e.clientX, e.clientY);
+                }
+            }}
+            onDrop={handleSidebarDrop}
+        >
             <div className={`mb-8 flex items-center ${sidebarCollapsed ? 'justify-center flex-col gap-4' : 'justify-between px-1'} opacity-60`}>
                 {!sidebarCollapsed && <div className="flex items-center gap-2 text-theme-secondary"><Layout size={18} /> <span className="text-xs font-bold tracking-widest uppercase text-theme-tertiary">{t('appearance')}</span></div>}
                 <div className="flex items-center gap-1">
@@ -671,35 +798,40 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
                 {/* Today & All Views */}
                 <div className="mb-6">
-                    <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today' && !tagFilter} icon={Star} color="#f5c94c" />
-                    <NavItem id="allview" label="All" active={view === 'allview' && !tagFilter} icon={Layers} color="#10b981" />
+                    <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today' && !tagFilter} icon={Star} color="#f5c94c" acceptsDrop={true} />
+                    <NavItem id="allview" label="所有任務" active={view === 'allview' && !tagFilter} icon={Layers} color="#10b981" />
                     <NavItem id="matrix" label="重要性" active={view === 'matrix'} icon={Layout} color="#6366f1" />
                 </div>
 
                 {/* Projects & Focus */}
                 <div className="mb-6">
-                    <NavItem id="focus" label={t('focus')} active={view === 'focus'} icon={Target} color="#ef4444" />
-                    <NavItem id="project" label="Projects" active={view === 'project'} icon={FolderKanban} color="#f97316" />
+                    <NavItem id="focus" label="聚焦" active={view === 'focus'} icon={Target} color="#ef4444" />
+                    <NavItem id="project" label="專案" active={view === 'project'} icon={FolderKanban} color="#f97316" acceptsDrop={true} />
                     <NavItem id="annualplan" label="年度計畫" active={view === 'annualplan'} icon={Crosshair} color="#eab308" />
                 </div>
 
                 {/* Ideas & Notes */}
                 <div className="mb-6">
-                    <NavItem id="waiting" label={t('someday')} normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" />
-                    <NavItem id="journal" label={t('journal')} normalCount={counts.note} active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" />
-                    <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Lightbulb} color="#fbbf24" />
+                    <NavItem id="waiting" label="將來/靈感" normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" acceptsDrop={true} />
+                    <NavItem id="journal" label="知識庫" normalCount={counts.note} active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" acceptsDrop={true} />
+                    <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Lightbulb} color="#fbbf24" acceptsDrop={true} />
                 </div>
 
-                {/* Logbook & Trash - Separated */}
+                {/* Logbook, Recent & Trash - Separated */}
                 <div className="mb-6">
                     <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} color="#a16207" />
+                    <NavItem id="recent" label="最近變動" active={view === 'recent'} icon={History} color="#0891b2" />
                     <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} color="#9ca3af" />
                 </div>
                 {!sidebarCollapsed && (
                     <div className="mt-2">
                         <div
                             className="flex items-center justify-between px-3 mb-2 group/tagheader cursor-pointer select-none"
-                            onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                            onClick={() => {
+                                const newVal = !isTagsExpanded;
+                                setIsTagsExpanded(newVal);
+                                localStorage.setItem('sidebar_tags_expanded', String(newVal));
+                            }}
                         >
                             <div className="flex items-center gap-2">
                                 <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider">TAGS</p>

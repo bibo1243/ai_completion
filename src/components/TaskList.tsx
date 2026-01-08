@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useContext, useMemo, useState, useCallback } from 'react';
-import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive } from 'lucide-react';
+import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive, MoveRight } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { INDENT_SIZE } from '../constants';
 import { TaskInput } from './TaskInput';
@@ -10,10 +10,30 @@ import { DateSeparator, generateDateSeparators, isDateToday, isDateTomorrow } fr
 import { TaskColor } from '../types';
 
 export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
-    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks, batchUpdateTasks, themeSettings } = useContext(AppContext);
+    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks, batchUpdateTasks, duplicateTasks, leavingTaskIds, dismissLeavingTasks, themeSettings } = useContext(AppContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollInterval = useRef<any>(null);
     const emptyDropZoneDateRef = useRef<string | null>(null); // Track if we're over an empty drop zone
+
+    // Auto-update date at midnight
+    const [currentDate, setCurrentDate] = useState(new Date());
+    useEffect(() => {
+        const checkDate = () => {
+            const now = new Date();
+            if (now.getDate() !== currentDate.getDate()) {
+                setCurrentDate(now);
+            }
+        };
+        // Check every minute
+        const timer = setInterval(checkDate, 60000);
+        // Also check on window focus
+        window.addEventListener('focus', checkDate);
+
+        return () => {
+            clearInterval(timer);
+            window.removeEventListener('focus', checkDate);
+        };
+    }, [currentDate]);
 
     // Store the task ID that was focused BEFORE opening the new task editor
     const priorFocusIdRef = useRef<string | null>(null);
@@ -121,6 +141,31 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 setSelectedTaskIds(allIds);
                 return;
             }
+
+            // Cmd+T: Set task start date to today
+            if ((e.metaKey || e.ctrlKey) && (e.key === 't' || e.key === 'T')) {
+                e.preventDefault();
+                const idsToUpdate = selectedTaskIds.length > 0 ? selectedTaskIds : (focusedTaskId ? [focusedTaskId] : []);
+                if (idsToUpdate.length > 0) {
+                    const today = new Date().toISOString().split('T')[0];
+                    batchUpdateTasks(idsToUpdate.map((id: string) => ({
+                        id,
+                        data: { start_date: today, status: 'active' }
+                    })));
+                }
+                return;
+            }
+
+            // Cmd+D: Duplicate task(s) including all subtasks
+            if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
+                e.preventDefault();
+                const idsToDuplicate = selectedTaskIds.length > 0 ? selectedTaskIds : (focusedTaskId ? [focusedTaskId] : []);
+                if (idsToDuplicate.length > 0) {
+                    duplicateTasks(idsToDuplicate);
+                }
+                return;
+            }
+
             const idx = effectiveVisibleTasks.findIndex(item => item.data.id === focusedTaskId);
             if (e.metaKey || e.ctrlKey) {
                 if (e.key === 'ArrowUp') { e.preventDefault(); if (effectiveVisibleTasks.length > 0) { const target = effectiveVisibleTasks[0]; setFocusedTaskId(target.data.id); effectiveHandleSelection({ shiftKey: false, ctrlKey: false } as any, target.data.id); } return; }
@@ -257,13 +302,13 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         };
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, effectiveHandleSelection, view, tags, selectedTaskIds, batchDeleteTasks]);
+    }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, effectiveHandleSelection, view, tags, selectedTaskIds, batchDeleteTasks, batchUpdateTasks, duplicateTasks]);
 
     const isReviewView = view === 'waiting' || view === 'prompt' || view === 'logbook' || view === 'log';
     const pendingReviewCount = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at).length : 0;
 
     const handleDragOver = (e: React.DragEvent) => {
-        if (view === 'focus' || view === 'upcoming') return;
+        if (view === 'focus' || view === 'upcoming' || view === 'recent') return;
         e.preventDefault();
         if (!dragState.isDragging || !containerRef.current) return;
         updateGhostPosition(e.clientX, e.clientY);
@@ -327,6 +372,23 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     const pendingReview = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at) : [];
     const mainTasks = isReviewView ? effectiveVisibleTasks.filter(t => !!t.data.reviewed_at) : effectiveVisibleTasks;
+
+    // Build "Leaving Tasks" for inbox view - tasks that no longer match inbox criteria but should still be shown temporarily
+    const leavingFlatTasks = useMemo(() => {
+        if (view !== 'all' || leavingTaskIds.length === 0) return [];
+
+        return leavingTaskIds
+            .map(id => tasks.find(t => t.id === id))
+            .filter(Boolean)
+            .map((task, idx) => ({
+                data: task!,
+                depth: 0,
+                hasChildren: false,
+                isExpanded: false,
+                path: [task!.id],
+                index: idx
+            }));
+    }, [view, leavingTaskIds, tasks]);
 
     // For allview and logbook: use archivedTasks from context (separate table)
     const [archivedCollapsed, setArchivedCollapsed] = useState(true);
@@ -415,14 +477,19 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     // Render Today view with date separators
     const renderTodayViewWithDates = () => {
-        // Generate dates for next 7 days
-        const dates = generateDateSeparators(new Date(), 8); // Today + 7 days
+        // Generate dates for next 7 days using the auto-updating currentDate
+        const dates = generateDateSeparators(currentDate, 8); // Today + 7 days
 
         // Group tasks by date
         const tasksByDate = new Map<string, typeof effectiveVisibleTasks>();
         const overdueTasks: typeof effectiveVisibleTasks = [];
         const futureTasks: typeof effectiveVisibleTasks = [];
-        const today = new Date().toISOString().split('T')[0];
+
+        // Use local time for 'today' string to avoid UTC mismatch
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
 
         effectiveVisibleTasks.forEach(item => {
             const dateStr = getTaskDateString(item.data);
@@ -650,7 +717,19 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     return (
         <>
-            <div ref={containerRef} className="pb-20 relative min-h-[500px]" onDragOver={handleDragOver} onDrop={(e) => { e.preventDefault(); handleDragEnd(); }} onDragEnd={handleDragEnd} >
+            <div
+                ref={containerRef}
+                className="pb-20 relative min-h-[500px]"
+                onDragOver={handleDragOver}
+                onDragLeave={(e) => {
+                    // When dragging to sidebar, clear the drop indicator in the list
+                    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+                        updateDropState({ dropIndex: null });
+                    }
+                }}
+                onDrop={(e) => { e.preventDefault(); handleDragEnd(); }}
+                onDragEnd={handleDragEnd}
+            >
                 {/* Relationship lines for Today view */}
                 {view === 'today' && themeSettings.showRelationshipLines !== false && (
                     <RelationshipLines
@@ -768,6 +847,73 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 )}
 
                 {isReviewView && renderTaskGroup(mainTasks)}
+
+                {/* Leaving Tasks Section - for inbox view */}
+                {view === 'all' && leavingFlatTasks.length > 0 && (
+                    <div className="mt-8 border-2 border-dashed border-amber-200 rounded-xl p-4 bg-amber-50/50">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <MoveRight size={16} className="text-amber-500" />
+                                <span className="text-[13px] font-semibold text-amber-700">
+                                    {leavingFlatTasks.length} 項任務已移出收件匣
+                                </span>
+                            </div>
+                            <button
+                                onClick={dismissLeavingTasks}
+                                className="px-3 py-1 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-full transition-colors"
+                            >
+                                確定
+                            </button>
+                        </div>
+                        <div className="space-y-1 opacity-70">
+                            {leavingFlatTasks.map(item => {
+                                // Determine target view based on what property caused the task to leave
+                                const projectTag = tags.find(t => ['project', '專案'].includes(t.name.trim().toLowerCase()));
+                                const inspirationTag = tags.find(t => t.name.includes('靈感') || ['someday', 'inspiration', '將來/靈感'].includes(t.name.trim().toLowerCase()));
+                                const noteTag = tags.find(t => ['note', 'journal', '知識庫', '知識筆記'].includes(t.name.trim().toLowerCase()));
+                                const promptTag = tags.find(t => ['prompt', '提示詞'].includes(t.name.trim().toLowerCase()));
+                                const journalTag = noteTag;
+                                const somedayTag = inspirationTag;
+                                const taskTags = item.data.tags || [];
+
+                                let targetView = '所有任務';
+                                if (item.data.start_date) {
+                                    targetView = '今天';
+                                } else if (item.data.status === 'someday' || item.data.status === 'waiting') {
+                                    targetView = '將來/靈感';
+                                } else if (somedayTag && taskTags.includes(somedayTag.id)) {
+                                    targetView = '將來/靈感';
+                                } else if (item.data.parent_id) {
+                                    targetView = '專案';
+                                } else if (projectTag && taskTags.includes(projectTag.id)) {
+                                    targetView = '專案';
+                                } else if (inspirationTag && taskTags.includes(inspirationTag.id)) {
+                                    targetView = '將來/靈感';
+                                } else if (noteTag && taskTags.includes(noteTag.id)) {
+                                    targetView = '知識庫';
+                                } else if (journalTag && taskTags.includes(journalTag.id)) {
+                                    targetView = '知識庫';
+                                } else if (promptTag && taskTags.includes(promptTag.id)) {
+                                    targetView = '提示詞';
+                                }
+
+                                return (
+                                    <div
+                                        key={item.data.id}
+                                        className="flex items-center justify-between p-2 bg-white/80 rounded-lg"
+                                    >
+                                        <span className="text-sm text-theme-primary truncate flex-1">
+                                            {item.data.title || '(無標題)'}
+                                        </span>
+                                        <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full ml-2">
+                                            → {targetView}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
         </>
     );

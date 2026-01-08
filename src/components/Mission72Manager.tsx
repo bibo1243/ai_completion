@@ -1,8 +1,9 @@
 
-import React, { useState, useContext, useMemo } from 'react';
+import React, { useState, useContext, useMemo, useEffect } from 'react';
 import { X, AlertCircle, Check, Loader2, ChevronRight, ChevronDown, Edit2, Wand2, Calendar, FileText } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { planTaskBreakdown, TaskPlan } from '../services/ai';
+import { TaskPlanGantt } from './TaskPlanGantt';
 
 interface Mission72ManagerProps {
     taskId: string;
@@ -10,6 +11,15 @@ interface Mission72ManagerProps {
 }
 
 type Step = 'prompt' | 'loading' | 'preview' | 'error';
+
+// Helper to assign IDs recursively
+const assignIds = (items: TaskPlan[]): TaskPlan[] => {
+    return items.map(item => ({
+        ...item,
+        id: item.id || crypto.randomUUID(),
+        subtasks: item.subtasks ? assignIds(item.subtasks) : []
+    }));
+};
 
 export const Mission72Manager: React.FC<Mission72ManagerProps> = ({ taskId, onClose }) => {
     const { tasks, tags, batchAddTasks, setToast } = useContext(AppContext);
@@ -19,6 +29,70 @@ export const Mission72Manager: React.FC<Mission72ManagerProps> = ({ taskId, onCl
     const [executing, setExecuting] = useState(false);
     const [customPrompt, setCustomPrompt] = useState('');
     const [promptSearch, setPromptSearch] = useState('');
+    const [viewMode, setViewMode] = useState<'list' | 'gantt'>('list');
+
+    // Undo/Redo History
+    const [history, setHistory] = useState<TaskPlan[][]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
+    // Initialize history when plan is first set
+    useEffect(() => {
+        if (plan && history.length === 0) {
+            setHistory([plan]);
+            setHistoryIndex(0);
+        }
+    }, [plan]);
+
+    const addToHistory = (newPlan: TaskPlan[]) => {
+        const newHistory = history.slice(0, historyIndex + 1);
+        newHistory.push(newPlan);
+        setHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+        setPlan(newPlan);
+    };
+
+    const undo = () => {
+        if (historyIndex > 0) {
+            const newIndex = historyIndex - 1;
+            setHistoryIndex(newIndex);
+            setPlan(history[newIndex]);
+        }
+    };
+
+    const redo = () => {
+        if (historyIndex < history.length - 1) {
+            const newIndex = historyIndex + 1;
+            setHistoryIndex(newIndex);
+            setPlan(history[newIndex]);
+        }
+    };
+
+    // Keyboard Shortcuts (Scoped)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Only capture if this component is mounted (implied by useEffect)
+            // Intercept common shortcuts to prevent background app interaction
+
+            const isCmd = e.metaKey || e.ctrlKey;
+
+            if (isCmd && e.key === 'z') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            }
+
+            // Optional: Block other global shortcuts if needed, or just specific ones
+            // For now, we mainly care about undo/redo interference
+        };
+
+        // Use capture: true to intercept before bubbling to AppContext
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    }, [historyIndex, history]); // Re-bind when state changes to capture latest closure
 
     const targetTask = tasks.find(t => t.id === taskId);
 
@@ -52,15 +126,57 @@ export const Mission72Manager: React.FC<Mission72ManagerProps> = ({ taskId, onCl
         setStep('loading');
         try {
             const today = new Date().toISOString().split('T')[0];
+
+            // 1. Gather Schedule Context (Tasks in next 14 days)
+            const startDate = new Date();
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 14);
+
+            const schedule = tasks
+                .filter(t => t.status !== 'deleted' && t.status !== 'completed' && t.status !== 'logged')
+                .filter(t => {
+                    const d = t.start_date || t.due_date;
+                    if (!d) return false;
+                    const date = new Date(d);
+                    return date >= startDate && date <= endDate;
+                })
+                .map(t => `- ${t.start_date?.split('T')[0] || t.due_date?.split('T')[0]}: ${t.title}`)
+                .slice(0, 20); // Limit to top 20 to save tokens
+
+            // 2. Gather Past Experience (Completed tasks with shared keywords)
+            // Simple logic: split title into 2-char chunks and find matches
+            const keywords = targetTask.title.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').match(/.{1,2}/g) || [];
+
+            const relevantcompleted = tasks
+                .filter(t => t.status === 'completed' || t.status === 'logged')
+                .map(t => {
+                    let score = 0;
+                    keywords.forEach(k => {
+                        if (t.title.includes(k)) score++;
+                    });
+                    return { task: t, score };
+                })
+                .filter(x => x.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5)
+                .map(x => `- [已完成] ${x.task.title}: ${x.task.description || '(無備註)'}`);
+
             const result = await planTaskBreakdown(
                 targetTask.title,
                 targetTask.description || '',
                 targetTask.start_date || null,
                 targetTask.due_date || null,
-                { today },
+                {
+                    today,
+                    existingSchedule: schedule,
+                    pastExperiences: relevantcompleted
+                },
                 customPrompt || undefined
             );
-            setPlan(result);
+            const initialPlan = assignIds(result);
+            setPlan(initialPlan);
+            setHistory([initialPlan]);
+            setHistoryIndex(0);
             setStep('preview');
         } catch (err: any) {
             console.error(err);
@@ -90,7 +206,7 @@ export const Mission72Manager: React.FC<Mission72ManagerProps> = ({ taskId, onCl
             current = current[path[i]].subtasks;
         }
         current[path[path.length - 1]][field] = value;
-        setPlan(newPlan);
+        addToHistory(newPlan); // Use history setter
     };
 
     // Step 1: Prompt Selection
@@ -206,28 +322,53 @@ export const Mission72Manager: React.FC<Mission72ManagerProps> = ({ taskId, onCl
     // Step 4: Preview (Editable)
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom-10 duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col animate-in slide-in-from-bottom-10 duration-200">
                 <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white rounded-t-xl z-10">
-                    <div className="flex items-center gap-2">
-                        <span className="text-2xl">🐵</span>
-                        <h2 className="text-xl font-bold text-gray-900">任務72變：計畫預覽</h2>
-                        <span className="text-xs text-gray-400 ml-2">（點擊欄位可編輯）</span>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-2xl">🐵</span>
+                            <h2 className="text-xl font-bold text-gray-900">任務72變：計畫預覽</h2>
+                        </div>
+
+                        {/* View Toggles */}
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`px-3 py-1.5 text-sm rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                列表模式
+                            </button>
+                            <button
+                                onClick={() => setViewMode('gantt')}
+                                className={`px-3 py-1.5 text-sm rounded-md transition-all ${viewMode === 'gantt' ? 'bg-white shadow-sm text-indigo-600 font-medium' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                甘特圖
+                            </button>
+                        </div>
                     </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 rounded-full p-1 hover:bg-gray-100">
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
-                    <div className="flex flex-col gap-3">
-                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-2">
-                            <h3 className="font-bold text-indigo-900 mb-1">{targetTask?.title}</h3>
-                            <p className="text-sm text-indigo-700">以下為行政總管AI生成的子任務架構，您可以直接編輯各欄位：</p>
+                <div className="flex-1 overflow-y-auto bg-gray-50/50 flex flex-col">
+                    {viewMode === 'list' ? (
+                        <div className="p-6">
+                            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mb-4">
+                                <h3 className="font-bold text-indigo-900 mb-1">{targetTask?.title}</h3>
+                                <p className="text-sm text-indigo-700">以下為行政總管AI生成的子任務架構，您可以直接編輯各欄位：</p>
+                            </div>
+                            <div className="flex flex-col gap-3">
+                                {plan?.map((item, idx) => (
+                                    <EditablePlanItem key={idx} item={item} path={[idx]} onUpdate={updatePlanItem} />
+                                ))}
+                            </div>
                         </div>
-                        {plan?.map((item, idx) => (
-                            <EditablePlanItem key={idx} item={item} path={[idx]} onUpdate={updatePlanItem} />
-                        ))}
-                    </div>
+                    ) : (
+                        <div className="flex-1 min-h-[500px] flex flex-col">
+                            {plan && <TaskPlanGantt plan={plan} onUpdatePlan={addToHistory} />}
+                        </div>
+                    )}
                 </div>
 
                 <div className="px-6 py-4 border-t bg-white rounded-b-xl flex justify-between sticky bottom-0 z-10">
@@ -267,7 +408,7 @@ const EditablePlanItem: React.FC<EditablePlanItemProps> = ({ item, path, depth =
 
     return (
         <div className="flex flex-col">
-            <div className={`p-3 bg-white rounded-lg border border-gray-100 shadow-sm ${depth > 0 ? 'ml-6 border-l-4 border-l-indigo-100' : ''}`}>
+            <div className={`p-3 bg-white rounded-lg border border-gray-100 shadow-sm ${depth > 0 ? 'ml-6' : ''}`}>
                 <div className="flex items-start gap-2">
                     {hasChildren ? (
                         <button onClick={() => setExpanded(!expanded)} className="mt-1 text-gray-400 hover:text-gray-600">
@@ -326,9 +467,16 @@ const EditablePlanItem: React.FC<EditablePlanItemProps> = ({ item, path, depth =
             </div>
 
             {hasChildren && expanded && (
-                <div className="mt-2 flex flex-col gap-2">
+                <div className="flex flex-col gap-2 mt-2 pl-6 relative">
                     {item.subtasks!.map((sub, idx) => (
-                        <EditablePlanItem key={idx} item={sub} path={[...path, idx]} depth={depth + 1} onUpdate={onUpdate} />
+                        <div key={idx} className="relative">
+                            {/* Vertical connector line - adjusted for new padding */}
+                            <div className="absolute left-[-12px] top-[-14px] bottom-[20px] w-px bg-gray-200 -z-10" />
+                            {/* Horizontal connector line */}
+                            <div className="absolute left-[-12px] top-[26px] w-[12px] h-px bg-gray-200 -z-10" />
+
+                            <EditablePlanItem item={sub} path={[...path, idx]} depth={depth + 1} onUpdate={onUpdate} />
+                        </div>
                     ))}
                 </div>
             )}

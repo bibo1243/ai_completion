@@ -135,10 +135,10 @@ export const MainLayout = () => {
     <div data-theme={themeSettings.themeMode && themeSettings.themeMode !== 'light' ? themeSettings.themeMode : undefined} className={`flex h-screen bg-theme-main text-theme-primary ${fontFamilyClass} selection:bg-indigo-50 selection:text-indigo-900`}>
       {dragState?.isDragging && draggedTask && (<DragGhost task={draggedTask} position={dragState.ghostPosition} count={dragCount} />)}
       {/* Desktop Sidebar */}
-      <div style={{ width: sidebarCollapsed ? 64 : sidebarWidth }} className="relative flex-shrink-0 hidden md:block transition-all duration-300 ease-in-out">
+      <div style={{ width: sidebarCollapsed ? 64 : sidebarWidth }} className={`relative flex-shrink-0 hidden md:block transition-all duration-300 ease-in-out ${dragState?.isDragging ? 'z-10' : 'z-10'}`}>
         <Sidebar view={view} setView={setView} tagFilter={tagFilter} setTagFilter={setTagFilter} />
-        {/* Resizer Handle */}
-        {!sidebarCollapsed && (
+        {/* Resizer Handle - Hide when dragging tasks to allow smooth crossover */}
+        {!sidebarCollapsed && !dragState?.isDragging && (
           <div
             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-theme-main/10 transition-colors z-50"
             onMouseDown={() => setIsResizing(true)}
@@ -156,7 +156,7 @@ export const MainLayout = () => {
       )}
 
       <main className="flex-1 flex flex-col relative overflow-hidden bg-theme-main">
-        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-theme z-40 sticky top-0 bg-theme-header backdrop-blur-sm">
+        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-theme z-30 sticky top-0 bg-theme-header backdrop-blur-sm">
           {/* Left: Menu & Title */}
           <div className="flex items-center gap-2 md:gap-4">
             <button className="md:hidden p-1 -ml-2 text-theme-secondary hover:bg-theme-hover rounded" onClick={() => setMobileMenuOpen(true)}>
@@ -208,7 +208,7 @@ export const MainLayout = () => {
           </div>
         </header>
         <AdvancedFilterBar />
-        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar prevent-pull-refresh ${view !== 'focus' && view !== 'project' && view !== 'annualplan' ? 'p-4 md:p-8' : ''}`}>
+        <div className={`flex-1 overflow-y-auto scroll-smooth no-scrollbar prevent-pull-refresh ${view !== 'focus' && view !== 'project' && view !== 'annualplan' ? 'p-2 md:p-4' : ''}`}>
           {view === 'journal' ? (
             <JournalView />
           ) : view === 'focus' ? (

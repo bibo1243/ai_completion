@@ -1,19 +1,54 @@
-import { TaskData } from '../types';
-import { COLOR_THEMES } from '../constants';
 
-export const DragGhost = ({ task, position, count }: { task: TaskData | null, position: { x: number; y: number }, count: number }) => {
-  if (!task) return null;
-  const theme = COLOR_THEMES[task.color] || COLOR_THEMES.blue;
-  
-  return (
-    <div className="fixed pointer-events-none z-[9999]" style={{ left: position.x, top: position.y, transform: 'translate(-20px, -50%) rotate(-2deg) scale(1.02)' }}>
-      <div className="bg-white rounded-lg shadow-2xl border border-slate-200 px-4 py-2 min-w-[200px] max-w-[300px] ring-2 ring-blue-400/30 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded ${theme.dot}`} />
-          <span className="text-sm font-medium text-slate-700 truncate">{task.title || '未命名任務'}</span>
+import React, { useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { TaskData } from '../types';
+
+interface DragGhostProps {
+    task: TaskData;
+    position: { x: number; y: number } | null;
+    count: number;
+}
+
+export const DragGhost: React.FC<DragGhostProps> = ({ task, position, count }) => {
+    const ghostRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        if (position && ghostRef.current) {
+            ghostRef.current.style.left = `${position.x}px`;
+            ghostRef.current.style.top = `${position.y}px`;
+        }
+    }, []);
+
+    if (!position) return null;
+
+    const ghost = (
+        <div
+            ref={ghostRef}
+            id="drag-ghost"
+            className="fixed pointer-events-none rounded-lg border-2 border-indigo-500/50 p-3 w-64 flex items-center gap-3"
+            style={{
+                transform: 'translate(16px, 16px) rotate(2deg)',
+                zIndex: 99999,
+                backgroundColor: '#ffffff', // Force white background
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', // Force shadow
+                opacity: 1,
+                isolation: 'isolate'
+            }}
+        >
+            <div className="flex-1 min-w-0">
+                <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">
+                    {task.title || '(無標題)'}
+                </h4>
+                {count > 1 && (
+                    <p className="text-xs text-indigo-500 font-medium">
+                        + {count - 1} 個其他任務
+                    </p>
+                )}
+            </div>
+            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
         </div>
-        {count > 1 && <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-lg border border-white">{count}</div>}
-      </div>
-    </div>
-  );
+    );
+
+    // Use portal to render at body level to avoid z-index stacking context issues
+    return createPortal(ghost, document.body);
 };

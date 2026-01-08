@@ -22,6 +22,7 @@ export const AppContext = createContext<{
 
     addTask: (task: any, childIds?: string[], specificId?: string) => Promise<string>;
     batchAddTasks: (plans: any[], parentId?: string | null) => Promise<void>;
+    duplicateTasks: (taskIds: string[]) => Promise<string[]>;
     updateTask: (id: string, data: any, childIds?: string[], options?: { skipHistory?: boolean }) => Promise<void>;
     batchUpdateTasks: (updates: { id: string, data: any }[]) => Promise<void>;
     deleteTask: (id: string, permanent?: boolean) => Promise<void>;
@@ -87,6 +88,10 @@ export const AppContext = createContext<{
     calculateVisibleTasks: any;
     pendingFocusTaskId: string | null;
     setPendingFocusTaskId: React.Dispatch<React.SetStateAction<string | null>>;
+    // "Leaving tasks" feature - tasks that will move out of current view
+    leavingTaskIds: string[];
+    addLeavingTask: (id: string) => void;
+    dismissLeavingTasks: () => void;
     calendarDate: Date;
     setCalendarDate: (date: Date) => void;
     taskCounts: Record<string, number>;
@@ -108,6 +113,7 @@ export const AppContext = createContext<{
     searchHistory: SearchHistory[];
     addSearchHistory: (query: string, filters: SearchFilters, name?: string) => Promise<void>;
     deleteSearchHistory: (id: string) => Promise<void>;
+    moveTaskToView: (taskIds: string[], targetView: string) => Promise<void>;
 }>({} as any);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
@@ -191,6 +197,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }, [tags]);
     const [view, setView] = useState(() => localStorage.getItem(`last_view_${user?.id}`) || 'all');
     const [tagFilter, setTagFilter] = useState<string | null>(null);
+    // Tasks that have been modified and will leave the current view (shown in "Leaving" section)
+    const [leavingTaskIds, setLeavingTaskIds] = useState<string[]>([]);
+    const leavingTaskIdsRef = useRef<string[]>([]);
+    leavingTaskIdsRef.current = leavingTaskIds;
     const [advancedFilters, setAdvancedFilters] = useState<{ additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }>({ additionalTags: [], startDate: null, dueDate: null, color: null });
     const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
         const saved = localStorage.getItem(`theme_settings_${user?.id}`);
@@ -1054,11 +1064,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (!targetTask) return;
 
         // Determine the best view for this task based on its tags
-        const noteTag = tags.find(tg => tg.name.trim().toLowerCase() === 'note');
-        const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
-        const journalTag = tags.find(tg => tg.name.trim().toLowerCase() === 'journal');
-        const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
-        const projectTag = tags.find(tg => tg.name.trim().toLowerCase() === 'project');
+        // Helper for finding tags by multiple potential names (i18n support)
+        const findTag = (names: string[]) => tags.find(tg => names.some(n => tg.name.trim().toLowerCase() === n.toLowerCase()));
+
+        const noteTag = findTag(['note', 'journal', '知識庫', '知識筆記']);
+        const promptTag = findTag(['prompt', '提示詞']);
+        const journalTag = noteTag; // Alias
+        const inspirationTag = findTag(['someday', 'inspiration', '靈感', '將來/靈感']);
+        const projectTag = findTag(['project', '專案']);
 
         let targetView = 'all';
 
@@ -1126,16 +1139,32 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }, [tasks, tags, view, focusedTaskId, expandedTaskIds]);
 
     const calculateVisibleTasks = useCallback((currentTasks: TaskData[], currentView: string, currentFilter: string | null, currentExpanded: string[], currentAdvancedFilters: { additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }, currentViewTagFilters: Record<string, { include: string[], exclude: string[] }>) => {
-        const promptTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt')?.id;
-        const journalTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'journal')?.id;
-        const inspirationTagId = tags.find(tg => tg.name.includes('靈感'))?.id;
-        const noteTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'note')?.id;
-        const projectTagId = tags.find(tg => tg.name.trim().toLowerCase() === 'project')?.id;
+        const helperFindTagId = (names: string[]) => tags.find(tg => names.some(n => tg.name.trim().toLowerCase() === n.toLowerCase()))?.id;
+
+        const promptTagId = helperFindTagId(['prompt', '提示詞']);
+        const journalTagId = helperFindTagId(['journal', 'note', '知識庫', '知識筆記']);
+        const inspirationTagId = helperFindTagId(['someday', 'inspiration', '靈感', '將來/靈感']);
+        const noteTagId = journalTagId; // Alias check
+        const projectTagId = helperFindTagId(['project', '專案']);
+        const somedayTagId = inspirationTagId; // Alias check (sometimes separated)
         // Find #prompt keyword tag (separate from 'prompt' tag for prompts library)
         const hashPromptTagId = tags.find(tg => tg.name === '#prompt')?.id;
 
         if (currentView === 'schedule') {
             return currentTasks.filter(t => (!!t.due_date || !!t.start_date) && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => { const dateA = new Date(a.start_date || a.due_date || 0).getTime(); const dateB = new Date(b.start_date || b.due_date || 0).getTime(); return dateA - dateB; }).map((t, index) => ({ data: t, depth: 0, hasChildren: false, isExpanded: false, path: [], index }));
+        }
+
+        // Recent view: show all non-deleted tasks sorted by updated_at descending
+        if (currentView === 'recent') {
+            return currentTasks
+                .filter(t => t.status !== 'deleted')
+                .sort((a, b) => {
+                    const dateA = new Date(a.updated_at || a.created_at || 0).getTime();
+                    const dateB = new Date(b.updated_at || b.created_at || 0).getTime();
+                    return dateB - dateA; // Descending (most recent first)
+                })
+                .slice(0, 100) // Limit to 100 most recent
+                .map((t, index) => ({ data: t, depth: 0, hasChildren: false, isExpanded: false, path: [], index }));
         }
         // Legacy Today view block removed to allow new filter logic to run
         const getFilter = () => {
@@ -1179,13 +1208,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 case 'all':
                     // Inbox: 根任務沒有日期的任務（及其子任務）
                     return (t: TaskData) => {
+                        // Exclude tasks that belong to other views
                         if (t.parent_id || t.status === 'deleted' || t.status === 'logged') return false;
+                        // Exclude someday/waiting status tasks - they go to 將來/靈感
+                        if (t.status === 'someday' || t.status === 'waiting') return false;
 
-                        // Exclude if task has prompt, journal, inspiration, or note tag
+                        // Exclude if task has prompt, journal, inspiration, note, or someday tag
                         if (promptTagId && t.tags.includes(promptTagId)) return false;
                         if (journalTagId && t.tags.includes(journalTagId)) return false;
                         if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
                         if (noteTagId && t.tags.includes(noteTagId)) return false;
+                        if (somedayTagId && t.tags.includes(somedayTagId)) return false;
 
                         // Exclude if task has #prompt keyword tag
                         if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
@@ -1298,8 +1331,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
                     if (t.status === 'deleted' || t.status === 'logged') return false;
                     const isWaitingStatus = t.status === 'waiting';
+                    const isSomedayStatus = t.status === 'someday';
                     const isInspiration = inspirationTagId && t.tags.includes(inspirationTagId);
-                    return isWaitingStatus || isInspiration;
+                    const hasSomedayTag = somedayTagId && t.tags.includes(somedayTagId);
+                    return isWaitingStatus || isSomedayStatus || isInspiration || hasSomedayTag;
+                };
+                case 'journal': return (t: TaskData) => {
+                    if (!journalTagId) return false;
+
+                    // View Tag Filters
+                    const filter = currentViewTagFilters['journal'] || { include: [] as string[], exclude: [] as string[] };
+                    const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+
+                    if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+                    if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
+
+                    return t.status !== 'deleted' && t.status !== 'logged' && t.tags.includes(journalTagId);
                 };
                 case 'prompt': return (t: TaskData) => {
                     const promptTag = tags.find(tg => tg.name.trim().toLowerCase() === 'prompt');
@@ -1317,6 +1364,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 };
                 case 'log': return (t: TaskData) => t.status === 'logged';
                 case 'logbook': return (t: TaskData) => t.status === 'logged';
+                case 'recent': return (t: TaskData) => t.status !== 'deleted'; // Show all non-deleted tasks
                 case 'trash': return (t: TaskData) => t.status === 'deleted';
                 default: return (t: TaskData) => t.status !== 'deleted' && t.status !== 'logged';
             }
@@ -1490,11 +1538,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         else { setSelectionAnchor(id); setSelectedTaskIds([id]); }
     };
 
-    const updateGhostPosition = useCallback((x: number, y: number) => { setDragState(prev => ({ ...prev, ghostPosition: { x, y } })); }, []);
+    const updateGhostPosition = useCallback((x: number, y: number) => {
+        // Direct DOM manipulation for performance to avoid re-renders
+        const ghost = document.getElementById('drag-ghost');
+        if (ghost) {
+            ghost.style.left = `${x}px`;
+            ghost.style.top = `${y}px`;
+        }
+    }, []);
     useEffect(() => { mainScrollRef.current = document.querySelector('main'); }, []);
 
     const startDrag = (e: React.DragEvent, task: FlatTask) => {
         if (view === 'schedule') { e.preventDefault(); return; }
+        console.log('[AppContext] Starting drag for task:', task.data.id, task.data.title);
         const moveIds = selectedTaskIds.includes(task.data.id) ? selectedTaskIds : [task.data.id];
         if (!selectedTaskIds.includes(task.data.id)) { setSelectedTaskIds([task.data.id]); }
         e.dataTransfer.setData('text/plain', task.data.id);
@@ -1757,7 +1813,48 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             const maxIdx = Math.max(...selectionIndices);
 
             if (direction === 'up') {
-                if (minIdx === 0) return;
+                if (minIdx === 0) {
+                    // At the top of current date section in today view - try to move to previous date
+                    if (isTodayView) {
+                        const getEffectiveDate = (t: TaskData) => {
+                            if (t.start_date) return t.start_date.split('T')[0];
+                            if (t.due_date) return t.due_date.split('T')[0];
+                            const now = new Date();
+                            const year = now.getFullYear();
+                            const month = String(now.getMonth() + 1).padStart(2, '0');
+                            const day = String(now.getDate()).padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                        };
+                        const currentDate = getEffectiveDate(movingTask);
+
+                        // Find all unique dates in visible tasks
+                        const allDates = Array.from(new Set(visibleTasks.map(vt => getEffectiveDate(vt.data)))).sort();
+                        const currentDateIndex = allDates.indexOf(currentDate);
+
+                        if (currentDateIndex > 0) {
+                            // Move to previous date
+                            const prevDate = allDates[currentDateIndex - 1];
+                            const prevDateTasks = visibleTasks
+                                .filter(vt => getEffectiveDate(vt.data) === prevDate)
+                                .map(vt => vt.data)
+                                .sort((a, b) => getSortValue(a) - getSortValue(b));
+
+                            // Insert at the end of previous date section
+                            const lastTaskOrder = prevDateTasks.length > 0
+                                ? getSortValue(prevDateTasks[prevDateTasks.length - 1])
+                                : 0;
+
+                            const updates = movingTasks.map((t, i) => ({
+                                id: t.id,
+                                start_date: prevDate,
+                                view_orders: { ...(t.view_orders || {}), [orderKey]: lastTaskOrder + 10000 * (i + 1) }
+                            }));
+                            applyBatchUpdates(updates);
+                            return;
+                        }
+                    }
+                    return;
+                }
                 const jumpTargetIdx = minIdx - 1;
                 const aboveTargetIdx = minIdx - 2;
 
@@ -1771,7 +1868,42 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 }));
                 applyBatchUpdates(updates);
             } else {
-                if (maxIdx === siblings.length - 1) return;
+                if (maxIdx === siblings.length - 1) {
+                    // At the end of current date section in today view - try to move to next date
+                    if (isTodayView) {
+                        const getEffectiveDate = (t: TaskData) => {
+                            if (t.start_date) return t.start_date.split('T')[0];
+                            if (t.due_date) return t.due_date.split('T')[0];
+                            const now = new Date();
+                            const year = now.getFullYear();
+                            const month = String(now.getMonth() + 1).padStart(2, '0');
+                            const day = String(now.getDate()).padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                        };
+                        const currentDate = getEffectiveDate(movingTask);
+
+                        // Find all unique dates in visible tasks
+                        const allDates = Array.from(new Set(visibleTasks.map(vt => getEffectiveDate(vt.data)))).sort();
+                        const currentDateIndex = allDates.indexOf(currentDate);
+
+                        if (currentDateIndex < allDates.length - 1) {
+                            // Move to next date
+                            const nextDate = allDates[currentDateIndex + 1];
+
+                            // Insert at the beginning of next date section
+                            // Use negative orders to ensure tasks always appear first
+                            const baseOrder = -10000 * (movingTasks.length + 1);
+                            const updates = movingTasks.map((t, i) => ({
+                                id: t.id,
+                                start_date: nextDate,
+                                view_orders: { ...(t.view_orders || {}), [orderKey]: baseOrder + 10000 * i }
+                            }));
+                            applyBatchUpdates(updates);
+                            return;
+                        }
+                    }
+                    return;
+                }
                 const jumpTargetIdx = maxIdx + 1;
                 const belowTargetIdx = maxIdx + 2;
 
@@ -1993,7 +2125,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             start_time: data.start_time || null,
             end_time: data.end_time || null,
             duration: data.duration || null,
-            reviewed_at: null
+
+            reviewed_at: null,
+            dependencies: data.dependencies || []
         };
         pushToHistory({ type: 'ADD', payload: { data: newTask } });
         setTasks(prev => {
@@ -2024,6 +2158,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         const processPlan = async (plan: any, pId: string | null): Promise<void> => {
             currentMaxOrder += 10000; // Increment for each new task
+
+            // Inherit Color from Parent
+            let inheritedColor = undefined;
+            if (pId) {
+                const parentTask = tasksRef.current.find(t => t.id === pId);
+                if (parentTask) {
+                    inheritedColor = parentTask.color;
+                }
+            }
+
             const taskData = {
                 title: plan.title,
                 description: plan.description,
@@ -2031,11 +2175,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 due_date: plan.due_date || null,
                 parent_id: pId,
                 order_index: currentMaxOrder, // Explicit order
-                view_orders: { today: 0 }
+                view_orders: { today: 0 },
+                dependencies: plan.dependencies || [],
+                is_all_day: true,
+                color: inheritedColor // Inherit parent color
             };
 
             // addTask handles creation, state update, and supabase insert
-            const newId = await addTask(taskData);
+            // Pass plan.id to preserve ID for dependencies linkage
+            const newId = await addTask(taskData, [], plan.id);
+
+            if (!newId) {
+                console.error("Failed to add task:", taskData.title);
+                throw new Error(`建立任務失敗: ${taskData.title}`);
+            }
 
             if (newId && plan.subtasks && plan.subtasks.length > 0) {
                 // Process subtasks sequentially to maintain order
@@ -2056,11 +2209,139 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
     };
 
+    // Duplicate tasks (including all subtasks recursively)
+    const duplicateTasks = async (taskIds: string[]): Promise<string[]> => {
+        if (!supabaseClient || taskIds.length === 0) return [];
+        setSyncStatus('syncing');
+
+        const newIds: string[] = [];
+        const idMapping = new Map<string, string>(); // Old ID -> New ID
+
+        // Helper to get all descendants of a task
+        const getDescendants = (parentId: string): any[] => {
+            const children = tasksRef.current.filter(t => t.parent_id === parentId);
+            let descendants: any[] = [];
+            children.forEach(child => {
+                descendants.push(child);
+                descendants = [...descendants, ...getDescendants(child.id)];
+            });
+            return descendants;
+        };
+
+        // Get current max order
+        let currentMaxOrder = tasksRef.current.length > 0
+            ? Math.max(...tasksRef.current.map(t => t.order_index || 0))
+            : 0;
+
+        try {
+            for (const taskId of taskIds) {
+                const originalTask = tasksRef.current.find(t => t.id === taskId);
+                if (!originalTask) continue;
+
+                // Get all descendants of this task
+                const descendants = getDescendants(taskId);
+
+                // First, duplicate the root task
+                currentMaxOrder += 10000;
+                const newRootId = crypto.randomUUID();
+                idMapping.set(taskId, newRootId);
+
+                const rootCopy = {
+                    ...originalTask,
+                    id: newRootId,
+                    title: originalTask.title + ' (副本)',
+                    created_at: new Date().toISOString(),
+                    order_index: currentMaxOrder,
+                    view_orders: {},
+                    reviewed_at: null,
+                };
+                delete (rootCopy as any).user_id;
+
+                await addTask(rootCopy, [], newRootId);
+                newIds.push(newRootId);
+
+                // Then, duplicate all descendants with updated parent_id references
+                for (const descendant of descendants) {
+                    currentMaxOrder += 10000;
+                    const newDescendantId = crypto.randomUUID();
+                    idMapping.set(descendant.id, newDescendantId);
+
+                    // Get the new parent ID from the mapping
+                    const newParentId = idMapping.get(descendant.parent_id) || descendant.parent_id;
+
+                    const descendantCopy = {
+                        ...descendant,
+                        id: newDescendantId,
+                        parent_id: newParentId,
+                        created_at: new Date().toISOString(),
+                        order_index: currentMaxOrder,
+                        view_orders: {},
+                        reviewed_at: null,
+                    };
+                    delete (descendantCopy as any).user_id;
+
+                    await addTask(descendantCopy, [], newDescendantId);
+                }
+            }
+        } catch (e) {
+            handleError(e);
+        } finally {
+            setSyncStatus('synced');
+        }
+
+        return newIds;
+    };
+
     const updateTask = async (id: string, data: any, childIds: string[] = [], options?: { skipHistory?: boolean }) => {
         if (!supabaseClient) return;
         setSyncStatus('syncing');
         markLocalUpdate(id);
         const original = tasks.find(t => t.id === id);
+
+        // Check if task will leave inbox view (view === 'all' is the inbox)
+        if (view === 'all' && original && !original.parent_id) {
+            // Find special tags that indicate task should leave inbox
+            const projectTag = tags.find(t => t.name.trim().toLowerCase() === 'project');
+            const inspirationTag = tags.find(t => t.name.includes('靈感'));
+            const noteTag = tags.find(t => t.name.trim().toLowerCase() === 'note');
+            const promptTag = tags.find(t => t.name.trim().toLowerCase() === 'prompt');
+            const hashPromptTag = tags.find(t => t.name === '#prompt');
+            const journalTag = tags.find(t => t.name.trim().toLowerCase() === 'journal');
+            const somedayTag = tags.find(t => t.name.trim().toLowerCase() === 'someday');
+
+            // Check if new tags include special tags that would move task out of inbox
+            const newTags = data.tags || original.tags || [];
+            const originalTags = original.tags || [];
+
+            const getsSpecialTag = data.tags && (
+                (projectTag && newTags.includes(projectTag.id) && !originalTags.includes(projectTag.id)) ||
+                (inspirationTag && newTags.includes(inspirationTag.id) && !originalTags.includes(inspirationTag.id)) ||
+                (noteTag && newTags.includes(noteTag.id) && !originalTags.includes(noteTag.id)) ||
+                (promptTag && newTags.includes(promptTag.id) && !originalTags.includes(promptTag.id)) ||
+                (hashPromptTag && newTags.includes(hashPromptTag.id) && !originalTags.includes(hashPromptTag.id)) ||
+                (journalTag && newTags.includes(journalTag.id) && !originalTags.includes(journalTag.id)) ||
+                (somedayTag && newTags.includes(somedayTag.id) && !originalTags.includes(somedayTag.id))
+            );
+
+            // Check if status is changing to someday/waiting (moves to 將來/靈感)
+            const statusChangesToSomeday =
+                data.status &&
+                (data.status === 'someday' || data.status === 'waiting') &&
+                original.status !== 'someday' &&
+                original.status !== 'waiting';
+
+            // Inbox shows tasks without dates, so setting a date or special tag means leaving
+            const willLeave =
+                (data.start_date && !original.start_date) ||
+                (data.due_date && !original.due_date) ||
+                (data.parent_id && !original.parent_id) ||
+                getsSpecialTag ||
+                statusChangesToSomeday;
+
+            if (willLeave && !leavingTaskIdsRef.current.includes(id)) {
+                addLeavingTask(id);
+            }
+        }
         if (original && !options?.skipHistory) {
             const before: any = {};
             let hasChanged = false;
@@ -2119,14 +2400,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         setTasks(prev => {
-            let next = prev.map(t => t.id === id ? { ...t, ...data } : t);
+            const now = new Date().toISOString();
+            let next = prev.map(t => t.id === id ? { ...t, ...data, updated_at: now } : t);
             // Also mark subtasks as completed
             if (subtaskIds.length > 0) {
-                next = next.map(t => subtaskIds.includes(t.id) ? { ...t, completed_at: data.completed_at, status: 'completed' as TaskStatus } : t);
+                next = next.map(t => subtaskIds.includes(t.id) ? { ...t, completed_at: data.completed_at, status: 'completed' as TaskStatus, updated_at: now } : t);
             }
             tasksRef.current = next;
             return next;
         });
+        // Note: updated_at is tracked locally for sorting in 'recent' view
+        // The database column will be added later via migration
         const { error } = await supabaseClient.from('tasks').update(data).eq('id', id);
         if (error) {
             if (original) setTasks(prev => {
@@ -2197,6 +2481,54 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (!supabaseClient || updates.length === 0) return;
         setSyncStatus('syncing');
 
+        // Check if any tasks will leave inbox view (view === 'all' is the inbox)
+        if (view === 'all') {
+            // Find special tags that indicate task should leave inbox
+            const projectTag = tags.find(t => t.name.trim().toLowerCase() === 'project');
+            const inspirationTag = tags.find(t => t.name.includes('靈感'));
+            const noteTag = tags.find(t => t.name.trim().toLowerCase() === 'note');
+            const promptTag = tags.find(t => t.name.trim().toLowerCase() === 'prompt');
+            const hashPromptTag = tags.find(t => t.name === '#prompt');
+            const journalTag = tags.find(t => t.name.trim().toLowerCase() === 'journal');
+            const somedayTag = tags.find(t => t.name.trim().toLowerCase() === 'someday');
+
+            updates.forEach(({ id, data }) => {
+                const original = tasksRef.current.find(t => t.id === id);
+                if (original && !original.parent_id) {
+                    const newTags = data.tags || original.tags || [];
+                    const originalTags = original.tags || [];
+
+                    const getsSpecialTag = data.tags && (
+                        (projectTag && newTags.includes(projectTag.id) && !originalTags.includes(projectTag.id)) ||
+                        (inspirationTag && newTags.includes(inspirationTag.id) && !originalTags.includes(inspirationTag.id)) ||
+                        (noteTag && newTags.includes(noteTag.id) && !originalTags.includes(noteTag.id)) ||
+                        (promptTag && newTags.includes(promptTag.id) && !originalTags.includes(promptTag.id)) ||
+                        (hashPromptTag && newTags.includes(hashPromptTag.id) && !originalTags.includes(hashPromptTag.id)) ||
+                        (journalTag && newTags.includes(journalTag.id) && !originalTags.includes(journalTag.id)) ||
+                        (somedayTag && newTags.includes(somedayTag.id) && !originalTags.includes(somedayTag.id))
+                    );
+
+                    // Check if status is changing to someday/waiting
+                    const statusChangesToSomeday =
+                        data.status &&
+                        (data.status === 'someday' || data.status === 'waiting') &&
+                        original.status !== 'someday' &&
+                        original.status !== 'waiting';
+
+                    const willLeave =
+                        (data.start_date && !original.start_date) ||
+                        (data.due_date && !original.due_date) ||
+                        (data.parent_id && !original.parent_id) ||
+                        getsSpecialTag ||
+                        statusChangesToSomeday;
+
+                    if (willLeave && !leavingTaskIdsRef.current.includes(id)) {
+                        addLeavingTask(id);
+                    }
+                }
+            });
+        }
+
         // Build batch update records for history
         const batchRecords: BatchUpdateRecord[] = [];
         updates.forEach(({ id, data }) => {
@@ -2217,16 +2549,17 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         }
 
         // Update local state
+        const now = new Date().toISOString();
         setTasks(prev => {
             const next = prev.map(t => {
                 const update = updates.find(u => u.id === t.id);
-                return update ? { ...t, ...update.data } : t;
+                return update ? { ...t, ...update.data, updated_at: now } : t;
             });
             tasksRef.current = next;
             return next;
         });
 
-        // Update database
+        // Update database (updated_at is tracked locally only for now)
         await Promise.all(updates.map(({ id, data }) =>
             supabaseClient!.from('tasks').update(data).eq('id', id)
         ));
@@ -2470,6 +2803,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setView(prev => {
             const next = typeof newView === 'function' ? newView(prev) : newView;
             if (user?.id) localStorage.setItem(`last_view_${user.id}`, next);
+            // Clear "leaving tasks" when switching views
+            if (next !== prev) {
+                setLeavingTaskIds([]);
+            }
             return next;
         });
     };
@@ -2489,6 +2826,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         });
     };
 
+    // Leaving tasks functions
+    const addLeavingTask = (id: string) => {
+        setLeavingTaskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+    };
+
+    const dismissLeavingTasks = () => {
+        setLeavingTaskIds([]);
+    };
+
+
     const setThemeSettingsAndPersist = (newSettings: ThemeSettings | ((prev: ThemeSettings) => ThemeSettings)) => {
         setThemeSettings(prev => {
             const next = typeof newSettings === 'function' ? newSettings(prev) : newSettings;
@@ -2497,16 +2844,117 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         });
     };
 
+    // Move task(s) to a different view by updating their properties
+    const moveTaskToView = async (taskIds: string[], targetView: string) => {
+        // Use local time for "today" to avoid UTC issues
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const today = `${year}-${month}-${day}`;
+
+        // Helper for finding tags by multiple potential names (i18n support)
+        const findTag = (names: string[]) => tags.find((t: any) =>
+            names.some(n => t.name.trim().toLowerCase() === n.toLowerCase())
+        );
+
+        const projectTag = findTag(['project', '專案']);
+        const somedayTag = findTag(['someday', 'inspiration', '靈感', '將來/靈感']);
+        const journalTag = findTag(['journal', 'note', '知識庫', '知識筆記']);
+        const promptTag = findTag(['prompt', '提示詞']);
+
+        for (const taskId of taskIds) {
+            const task = tasksRef.current.find(t => t.id === taskId);
+            if (!task) continue;
+
+            switch (targetView) {
+                case 'today': // Today view (alias)
+                case 'newtable': // Today view
+                    await updateTask(taskId, { start_date: today });
+                    break;
+
+                case 'project': // Projects view
+                    if (projectTag) {
+                        const newTags = task.tags.includes(projectTag.id)
+                            ? task.tags
+                            : [...task.tags, projectTag.id];
+                        await updateTask(taskId, { tags: newTags });
+
+                        // Check if task has children, if not create one
+                        const hasChildren = tasksRef.current.some(t => t.parent_id === taskId && t.status !== 'deleted');
+                        if (!hasChildren) {
+                            await addTask({
+                                title: '請規劃任務',
+                                parent_id: taskId,
+                                status: 'active',
+                                importance: null,
+                                tags: [],
+                                notes: '',
+                                start_date: null,
+                                due_date: null
+                            });
+                        }
+                    }
+                    break;
+                case 'waiting': // Someday/Inspiration view
+                    if (somedayTag) {
+                        const newTags = task.tags.includes(somedayTag.id)
+                            ? task.tags
+                            : [...task.tags, somedayTag.id];
+                        // Also update status to 'someday' to ensure it leaves inbox and appears in Someday view
+                        await updateTask(taskId, { tags: newTags, status: 'someday' });
+                    } else {
+                        await updateTask(taskId, { status: 'someday' });
+                    }
+                    break;
+
+                case 'journal': // Knowledge base view
+                    if (journalTag) {
+                        const newTags = task.tags.includes(journalTag.id)
+                            ? task.tags
+                            : [...task.tags, journalTag.id];
+                        await updateTask(taskId, { tags: newTags });
+                    }
+                    break;
+
+                case 'prompt': // Prompts view
+                    if (promptTag) {
+                        const newTags = task.tags.includes(promptTag.id)
+                            ? task.tags
+                            : [...task.tags, promptTag.id];
+                        await updateTask(taskId, { tags: newTags });
+                    }
+                    break;
+            }
+        }
+
+        // Clear selection after moving
+        setSelectedTaskIds([]);
+        setFocusedTaskId(null);
+
+        // Show toast notification
+        const viewNames: Record<string, string> = {
+            'today': '今天',
+            'newtable': '今天',
+            'project': '專案',
+            'waiting': '將來/靈感',
+            'journal': '知識庫',
+            'prompt': '提示詞'
+        };
+        setToast({ msg: `已將 ${taskIds.length} 個任務移至「${viewNames[targetView] || targetView}」`, type: 'info' });
+    };
+
+
     return (
         <AppContext.Provider value={{
-            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion,
+            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion,
             view, setView: setViewAndPersist,
-            tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, initError,
+            tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, leavingTaskIds, addLeavingTask, dismissLeavingTasks, initError,
             sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist, sidebarCollapsed, toggleSidebar,
             expandedTags, setExpandedTags: setExpandedTagsAndPersist,
             calendarDate, setCalendarDate, taskCounts,
             focusSplitWidth, setFocusSplitWidth,
-            reviewTask, restoreTask, emptyTrash,
+            reviewTask, restoreTask, emptyTrash, moveTaskToView,
             isCmdPressed, tagsWithResolvedColors,
             language,
             setLanguage,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext, useLayoutEffect } from 'react';
 import { AppContext } from '../context/AppContext';
-import { isSameDay } from '../utils';
+import { isSameDay, getRootTask } from '../utils';
 import { Clock } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 import { TaskData } from '../types';
@@ -910,12 +910,13 @@ export const ScheduleView = () => {
                                 {/* All Day Section */}
                                 <div
                                     data-drop-zone="allday"
-                                    className="overflow-y-auto space-y-1 py-1 border-t border-dashed border-theme scrollbar-none px-1 cursor-cell transition-colors relative"
+                                    className="overflow-y-auto space-y-1 py-1 border-t border-dashed border-theme custom-scrollbar px-1 cursor-cell transition-colors relative"
                                     style={{ height: allDayHeight }}
                                     onDoubleClick={(e) => handleAllDayDoubleClick(e, day)}
                                 >
                                     {tasks.filter(t => t.status !== 'deleted' && t.is_all_day && isSameDay(new Date(t.start_date!), day)).map(task => {
-                                        const theme = COLOR_THEMES[task.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.blue;
+                                        const rootTask = getRootTask(task, tasks);
+                                        const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                         const isSelected = selectedTaskIds.includes(task.id);
                                         const isDragging = dragState?.task.id === task.id;
                                         return (
@@ -1007,7 +1008,8 @@ export const ScheduleView = () => {
 
                                     const start = timeToMinutes(task.start_time);
                                     const dur = task.duration || 60;
-                                    const theme = COLOR_THEMES[task.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.blue;
+                                    const rootTask = getRootTask(task, tasks);
+                                    const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                     const isSelected = selectedTaskIds.includes(task.id);
 
                                     return (
@@ -1073,7 +1075,8 @@ export const ScheduleView = () => {
 
                 {/* Unified Drag Overlay */}
                 {dragState && (() => {
-                    const theme = COLOR_THEMES[dragState.task.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.blue;
+                    const rootTask = getRootTask(dragState.task, tasks);
+                    const theme = COLOR_THEMES[rootTask.color || dragState.task.color] || COLOR_THEMES.blue;
 
                     let leftPos = 0;
                     const targetColEl = Array.from(document.querySelectorAll('div[data-date]')).find(el => el.getAttribute('data-date') === dragState.currentDate.toISOString());

@@ -85,19 +85,27 @@ export const DateSeparator: React.FC<DateSeparatorProps> = ({
 };
 
 // Utility to generate date separators for the next N days
+// Utility to generate date separators for the next N days
 export const generateDateSeparators = (startDate: Date, days: number): string[] => {
     const dates: string[] = [];
     for (let i = 0; i < days; i++) {
         const d = new Date(startDate);
         d.setDate(d.getDate() + i);
-        dates.push(d.toISOString().split('T')[0]);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${day}`);
     }
     return dates;
 };
 
 // Utility to check if a date string is today
 export const isDateToday = (dateStr: string): boolean => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const today = `${year}-${month}-${day}`;
     return dateStr === today;
 };
 
@@ -105,5 +113,9 @@ export const isDateToday = (dateStr: string): boolean => {
 export const isDateTomorrow = (dateStr: string): boolean => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    return dateStr === tomorrow.toISOString().split('T')[0];
+    const year = tomorrow.getFullYear();
+    const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const day = String(tomorrow.getDate()).padStart(2, '0');
+    const tomorrowStr = `${year}-${month}-${day}`;
+    return dateStr === tomorrowStr;
 };

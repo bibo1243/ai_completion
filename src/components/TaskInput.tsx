@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2, Repeat2 } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2, Repeat2, AlertCircle } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import { AppContext } from '../context/AppContext';
 import { RecordingContext } from '../context/RecordingContext';
@@ -638,6 +638,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         setShowTitlePreview(false);
         setGeneratedTitle('');
     };
+
+    // Check for dependencies
+    const blockingTasks = useMemo(() => {
+        if (!initialData?.dependencies?.length) return [];
+        return tasks.filter(t => initialData.dependencies?.includes(t.id) && !t.completed_at);
+    }, [initialData?.dependencies, tasks]);
 
     // Get existing keyword tags (tags that start with #)
     const existingKeywordTags = useMemo(() => {
@@ -1991,12 +1997,38 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     </button>
                                 );
                             })()}
+                            {/* Dependency Warning */}
+                            {blockingTasks.length > 0 && (
+                                <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 p-2 rounded-lg mb-2">
+                                    <AlertCircle size={14} className="shrink-0" />
+                                    <span>
+                                        需先完成：
+                                        {blockingTasks.map((t, idx) => (
+                                            <span key={t.id}>
+                                                {idx > 0 && ', '}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        navigateToTask(t.id, true);
+                                                    }}
+                                                    className="hover:underline font-medium"
+                                                >
+                                                    {t.title}
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </span>
+                                </div>
+                            )}
                             {/* Title input row with AI generate button */}
                             <div className="flex items-center relative">
                                 <input
                                     ref={titleRef}
                                     autoFocus
                                     type="text"
+                                    name="task_title"
+                                    autoComplete="off"
                                     value={title}
                                     onChange={e => {
                                         const val = e.target.value;

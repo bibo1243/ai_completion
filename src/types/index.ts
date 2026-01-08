@@ -51,6 +51,7 @@ export interface TaskData {
   color: TaskColor;
   importance?: ImportanceLevel;  // Importance level: urgent/planned/delegated/unplanned
   created_at: string;
+  updated_at?: string;  // Track last modification time
   completed_at: string | null;
   order_index: number;
   view_orders?: Record<string, number>;
@@ -64,6 +65,7 @@ export interface TaskData {
   ai_history?: AIHistoryEntry[];
   reviewed_at: string | null;
   repeat_rule?: RepeatRule | null;  // For recurring tasks
+  dependencies?: string[]; // IDs of tasks that must be completed before this one
 }
 
 export interface AIHistoryEntry {

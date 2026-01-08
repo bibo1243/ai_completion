@@ -342,12 +342,12 @@ const checkTasks = async () => {
                 shouldAlert = (nowHour > taskHour) || (nowHour === taskHour && nowMinute >= taskMinute);
             }
 
-            // Also check if task was recently reviewed (within last hour) - skip if so
+            // Check if task was already confirmed (reviewed) for this scheduled time
             if (task.reviewed_at) {
                 const reviewedAt = new Date(task.reviewed_at);
-                const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-                if (reviewedAt > hourAgo) {
-                    continue; // Skip - was reviewed recently
+                // If reviewed at or after the start time, we consider it acknowledged for this instance
+                if (reviewedAt >= startDate) {
+                    continue;
                 }
             }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext, useCallback, useLayoutEffect } from 'react';
 import { AppContext } from '../context/AppContext';
-import { isSameDay } from '../utils';
+import { isSameDay, getRootTask } from '../utils';
 import { COLOR_THEMES } from '../constants';
 import { getTaiwanHoliday, getLunarDate } from '../utils/calendar';
 
@@ -406,7 +406,8 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
 
                                                 <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                                     {dayTasks.map((task: any) => {
-                                                        const theme = COLOR_THEMES[task.color] || COLOR_THEMES.gray;
+                                                        const rootTask = getRootTask(task, tasks);
+                                                        const theme = COLOR_THEMES[rootTask.color] || COLOR_THEMES[task.color] || COLOR_THEMES.gray;
                                                         const isAllDay = task.is_all_day;
                                                         const isSelected = selectedTaskIds.includes(task.id);
 
