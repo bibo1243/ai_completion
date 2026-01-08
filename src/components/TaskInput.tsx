@@ -2027,8 +2027,10 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     ref={titleRef}
                                     autoFocus
                                     type="text"
-                                    name="task_title"
-                                    autoComplete="off"
+                                    name="data_task_input"
+                                    autoComplete="new-password"
+                                    autoCorrect="off"
+                                    spellCheck="false"
                                     value={title}
                                     onChange={e => {
                                         const val = e.target.value;
