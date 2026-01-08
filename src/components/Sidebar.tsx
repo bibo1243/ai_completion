@@ -169,9 +169,8 @@ const SidebarNavItem = ({
 };
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, setSelectedTaskIds, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
-    const [isAltPressed, setIsAltPressed] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
     const [editingViewName, setEditingViewName] = useState('');
@@ -180,16 +179,6 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             return JSON.parse(localStorage.getItem('custom_view_names') || '{}');
         } catch { return {}; }
     });
-    useEffect(() => {
-        const down = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(true);
-        const up = (e: KeyboardEvent) => e.key === 'Alt' && setIsAltPressed(false);
-        window.addEventListener('keydown', down);
-        window.addEventListener('keyup', up);
-        return () => {
-            window.removeEventListener('keydown', down);
-            window.removeEventListener('keyup', up);
-        }
-    }, []);
     const [isAddingTag, setIsAddingTag] = useState(false);
     const [addingSubTagTo, setAddingSubTagTo] = useState<string | null>(null);
     const [newTagName, setNewTagName] = useState('');
