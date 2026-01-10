@@ -846,10 +846,10 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     useEffect(() => {
         if (!editor) return;
 
-        const updateHandler = ({ transaction }: { transaction: any }) => {
-            // Skip if IME is composing (Chinese/Japanese input)
-            if ((window as any).__imeComposing) return;
+        // Store pending timestamp for IME input
+        let pendingTimestamp: { time: number, recordingId: string | null } | null = null;
 
+        const updateHandler = ({ transaction }: { transaction: any }) => {
             if (isRecording && recordingTimeRef.current >= 0 && transaction.docChanged) {
                 const currentTime = recordingTimeRef.current;
                 const { selection } = editor.state;
@@ -875,6 +875,14 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
 
                 if (isMentionOpenRef.current) return;
 
+                const recId = currentRecordingIdRef.current;
+
+                // If IME is composing, store the timestamp for later
+                if ((window as any).__imeComposing) {
+                    pendingTimestamp = { time: currentTime, recordingId: recId };
+                    return;
+                }
+
                 // Check for existing timestamp mark at cursor
                 const currentMarks = $from.marks();
                 const existingTimestampMark = currentMarks.find((m: any) => m.type.name === 'timestamp');
@@ -891,7 +899,6 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                 }
 
                 if (shouldApplyNewMark) {
-                    const recId = currentRecordingIdRef.current;
                     editor.commands.setMark('timestamp', { time: currentTime, recordingId: recId });
                 }
             }
@@ -903,6 +910,21 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
         };
         const handleCompositionEnd = () => {
             (window as any).__imeComposing = false;
+
+            // Apply pending timestamp after IME composition ends
+            if (pendingTimestamp && isRecording) {
+                // Use setTimeout to allow the editor state to update after composition
+                setTimeout(() => {
+                    if (pendingTimestamp) {
+                        editor.commands.setMark('timestamp', {
+                            time: pendingTimestamp.time,
+                            recordingId: pendingTimestamp.recordingId
+                        });
+                        console.log('[NoteEditor] Applied pending timestamp after IME:', pendingTimestamp);
+                        pendingTimestamp = null;
+                    }
+                }, 10);
+            }
         };
 
         // Get the editor DOM element and attach composition listeners
@@ -1031,16 +1053,20 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             style={{ '--attachment-link-color': taskColor } as React.CSSProperties}
             onClickCapture={(e) => {
                 const target = e.target as HTMLElement;
+                console.log('[NoteEditor] Click captured on:', target.tagName, target.className, target.outerHTML?.slice(0, 200));
 
                 // 1. Audio Timestamp Click (Inline Marks)
                 // Look for data-time attribute
                 const timestampEl = target.closest('[data-time]') as HTMLElement;
+                console.log('[NoteEditor] Timestamp element found:', timestampEl, timestampEl?.getAttribute('data-time'));
                 if (timestampEl) {
                     const timeStr = timestampEl.getAttribute('data-time');
                     const recordingId = timestampEl.getAttribute('data-recording-id') || undefined;
                     const time = parseInt(timeStr || '0', 10);
+                    console.log('[NoteEditor] Parsed time:', time, 'recordingId:', recordingId, 'onAudioMarkerClick:', !!onAudioMarkerClick);
 
                     if (!isNaN(time) && onAudioMarkerClick) {
+                        console.log('[NoteEditor] Calling onAudioMarkerClick with time:', time);
                         onAudioMarkerClick(time, recordingId);
                         return;
                     }
