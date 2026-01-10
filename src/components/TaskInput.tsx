@@ -2349,17 +2349,6 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 }
                                             }
                                             // Fallback: just seek if audio is already playing
-                                            // If not playing, try to find the first audio attachment and play it
-                                            if (!playedAudio) {
-                                                const firstAudio = attachments.find((a: any) => a.type?.startsWith('audio/') || a.name.endsWith('.mp3') || a.name.endsWith('.wav') || a.name.endsWith('.m4a') || a.recordingId);
-                                                if (firstAudio) {
-                                                    setPlayedAudio({
-                                                        url: firstAudio.url,
-                                                        name: firstAudio.name,
-                                                        markers: firstAudio.markers
-                                                    });
-                                                }
-                                            }
                                             setAudioSeekTime(Math.max(0, time - 4000));
                                         }}
                                         activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}

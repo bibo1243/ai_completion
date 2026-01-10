@@ -122,8 +122,12 @@ const TimestampMark = Mark.create({
                 default: 0,
                 parseHTML: element => parseInt(element.getAttribute('data-time') || '0', 10),
                 renderHTML: attributes => {
-                    if (attributes.time === undefined || attributes.time === null) return {};
-                    return { 'data-time': attributes.time };
+                    if (!attributes.time) return {};
+                    return {
+                        'data-time': attributes.time,
+                        'class': 'timestamp-marker cursor-pointer hover:bg-indigo-100/50 hover:text-indigo-800 transition-colors rounded-sm px-[1px]',
+                        'title': `Jump to ${Math.floor(attributes.time / 1000)}s`
+                    };
                 },
             },
             recordingId: {
@@ -133,7 +137,6 @@ const TimestampMark = Mark.create({
                     if (!attributes.recordingId) return {};
                     return {
                         'data-recording-id': attributes.recordingId,
-                        'title': `Jump to ${Math.floor(attributes.time / 1000)}s`
                     };
                 },
             },
@@ -143,9 +146,7 @@ const TimestampMark = Mark.create({
         return [{ tag: 'span[data-time]' }];
     },
     renderHTML({ HTMLAttributes }) {
-        return ['span', mergeAttributes(HTMLAttributes, {
-            'class': 'timestamp-marker cursor-pointer hover:bg-indigo-100/50 hover:text-indigo-800 transition-colors rounded-sm px-[1px]'
-        }), 0];
+        return ['span', mergeAttributes(HTMLAttributes), 0];
     },
 });
 
