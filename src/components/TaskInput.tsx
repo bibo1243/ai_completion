@@ -2333,11 +2333,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         className="h-full"
                                         onSaveAudio={handleSaveAudio}
                                         onAudioMarkerClick={(time, recordingId) => {
-                                            console.log('[TaskInput] onAudioMarkerClick called:', { time, recordingId, attachmentsCount: attachments.length, playedAudio: !!playedAudio });
                                             // Find the audio file matching the recordingId
                                             if (recordingId) {
                                                 const matchingAudio = attachments.find((a: any) => a.recordingId === recordingId);
-                                                console.log('[TaskInput] Matching audio by recordingId:', matchingAudio);
                                                 if (matchingAudio) {
                                                     // Set this audio as the active player
                                                     setPlayedAudio({
@@ -2350,26 +2348,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     return;
                                                 }
                                             }
-                                            // Fallback: If audio is already playing, just seek
-                                            if (playedAudio) {
-                                                console.log('[TaskInput] Seeking existing audio to:', time - 4000);
-                                                setAudioSeekTime(Math.max(0, time - 4000));
-                                            } else {
-                                                // No audio playing - find first audio attachment and play it
-                                                console.log('[TaskInput] Looking for audio in attachments:', attachments.map((a: any) => ({ name: a.name, type: a.type })));
-                                                const audioAttachment = attachments.find((a: any) =>
-                                                    a.type?.startsWith('audio/') || a.name?.endsWith('.webm') || a.name?.endsWith('.mp3') || a.name?.endsWith('.wav')
-                                                );
-                                                console.log('[TaskInput] Found audio attachment:', audioAttachment);
-                                                if (audioAttachment) {
-                                                    setPlayedAudio({
-                                                        url: audioAttachment.url,
-                                                        name: audioAttachment.name,
-                                                        markers: audioAttachment.markers
-                                                    });
-                                                    setAudioSeekTime(Math.max(0, time - 4000));
-                                                }
-                                            }
+                                            // Fallback: just seek if audio is already playing
+                                            setAudioSeekTime(Math.max(0, time - 4000));
                                         }}
                                         activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
                                         onMarkersChange={(currentMarkers) => {
