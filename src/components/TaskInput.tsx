@@ -2333,23 +2333,42 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         className="h-full"
                                         onSaveAudio={handleSaveAudio}
                                         onAudioMarkerClick={(time, recordingId) => {
-                                            // Find the audio file matching the recordingId
+                                            // 1. Try to find the audio file matching the recordingId
                                             if (recordingId) {
                                                 const matchingAudio = attachments.find((a: any) => a.recordingId === recordingId);
                                                 if (matchingAudio) {
-                                                    // Set this audio as the active player
                                                     setPlayedAudio({
                                                         url: matchingAudio.url,
                                                         name: matchingAudio.name,
                                                         markers: matchingAudio.markers
                                                     });
-                                                    // Seek to the time (-4s buffer)
                                                     setAudioSeekTime(Math.max(0, time - 4000));
                                                     return;
                                                 }
                                             }
-                                            // Fallback: just seek if audio is already playing
-                                            setAudioSeekTime(Math.max(0, time - 4000));
+
+                                            // 2. If audio is already playing, just seek
+                                            if (playedAudio) {
+                                                setAudioSeekTime(Math.max(0, time - 4000));
+                                                return;
+                                            }
+
+                                            // 3. Fallback: If not playing and ID not found, play the first available audio
+                                            // This supports legacy notes or cases where recordingId is lost
+                                            const audioAttachment = attachments.find((a: any) =>
+                                                a.recordingId ||
+                                                a.type?.startsWith('audio/') ||
+                                                a.url?.match(/\.(mp3|wav|webm|m4a|ogg)$/i)
+                                            );
+
+                                            if (audioAttachment) {
+                                                setPlayedAudio({
+                                                    url: audioAttachment.url,
+                                                    name: audioAttachment.name,
+                                                    markers: audioAttachment.markers
+                                                });
+                                                setAudioSeekTime(Math.max(0, time - 4000));
+                                            }
                                         }}
                                         activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
                                         onMarkersChange={(currentMarkers) => {

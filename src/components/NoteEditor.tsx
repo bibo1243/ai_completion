@@ -1,7 +1,7 @@
 import React, { useEffect, useContext, useState, useRef, forwardRef, useImperativeHandle } from 'react';
 import { AppContext } from '../context/AppContext';
 import { RecordingContext } from '../context/RecordingContext';
-import { useEditor, EditorContent, Extension, ReactNodeViewRenderer, ReactRenderer } from '@tiptap/react';
+import { useEditor, EditorContent, Extension, ReactNodeViewRenderer } from '@tiptap/react';
 import { Node, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -11,16 +11,16 @@ import TaskItem from '@tiptap/extension-task-item';
 import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
-import { Sparkles, Paperclip, X, Download, Check, Plus } from 'lucide-react';
+import { Sparkles, Paperclip, X, Download, Check } from 'lucide-react';
 import Details from '@tiptap/extension-details';
 import DetailsSummary from '@tiptap/extension-details-summary';
 import DetailsContent from '@tiptap/extension-details-content';
 import Mention from '@tiptap/extension-mention';
-import tippy, { Instance as TippyInstance } from 'tippy.js';
-import 'tippy.js/dist/tippy.css';
 
-
-// Custom extension to handle internal tab and Cmd+Enter exit, and now Enter tracking for recording
+// Refs to access latest values inside editor callbacks without triggering re-initialization
+// (Used to be used for mention suggestions, now kept minimal if needed or can be removed)
+// removed tagsRef, onCreateTagRef, isMentionOpenRef as they were only used for suggestions.
+// --- Attachment Link State ---
 const KeyboardNavigation = (onExit?: () => void, onEnter?: () => void) => Extension.create({
     name: 'keyboardNavigation',
     addKeyboardShortcuts() {
@@ -123,12 +123,7 @@ const TimestampMark = Mark.create({
                 parseHTML: element => parseInt(element.getAttribute('data-time') || '0', 10),
                 renderHTML: attributes => {
                     if (!attributes.time) return {};
-                    return {
-                        'data-time': attributes.time,
-                        // Always apply the styling when timestamp mark exists
-                        'class': 'timestamp-marker cursor-pointer hover:bg-indigo-100/50 hover:text-indigo-800 transition-colors rounded-sm px-[1px]',
-                        'title': `Jump to ${Math.floor(attributes.time / 1000)}s`
-                    };
+                    return { 'data-time': attributes.time };
                 },
             },
             recordingId: {
@@ -138,6 +133,8 @@ const TimestampMark = Mark.create({
                     if (!attributes.recordingId) return {};
                     return {
                         'data-recording-id': attributes.recordingId,
+                        'class': 'timestamp-marker cursor-pointer hover:bg-indigo-100/50 hover:text-indigo-800 transition-colors rounded-sm px-[1px]',
+                        'title': `Jump to ${Math.floor(attributes.time / 1000)}s`
                     };
                 },
             },
@@ -266,161 +263,7 @@ const AudioMarkerNode = Node.create({
     },
 });
 
-// Tag Mention Suggestion List Component
-interface TagMentionListProps {
-    items: { id: string; name: string; color: string; parent_id?: string; isCreateOption?: boolean }[];
-    command: (item: { id: string; name: string; color: string; isCreateOption?: boolean }) => void;
-}
 
-interface TagMentionListRef {
-    onKeyDown: (props: { event: KeyboardEvent }) => boolean;
-}
-
-const TagMentionList = forwardRef<TagMentionListRef, TagMentionListProps>((props, ref) => {
-    const [selectedIndex, setSelectedIndex] = useState(0);
-    const [searchTerm, setSearchTerm] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    // Filter items based on search term
-    const filteredItems = searchTerm
-        ? props.items.filter(item =>
-            item.name.toLowerCase().includes(searchTerm.toLowerCase()) || item.isCreateOption
-        )
-        : props.items;
-
-    const selectItem = (index: number) => {
-        const item = filteredItems[index];
-        if (item) {
-            props.command(item);
-        }
-    };
-
-    const upHandler = () => {
-        setSelectedIndex((prev) => (prev + filteredItems.length - 1) % filteredItems.length);
-    };
-
-    const downHandler = () => {
-        setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
-    };
-
-    const enterHandler = () => {
-        selectItem(selectedIndex);
-    };
-
-    // Reset selection when items or search changes
-    useEffect(() => setSelectedIndex(0), [props.items, searchTerm]);
-
-    // Focus input on mount
-    useEffect(() => {
-        setTimeout(() => inputRef.current?.focus(), 50);
-    }, []);
-
-    useImperativeHandle(ref, () => ({
-        onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-            if (event.key === 'ArrowUp') {
-                upHandler();
-                return true;
-            }
-            if (event.key === 'ArrowDown') {
-                downHandler();
-                return true;
-            }
-            if (event.key === 'Enter') {
-                enterHandler();
-                return true;
-            }
-            // Let other keys pass through to the search input
-            return false;
-        },
-    }));
-
-    return (
-        <div
-            className="bg-theme-card backdrop-blur border border-theme rounded-xl shadow-xl overflow-hidden min-w-[220px]"
-            onMouseDown={(e) => e.preventDefault()}
-        >
-            {/* Search Input */}
-            <div className="p-2 border-b border-theme">
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={(e) => {
-                        // Stop all events from bubbling to prevent closing the editor
-                        e.stopPropagation();
-
-                        if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            upHandler();
-                        } else if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            downHandler();
-                        } else if (e.key === 'Enter') {
-                            e.preventDefault();
-                            enterHandler();
-                        } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            // Let the parent handle escape by NOT stopping propagation here
-                            // Actually we already stopped it above, so we need to handle escape differently
-                        }
-                    }}
-                    placeholder="搜尋標籤..."
-                    className="w-full px-2 py-1.5 text-sm bg-theme-hover rounded-lg border-none outline-none focus:ring-1 focus:ring-indigo-400 text-theme-primary placeholder-theme-tertiary"
-                    autoComplete="off"
-                />
-            </div>
-
-            {/* Tag List */}
-            <div className="max-h-52 overflow-y-auto">
-                {filteredItems.length === 0 ? (
-                    <div className="p-3 text-xs font-light text-theme-tertiary text-center">
-                        沒有找到標籤
-                    </div>
-                ) : (
-                    filteredItems.map((item, index) => {
-                        const isCreateOption = item.isCreateOption;
-                        const hasParent = !!item.parent_id;
-                        const paddingLeft = hasParent ? 'pl-6' : 'pl-3';
-
-                        return (
-                            <button
-                                key={item.id}
-                                type="button"
-                                onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    selectItem(index);
-                                }}
-                                className={`w-full flex items-center gap-2 ${paddingLeft} pr-3 py-1.5 text-left transition-colors ${index === selectedIndex
-                                    ? 'bg-theme-selection'
-                                    : 'hover:bg-theme-hover'
-                                    }`}
-                            >
-                                {isCreateOption ? (
-                                    <div className="w-4 h-4 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0 text-indigo-400">
-                                        <Plus size={10} strokeWidth={3} />
-                                    </div>
-                                ) : (
-                                    <div
-                                        className="w-2 h-2 rounded-full flex-shrink-0"
-                                        style={{ backgroundColor: item.color || '#6366f1' }}
-                                    />
-                                )}
-                                <span className={`text-sm font-light truncate ${index === selectedIndex ? 'text-theme-primary' : 'text-theme-secondary'
-                                    }`}>
-                                    {item.name}
-                                </span>
-                            </button>
-                        );
-                    })
-                )}
-            </div>
-        </div>
-    );
-});
-
-TagMentionList.displayName = 'TagMentionList';
 
 interface NoteEditorProps {
     initialContent: string;
@@ -664,123 +507,6 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                 },
                 renderLabel({ node }) {
                     return node.attrs.label ?? node.attrs.id;
-                },
-                suggestion: {
-                    char: '@',
-                    items: ({ query }: { query: string }) => {
-                        const currentTags = tagsRef.current;
-                        // Return all matching tags (no limit) since we have search in the dropdown
-                        const results = currentTags
-                            .filter(tag => tag.name.toLowerCase().includes(query.toLowerCase()));
-
-                        // If query exists and no exact match found, offer to create new tag
-                        if (query && !currentTags.some(tag => tag.name.toLowerCase() === query.toLowerCase())) {
-                            results.push({
-                                id: 'CREATE_TAG:' + query,
-                                name: `Create "${query}"`,
-                                color: '#6366f1',
-                                isCreateOption: true
-                            } as any);
-                        } else if (!query && results.length === 0) {
-                            return currentTags; // Return all tags if no query and no results
-                        }
-
-                        return results;
-                    },
-                    command: ({ editor, range, props }: { editor: any; range: any; props: any }) => {
-                        // Handle new tag creation
-                        if (props.id.startsWith('CREATE_TAG:')) {
-                            const newTagName = props.id.substring('CREATE_TAG:'.length);
-                            if (onCreateTagRef.current) {
-                                onCreateTagRef.current(newTagName).then((newTag) => {
-                                    if (newTag) {
-                                        editor
-                                            .chain()
-                                            .focus()
-                                            .insertContentAt(range, [
-                                                {
-                                                    type: 'mention',
-                                                    attrs: {
-                                                        id: newTag.id,
-                                                        label: newTag.name,
-                                                    },
-                                                },
-                                                { type: 'text', text: ' ' },
-                                            ])
-                                            .run();
-                                    }
-                                });
-                            }
-                            return;
-                        }
-
-                        // Insert the mention with the tag name as label
-                        editor
-                            .chain()
-                            .focus()
-                            .insertContentAt(range, [
-                                {
-                                    type: 'mention',
-                                    attrs: {
-                                        id: props.id,
-                                        label: props.name, // Use tag name as label
-                                    },
-                                },
-                                {
-                                    type: 'text',
-                                    text: ' ',
-                                },
-                            ])
-                            .run();
-                    },
-                    render: () => {
-                        let component: ReactRenderer<TagMentionListRef> | null = null;
-                        let popup: TippyInstance[] | null = null;
-
-                        return {
-                            onStart: (props: any) => {
-                                isMentionOpenRef.current = true;
-                                component = new ReactRenderer(TagMentionList, {
-                                    props,
-                                    editor: props.editor,
-                                });
-
-                                if (!props.clientRect) return;
-
-                                popup = tippy('body', {
-                                    getReferenceClientRect: props.clientRect,
-                                    appendTo: () => document.body,
-                                    content: component.element,
-                                    showOnCreate: true,
-                                    interactive: true,
-                                    trigger: 'manual',
-                                    placement: 'bottom-start',
-                                    arrow: false,
-                                });
-                            },
-                            onUpdate(props: any) {
-                                component?.updateProps(props);
-
-                                if (!props.clientRect || !popup) return;
-
-                                popup[0].setProps({
-                                    getReferenceClientRect: props.clientRect,
-                                });
-                            },
-                            onKeyDown(props: any) {
-                                if (props.event.key === 'Escape') {
-                                    popup?.[0]?.hide();
-                                    return true;
-                                }
-                                return component?.ref?.onKeyDown(props) ?? false;
-                            },
-                            onExit() {
-                                isMentionOpenRef.current = false;
-                                popup?.[0]?.destroy();
-                                component?.destroy();
-                            },
-                        };
-                    },
                 },
             }),
             KeyboardNavigation(onExit, handleEnter),
