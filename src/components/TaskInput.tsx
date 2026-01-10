@@ -2348,8 +2348,23 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     return;
                                                 }
                                             }
-                                            // Fallback: just seek if audio is already playing
-                                            setAudioSeekTime(Math.max(0, time - 4000));
+                                            // Fallback: If audio is already playing, just seek
+                                            if (playedAudio) {
+                                                setAudioSeekTime(Math.max(0, time - 4000));
+                                            } else {
+                                                // No audio playing - find first audio attachment and play it
+                                                const audioAttachment = attachments.find((a: any) =>
+                                                    a.type?.startsWith('audio/') || a.name?.endsWith('.webm') || a.name?.endsWith('.mp3') || a.name?.endsWith('.wav')
+                                                );
+                                                if (audioAttachment) {
+                                                    setPlayedAudio({
+                                                        url: audioAttachment.url,
+                                                        name: audioAttachment.name,
+                                                        markers: audioAttachment.markers
+                                                    });
+                                                    setAudioSeekTime(Math.max(0, time - 4000));
+                                                }
+                                            }
                                         }}
                                         activeMarkerIds={playedAudio?.markers?.filter(m => editorMarkerIds.has(m.id)).map(m => m.id) || null}
                                         onMarkersChange={(currentMarkers) => {

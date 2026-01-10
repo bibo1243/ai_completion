@@ -16,12 +16,14 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
     const [isPlaying, setIsPlaying] = useState(autoPlay);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [isReady, setIsReady] = useState(false);
+    const pendingSeekRef = useRef<number | null>(null);
 
     useEffect(() => {
-        if (autoPlay && audioRef.current) {
+        if (autoPlay && audioRef.current && isReady) {
             audioRef.current.play().catch(console.error);
         }
-    }, [url, autoPlay]);
+    }, [url, autoPlay, isReady]);
 
     const togglePlay = () => {
         if (!audioRef.current) return;
@@ -42,6 +44,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
     const handleLoadedMetadata = () => {
         if (audioRef.current) {
             setDuration(audioRef.current.duration);
+            setIsReady(true);
+            // Apply any pending seek
+            if (pendingSeekRef.current !== null) {
+                jumpToTime(pendingSeekRef.current);
+                pendingSeekRef.current = null;
+            }
         }
     };
 
@@ -73,10 +81,15 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ url, fileName, autoPlay = fal
 
     // Handle external seek requests
     useEffect(() => {
-        if (seekToTime !== null && seekToTime !== undefined && audioRef.current) {
-            jumpToTime(seekToTime);
+        if (seekToTime !== null && seekToTime !== undefined) {
+            if (isReady && audioRef.current) {
+                jumpToTime(seekToTime);
+            } else {
+                // Store for when ready
+                pendingSeekRef.current = seekToTime;
+            }
         }
-    }, [seekToTime]);
+    }, [seekToTime, isReady]);
 
     const formatTime = (time: number) => {
         if (isNaN(time)) return "0:00";
