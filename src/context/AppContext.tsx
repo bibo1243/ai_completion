@@ -67,6 +67,8 @@ export const AppContext = createContext<{
 
     editingTaskId: string | null;
     setEditingTaskId: React.Dispatch<React.SetStateAction<string | null>>;
+    inlineEditingTaskId: string | null;
+    setInlineEditingTaskId: React.Dispatch<React.SetStateAction<string | null>>;
 
     expandedTaskIds: string[];
     toggleExpansion: (id: string, forceState?: boolean) => void;
@@ -234,6 +236,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }, [language]);
 
     const [pendingFocusTaskId, setPendingFocusTaskId] = useState<string | null>(null);
+    const [inlineEditingTaskId, setInlineEditingTaskId] = useState<string | null>(null);
     const [calendarDate, setCalendarDate] = useState(() => {
         const saved = localStorage.getItem(`calendar_current_date_${user?.id}`);
         return saved ? new Date(saved) : new Date();
@@ -2947,7 +2950,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     return (
         <AppContext.Provider value={{
-            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, toggleExpansion,
+            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, expandedTaskIds, toggleExpansion,
             view, setView: setViewAndPersist,
             tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, leavingTaskIds, addLeavingTask, dismissLeavingTasks, initError,
             sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist, sidebarCollapsed, toggleSidebar,
