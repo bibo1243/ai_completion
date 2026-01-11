@@ -7,8 +7,49 @@ import { isToday, isOverdue, getRelativeDateString } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
 import { motion } from 'framer-motion';
 
+export const InlineTaskTitleEditor = ({ initialTitle, onSave, onCancel, onSwitchToFull, className, fontClass }: any) => {
+    const [val, setVal] = useState(initialTitle);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+            // Select all only if editing existing text (not new empty task)
+            if (initialTitle) inputRef.current.select();
+        }
+    }, [initialTitle]);
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        e.stopPropagation(); // Stop propagation to TaskList/Item handlers
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.metaKey || e.ctrlKey) {
+                onSwitchToFull(val);
+            } else {
+                onSave(val);
+            }
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            onCancel();
+        }
+    };
+
+    return (
+        <input
+            ref={inputRef}
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onBlur={() => onSave(val)}
+            onKeyDown={handleKeyDown}
+            onClick={e => e.stopPropagation()}
+            className={`bg-transparent outline-none border-none p-0 m-0 w-full ${className} ${fontClass}`}
+        />
+    );
+};
+
 export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void, onSelect?: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void }) => {
-    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
+    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -290,7 +331,15 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
             }
             return;
         }
-        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onEdit(); }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.metaKey || e.ctrlKey) {
+                onEdit();
+            } else {
+                setInlineEditingTaskId(task.id);
+            }
+        }
         if (e.key === ' ' && (view === 'all' || view === 'today' || view === 'schedule' || view === 'waiting' || view === 'focus')) {
             e.preventDefault(); e.stopPropagation();
             const currentIdx = visibleTasks.findIndex(t => t.data.id === task.id);
@@ -356,7 +405,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
             addTask(newTaskData, [], undefined).then(newId => {
                 if (newId) {
                     setPendingFocusTaskId(newId);
-                    setEditingTaskId(newId);
+                    setInlineEditingTaskId(newId);
                     setSelectedTaskIds([]);
                 }
             });
@@ -583,10 +632,36 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                 />
                                 {/* Importance is now shown via checkbox color */}
                             </div>
-                            <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden">
+                            <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden relative">
                                 <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink`}>
                                     {task.title}
                                 </span>
+                                {inlineEditingTaskId === task.id && (
+                                    <div className="absolute inset-0 bg-theme-bg z-10 flex items-center pr-2">
+                                        <InlineTaskTitleEditor
+                                            initialTitle={task.title}
+                                            className={`${fontSizeClass} ${titleFontClass} text-theme-primary`}
+                                            fontClass=""
+                                            onSave={(newTitle: string) => {
+                                                if (newTitle !== task.title) {
+                                                    updateTask(task.id, { title: newTitle });
+                                                }
+                                                setInlineEditingTaskId(null);
+                                                // Ideally restore focus to the item container?
+                                                if (itemRef.current) itemRef.current.focus();
+                                            }}
+                                            onCancel={() => {
+                                                setInlineEditingTaskId(null);
+                                                if (itemRef.current) itemRef.current.focus();
+                                            }}
+                                            onSwitchToFull={async (newTitle: string) => {
+                                                await updateTask(task.id, { title: newTitle });
+                                                setInlineEditingTaskId(null);
+                                                onEdit(); // Opens full editor
+                                            }}
+                                        />
+                                    </div>
+                                )}
                                 {/* Debug Info for Sorting Issues */}
 
                                 {breadcrumbData && (
