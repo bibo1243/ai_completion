@@ -7,6 +7,7 @@ import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { isOverdue, isToday } from '../utils';
 import { SearchModal } from './SearchModal';
+import { GOALS_2026_DATA } from '../data/goals2026';
 
 const TAG_COLORS = [
     '#6366f1', // indigo
@@ -169,7 +170,7 @@ const SidebarNavItem = ({
 };
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -244,6 +245,62 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             }, 50);
         }
     }, [isAddingTag, editingTagId]);
+
+    const handleImport2026Goals = async () => {
+        if (!confirm('匯入 2026 年度目標？')) return;
+        try {
+            // 1. Create Project Task
+            const projectTag = tags.find((t: any) => t.name.toLowerCase() === 'project' || t.name === '專案');
+            const goalTagIds = projectTag ? [projectTag.id] : [];
+
+            const projectId = await addTask({
+                title: GOALS_2026_DATA.title,
+                notes: GOALS_2026_DATA.description,
+                tags: goalTagIds,
+                status: 'active'
+            });
+
+            if (!projectId) return;
+
+            // 2. Add Core Goals as Tasks
+            const promises = GOALS_2026_DATA.coreGoals.map(async (goal) => {
+                const goalTaskId = await addTask({
+                    title: goal.title,
+                    notes: goal.description,
+                    parent_id: projectId,
+                    status: 'active'
+                }, [], undefined); // explicit args to avoid mismatch
+                if (goalTaskId && goal.subtasks) {
+                    await batchAddTasks(goal.subtasks.map(s => ({
+                        title: s.title,
+                        parent_id: goalTaskId,
+                        status: 'active'
+                    })));
+                }
+            });
+
+            // 3. Add Life Intentions
+            const intentTaskId = await addTask({
+                title: "人生意圖 (Thinking & Being)",
+                parent_id: projectId,
+                status: 'active'
+            }, [], undefined);
+            if (intentTaskId) {
+                await batchAddTasks(GOALS_2026_DATA.lifeIntentions.sections.map(s => ({
+                    title: s.title,
+                    notes: s.description,
+                    parent_id: intentTaskId,
+                    status: 'active'
+                })));
+            }
+
+            await Promise.all(promises);
+            setToast({ msg: "匯入成功！", type: 'info' });
+        } catch (e) {
+            console.error(e);
+            setToast({ msg: "匯入失敗", type: 'error' });
+        }
+    };
 
     const handleAddTagAction = async (e?: React.FormEvent, parentId: string | null = null) => {
         e?.preventDefault();
@@ -1036,6 +1093,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 </button>
                                 <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
                                     <Upload size={12} /> {language === 'zh' ? '導匯入資料' : 'Import Data'}
+                                </button>
+                                <button onClick={handleImport2026Goals} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Target size={12} /> {language === 'zh' ? '匯入 2026 年度目標' : 'Import 2026 Goals'}
                                 </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
                             </div>
