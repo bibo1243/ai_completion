@@ -255,7 +255,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
             const projectId = await addTask({
                 title: GOALS_2026_DATA.title,
-                notes: GOALS_2026_DATA.description,
+                description: GOALS_2026_DATA.description,
                 tags: goalTagIds,
                 status: 'active'
             });
@@ -266,7 +266,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             const promises = GOALS_2026_DATA.coreGoals.map(async (goal) => {
                 const goalTaskId = await addTask({
                     title: goal.title,
-                    notes: goal.description,
+                    description: goal.description,
                     parent_id: projectId,
                     status: 'active'
                 }, [], undefined); // explicit args to avoid mismatch
@@ -288,7 +288,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             if (intentTaskId) {
                 await batchAddTasks(GOALS_2026_DATA.lifeIntentions.sections.map(s => ({
                     title: s.title,
-                    notes: s.description,
+                    description: s.description,
                     parent_id: intentTaskId,
                     status: 'active'
                 })));
