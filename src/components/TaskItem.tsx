@@ -634,7 +634,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                 {/* Importance is now shown via checkbox color */}
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden relative">
-                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink`}>
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink ${inlineEditingTaskId === task.id ? 'opacity-0' : ''}`}>
                                     {task.title}
                                 </span>
                                 {inlineEditingTaskId === task.id && (
