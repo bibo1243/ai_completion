@@ -362,7 +362,13 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         if (targetId) {
             setFocusedTaskId(targetId);
             setSelectedTaskIds([targetId]);
-            setTimeout(() => { const taskEl = containerRef.current?.querySelector(`[data-task-id="${targetId}"]`) as HTMLElement; if (taskEl) taskEl.focus(); }, 50);
+            setTimeout(() => {
+                const taskEl = containerRef.current?.querySelector(`[data-task-id="${targetId}"]`) as HTMLElement;
+                if (taskEl) {
+                    taskEl.focus();
+                    taskEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            }, 100);
         }
         priorFocusIdRef.current = null;
         if (pendingFocusTaskId) setPendingFocusTaskId(null);
