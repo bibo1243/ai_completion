@@ -14,10 +14,11 @@ export const InlineTaskTitleEditor = ({ initialTitle, onSave, onCancel, onSwitch
     useEffect(() => {
         if (inputRef.current) {
             inputRef.current.focus();
-            // Select all only if editing existing text (not new empty task)
-            if (initialTitle) inputRef.current.select();
+            // Place cursor at the end
+            const len = inputRef.current.value.length;
+            inputRef.current.setSelectionRange(len, len);
         }
-    }, [initialTitle]);
+    }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         e.stopPropagation(); // Stop propagation to TaskList/Item handlers
