@@ -18,6 +18,7 @@ export const ScheduleView = () => {
         tags,
         calendarDate,
         setCalendarDate,
+        editingTaskId,
         setEditingTaskId,
         addTask,
         handleSelection,
@@ -183,7 +184,8 @@ export const ScheduleView = () => {
     // Keyboard handler for DEL key
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.length > 0) {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTaskIds.length > 0 && !editingTaskId) {
+                if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
                 e.preventDefault();
                 batchDeleteTasks(selectedTaskIds, false);
             }
@@ -191,7 +193,7 @@ export const ScheduleView = () => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedTaskIds, batchDeleteTasks]);
+    }, [selectedTaskIds, batchDeleteTasks, editingTaskId]);
 
     // Scroll to Today
     const scrollToToday = () => {
@@ -982,7 +984,6 @@ export const ScheduleView = () => {
                                             <div
                                                 key={task.id}
                                                 onMouseDown={(e) => handleTaskMouseDown(e, task, day, 'move', true)}
-                                                onClick={(e) => { e.stopPropagation(); handleSelection(e, task.id); }}
                                                 onDoubleClick={(e) => { e.stopPropagation(); setSelectedTaskIds([]); setEditingTaskId(task.id); }}
                                                 className={`group/allday text-[10px] px-2 py-1 rounded-lg border text-center font-extralight transition-all w-full relative overflow-hidden cursor-grab active:cursor-grabbing
                                                     ${isSelected ? 'ring-2 ring-offset-1' : ''}
