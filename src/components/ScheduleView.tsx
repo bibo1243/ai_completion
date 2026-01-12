@@ -926,6 +926,9 @@ export const ScheduleView = () => {
                                         const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                         const isSelected = selectedTaskIds.includes(task.id);
                                         const isDragging = dragState?.task.id === task.id;
+                                        const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
+                                        const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
+
                                         return (
                                             <div
                                                 key={task.id}
@@ -937,11 +940,13 @@ export const ScheduleView = () => {
                                                     ${isDragging ? 'opacity-30' : ''}
                                                 `}
                                                 style={{
-                                                    backgroundColor: isSelected ? theme.color + '40' : theme.color + '18',
+                                                    backgroundColor: isScheduleTask ? `${theme.color}10` : (isSelected ? theme.color + '40' : theme.color + '18'),
+                                                    backgroundImage: isScheduleTask ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)` : undefined,
                                                     color: theme.color,
                                                     borderColor: isSelected ? theme.color + '80' : theme.color + '60',
                                                     boxShadow: isSelected ? '2px 2px 4px rgba(0,0,0,0.12)' : '2px 2px 3px rgba(0,0,0,0.08)',
-                                                    '--tw-ring-color': isSelected ? theme.color + '60' : undefined
+                                                    '--tw-ring-color': isSelected ? theme.color + '60' : undefined,
+                                                    ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                                 } as React.CSSProperties}
                                             >
                                                 {/* Hover overlay */}
