@@ -51,10 +51,13 @@ export const FocusView = () => {
         const filter = viewTagFilters['focus'] || { include: [] as string[], exclude: [] as string[] };
         const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
 
+        const deletedTaskIds = new Set(tasks.filter(t => t.status === 'deleted').map(t => t.id));
+
         let filtered = tasks.filter(t =>
             t.status === 'inbox' &&
             !t.start_date &&
-            !t.completed_at
+            !t.completed_at &&
+            (!t.parent_id || !deletedTaskIds.has(t.parent_id))
         );
 
         if (include.length > 0) {

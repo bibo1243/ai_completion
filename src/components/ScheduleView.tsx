@@ -233,6 +233,12 @@ export const ScheduleView = () => {
         }
     };
 
+    // Initial Scroll to Today
+    useEffect(() => {
+        // Short delay to ensure layout is ready
+        setTimeout(() => scrollToToday(), 100);
+    }, []);
+
     // Scroll Handler
     const handleScroll = () => {
         const container = scrollContainerRef.current;
