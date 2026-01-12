@@ -2254,8 +2254,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 order_index: currentMaxOrder, // Explicit order
                 view_orders: { today: 0 },
                 dependencies: plan.dependencies || [],
-                is_all_day: true,
-                color: inheritedColor // Inherit parent color
+                is_all_day: plan.is_all_day !== undefined ? plan.is_all_day : true,
+                color: inheritedColor || plan.color,
+                tags: plan.tags || []
             };
 
             // addTask handles creation, state update, and supabase insert
