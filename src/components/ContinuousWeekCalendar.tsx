@@ -3,6 +3,7 @@ import { AppContext } from '../context/AppContext';
 import { isSameDay, getRootTask } from '../utils';
 import { COLOR_THEMES } from '../constants';
 import { getTaiwanHoliday, getLunarDate } from '../utils/calendar';
+import { CalendarCheck } from 'lucide-react';
 
 
 // 配置
@@ -234,6 +235,33 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
         if (onDateClick) onDateClick(date);
     };
 
+    const toggleScheduleTag = async () => {
+        if (selectedTaskIds.length === 0) return;
+        const scheduleTag = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程');
+        if (!scheduleTag) return;
+
+        const allHaveTag = selectedTaskIds.every(id => {
+            const t = tasks.find(task => task.id === id);
+            return t?.tags?.includes(scheduleTag.id);
+        });
+
+        const updates = selectedTaskIds.map(id => {
+            const t = tasks.find(task => task.id === id);
+            if (!t) return null;
+            let newTags = [...(t.tags || [])];
+            if (allHaveTag) {
+                newTags = newTags.filter(tid => tid !== scheduleTag.id);
+            } else {
+                if (!newTags.includes(scheduleTag.id)) newTags.push(scheduleTag.id);
+            }
+            return { id, data: { tags: newTags } };
+        }).filter(Boolean);
+
+        if (updates.length > 0) {
+            await batchUpdateTasks(updates as any);
+        }
+    };
+
     // 雙擊日期格創建新任務（內嵌輸入）
     const handleDateDoubleClick = (date: Date, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -264,6 +292,24 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
 
     // 格式化當前標題日期
     const headerTitle = `${currentViewDate.getFullYear()}年 ${currentViewDate.getMonth() + 1}月`;
+
+    const scrollToToday = useCallback(() => {
+        const today = new Date();
+        setCalendarDate(today);
+        // 觸發重渲染
+        const initialWeeks: WeekData[] = [];
+        for (let i = -INITIAL_WEEKS_RANGE; i <= INITIAL_WEEKS_RANGE; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() + (i * 7));
+            initialWeeks.push(generateWeek(d));
+        }
+        setWeeks(initialWeeks);
+        if (containerRef.current) {
+            const centerIndex = INITIAL_WEEKS_RANGE;
+            const scrollTop = centerIndex * WEEK_HEIGHT - (containerRef.current.clientHeight / 2) + (WEEK_HEIGHT / 2);
+            containerRef.current.scrollTop = scrollTop;
+        }
+    }, [generateWeek, setCalendarDate, setWeeks]);
 
     return (
         <div className="flex flex-col h-full bg-theme-main relative">
@@ -539,26 +585,25 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
             </div>
 
             {/* 快速回到今天 (懸浮按鈕) */}
+            {selectedTaskIds.length > 0 && (
+                <button
+                    onClick={toggleScheduleTag}
+                    className={`absolute bottom-6 right-24 w-10 h-10 border rounded-full shadow-lg flex items-center justify-center transition-all z-30
+                        ${selectedTaskIds.every(id => {
+                        const t = tasks.find(task => task.id === id);
+                        const stag = tags.find(tag => tag.name.toLowerCase() === 'schedule' || tag.name === '行程');
+                        return stag && t?.tags?.includes(stag.id);
+                    })
+                            ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                            : 'bg-theme-card border-theme text-theme-secondary hover:text-indigo-600 hover:border-indigo-300'
+                        }`}
+                    title="切換 Schedule 標籤 (一鍵轉換行事曆)"
+                >
+                    <CalendarCheck size={20} />
+                </button>
+            )}
             <button
-                onClick={() => {
-                    // 簡單重刷頁面或者重新定位
-                    // 這裡做個簡易重置
-                    const today = new Date();
-                    setCalendarDate(today);
-                    // 觸發重渲染
-                    const initialWeeks: WeekData[] = [];
-                    for (let i = -INITIAL_WEEKS_RANGE; i <= INITIAL_WEEKS_RANGE; i++) {
-                        const d = new Date(today);
-                        d.setDate(today.getDate() + (i * 7));
-                        initialWeeks.push(generateWeek(d));
-                    }
-                    setWeeks(initialWeeks);
-                    if (containerRef.current) {
-                        const centerIndex = INITIAL_WEEKS_RANGE;
-                        const scrollTop = centerIndex * WEEK_HEIGHT - (containerRef.current.clientHeight / 2) + (WEEK_HEIGHT / 2);
-                        containerRef.current.scrollTop = scrollTop;
-                    }
-                }}
+                onClick={scrollToToday}
                 className="absolute bottom-4 right-4 bg-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg text-xs font-bold hover:apply-indigo-700 transition-transform active:scale-95 flex items-center gap-1"
             >
                 Today

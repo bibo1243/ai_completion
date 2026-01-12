@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext, useLayoutEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { isSameDay, getRootTask } from '../utils';
-import { Clock } from 'lucide-react';
+import { Clock, CalendarCheck } from 'lucide-react';
 import { COLOR_THEMES } from '../constants';
 import { TaskData } from '../types';
 
@@ -230,6 +230,36 @@ export const ScheduleView = () => {
                     scrollContainerRef.current.scrollLeft = centerOffset;
                 }
             }, 0);
+        }
+    };
+
+    const toggleScheduleTag = async () => {
+        if (selectedTaskIds.length === 0) return;
+        const scheduleTag = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程');
+        if (!scheduleTag) {
+            console.warn("Schedule tag not found");
+            return;
+        }
+
+        const allHaveTag = selectedTaskIds.every(id => {
+            const t = tasks.find(task => task.id === id);
+            return t?.tags?.includes(scheduleTag.id);
+        });
+
+        const updates = selectedTaskIds.map(id => {
+            const t = tasks.find(task => task.id === id);
+            if (!t) return null;
+            let newTags = [...(t.tags || [])];
+            if (allHaveTag) {
+                newTags = newTags.filter(tid => tid !== scheduleTag.id);
+            } else {
+                if (!newTags.includes(scheduleTag.id)) newTags.push(scheduleTag.id);
+            }
+            return { id, data: { tags: newTags } };
+        }).filter(Boolean);
+
+        if (updates.length > 0) {
+            await batchUpdateTasks(updates as any);
         }
     };
 
@@ -843,6 +873,25 @@ export const ScheduleView = () => {
                             className="w-20 h-1 bg-theme-hover rounded-lg appearance-none cursor-pointer accent-indigo-500"
                         />
                     </div>
+
+                    {selectedTaskIds.length > 0 && (
+                        <button
+                            onClick={toggleScheduleTag}
+                            className={`px-3 py-1 border rounded-md text-xs font-bold shadow-sm flex items-center gap-1 transition-all
+                                ${selectedTaskIds.every(id => {
+                                const t = tasks.find(task => task.id === id);
+                                const stag = tags.find(tag => tag.name.toLowerCase() === 'schedule' || tag.name === '行程');
+                                return stag && t?.tags?.includes(stag.id);
+                            })
+                                    ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
+                                    : 'bg-theme-card border-theme text-theme-secondary hover:bg-theme-hover'
+                                }`}
+                            title="切換 Schedule 標籤"
+                        >
+                            <CalendarCheck size={14} />
+                            {selectedTaskIds.length > 1 ? `(${selectedTaskIds.length})` : ''}
+                        </button>
+                    )}
                     <button onClick={scrollToToday} className="px-3 py-1 bg-theme-card border border-theme rounded-md text-xs font-bold shadow-sm hover:bg-theme-hover text-theme-primary">
                         Today
                     </button>
@@ -1164,6 +1213,6 @@ export const ScheduleView = () => {
                 })()}
 
             </div>
-        </div>
+        </div >
     );
 };
