@@ -915,7 +915,7 @@ export const ScheduleView = () => {
                                     style={{ height: allDayHeight }}
                                     onDoubleClick={(e) => handleAllDayDoubleClick(e, day)}
                                 >
-                                    {tasks.filter(t => t.status !== 'deleted' && t.is_all_day && isSameDay(new Date(t.start_date!), day)).map(task => {
+                                    {tasks.filter(t => t.status !== 'deleted' && (t.is_all_day || !t.start_time) && isSameDay(new Date(t.start_date!), day)).map(task => {
                                         const rootTask = getRootTask(task, tasks);
                                         const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                         const isSelected = selectedTaskIds.includes(task.id);

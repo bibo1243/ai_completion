@@ -53,7 +53,8 @@ export const FocusView = () => {
 
         let filtered = tasks.filter(t =>
             t.status === 'inbox' &&
-            !t.start_date
+            !t.start_date &&
+            !t.completed_at
         );
 
         if (include.length > 0) {

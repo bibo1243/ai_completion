@@ -50,6 +50,7 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
     const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null);
     const [dragOverDate, setDragOverDate] = useState<string | null>(null);
     const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
+    const [internalSelectedDate, setInternalSelectedDate] = useState<Date | null>(null);
     const [draftTask, setDraftTask] = useState<{ date: Date; title: string } | null>(null);
 
     const filteredTasks = React.useMemo(() => {
@@ -196,7 +197,6 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
 
 
 
-    // 處理點擊
     const handleDateClick = async (date: Date, e: React.MouseEvent) => {
         const dateKey = date.toDateString();
         // 只有在施工模式啟動時才能放置任務
@@ -222,10 +222,16 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
             }
             setPlacedDateFlash(dateKey);
             setTimeout(() => setPlacedDateFlash(null), 600);
-        } else if (onDateClick) {
-            // 非施工模式：觸發日期點擊回調（用於導航到日程視圖）
-            onDateClick(date);
+        } else {
+            // 單擊：僅選中
+            setInternalSelectedDate(date);
         }
+    };
+
+    // 雙擊標題進入日程視圖
+    const handleHeaderDoubleClick = (date: Date, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDateClick) onDateClick(date);
     };
 
     // 雙擊日期格創建新任務（內嵌輸入）
@@ -313,6 +319,7 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                     const dayTasks = getTasksForDate(day.date);
                                     const isFlashing = placedDateFlash === day.date.toDateString();
                                     const isHovered = constructionModeEnabled && selectedTaskIds.length > 0;
+                                    const isSelectedDay = internalSelectedDate && isSameDay(day.date, internalSelectedDate);
 
                                     // 節假日資訊
                                     const holiday = getTaiwanHoliday(day.date);
@@ -326,17 +333,18 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                             key={dIndex}
                                             className={`
                                                 flex-1 min-w-0 h-full border-r border-theme relative group
-                                                ${day.isToday
-                                                    ? 'bg-indigo-500/10'
-                                                    : (isWeekend
+                                                ${isSelectedDay ? 'bg-indigo-500/10' : ''}
+                                                ${day.isToday && !isSelectedDay
+                                                    ? 'bg-indigo-500/5'
+                                                    : (isWeekend && !isSelectedDay
                                                         ? 'bg-theme-sidebar'
-                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-theme-main' : 'bg-theme-hover/30')
+                                                        : (day.date.getMonth() % 2 === 0 && !isSelectedDay ? 'bg-theme-main' : (!isSelectedDay ? 'bg-theme-hover/30' : ''))
                                                     )
                                                 }
                                                 ${isFlashing ? 'ring-4 ring-green-400 bg-green-50 animate-pulse z-20' : ''}
                                                 ${dragOverDate === day.date.toDateString() ? 'bg-indigo-500/20 ring-inset ring-2 ring-indigo-400 z-10 transition-colors duration-150' : ''}
                                                 ${isHovered ? 'cursor-pointer hover:ring-[1.5px] hover:ring-indigo-500 hover:shadow-sm hover:z-30 z-10' : ''}
-                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() ? 'hover:bg-theme-hover' : ''}
+                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() && !isSelectedDay ? 'hover:bg-theme-hover' : ''}
                                             `}
                                             onDragEnter={() => setDragOverDate(day.date.toDateString())}
                                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
@@ -378,8 +386,11 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                 </>
                                             )}
 
-                                            <div className="p-1 h-full flex flex-col gap-0.5 overflow-hidden">
-                                                <div className="flex items-start justify-between min-w-0">
+                                            <div
+                                                className="p-1 h-full flex flex-col gap-0.5 overflow-hidden"
+                                                onDoubleClick={(e) => handleHeaderDoubleClick(day.date, e)}
+                                            >
+                                                <div className="flex items-start justify-between min-w-0 pointer-events-none">
                                                     {/* 農曆與節假日顯示 */}
                                                     <div className="flex flex-col leading-none pt-0.5 pl-0.5 max-w-[70%] text-left">
                                                         {themeSettings.showTaiwanHolidays && holiday && (
