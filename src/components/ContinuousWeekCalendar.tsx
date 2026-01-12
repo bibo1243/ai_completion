@@ -106,7 +106,14 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
             if (t.start_date && isSameDay(new Date(t.start_date), date)) return true;
 
             return false;
-        }).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+        }).sort((a, b) => {
+            if (a.is_all_day && !b.is_all_day) return -1;
+            if (!a.is_all_day && b.is_all_day) return 1;
+            if (!a.is_all_day && !b.is_all_day) {
+                return (a.start_time || '').localeCompare(b.start_time || '');
+            }
+            return (a.order_index || 0) - (b.order_index || 0);
+        });
     }, [filteredTasks]);
 
     // 初始化週數據
@@ -471,14 +478,21 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                         const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
                                                         const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
 
-                                                        // 樣式邏輯：邊框改細改淡 (使用 hex alpha)
-                                                        // 整日：邊框極淡 (20% opacity)
-                                                        // 非整日：邊框稍淡 (40% opacity)
-                                                        const borderColor = `${theme.color}${isAllDay ? '33' : '66'}`;
-                                                        // 選中時加粗邊框
-                                                        const borderStyle = isSelected
-                                                            ? `2px solid ${theme.color}`
-                                                            : `1px solid ${borderColor}`;
+                                                        const bgStyle = isAllDay ? {
+                                                            backgroundColor: theme.color,
+                                                            color: 'white',
+                                                            boxShadow: '0 1px 1px rgba(0,0,0,0.1)',
+                                                            border: isSelected ? '2px solid white' : `1px solid ${theme.color}40`
+                                                        } : {
+                                                            backgroundColor: theme.bg,
+                                                            color: theme.text,
+                                                            borderLeft: `3px solid ${theme.accent}`,
+                                                            borderTop: isSelected ? `1px solid ${theme.color}` : undefined,
+                                                            borderBottom: isSelected ? `1px solid ${theme.color}` : undefined,
+                                                            borderRight: isSelected ? `1px solid ${theme.color}` : undefined
+                                                        };
+
+                                                        const formatTime = (t: string) => t ? t.replace(':', '') : '';
 
                                                         return (
                                                             <div
@@ -524,8 +538,7 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                                             setSelectedTaskIds(prev => [...prev, task.id]);
                                                                         }
                                                                     } else {
-                                                                        // 單擊直接選中（並清除其他，除非是再次點擊已選中的來取消？）
-                                                                        // 方便起見，單擊就是選中該任務（唯一）
+                                                                        // 單擊直接選中
                                                                         setSelectedTaskIds([task.id]);
                                                                     }
                                                                 }}
@@ -536,20 +549,25 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                                 title={task.title}
                                                                 className={`
                                                                     truncate text-[9.5px] px-1.5 rounded-md cursor-pointer hover:brightness-95 transition-all mb-0.5
-                                                                    ${isAllDay ? theme.bg : ''} 
-                                                                    ${isAllDay ? theme.text : ''}
+                                                                    flex items-center justify-between gap-1
+                                                                    ${isSelected ? 'ring-2 ring-indigo-400 z-10' : ''}
                                                                 `}
                                                                 style={{
-                                                                    border: borderStyle,
-                                                                    backgroundColor: isScheduleTask ? `${theme.color}10` : (isAllDay ? undefined : `${theme.color}20`),
-                                                                    backgroundImage: isScheduleTask ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)` : undefined,
-                                                                    color: isAllDay ? undefined : theme.color,    // Text color follows border/theme
-                                                                    height: '20px',
-                                                                    lineHeight: '18px',
-                                                                    ...(isScheduleTask ? { fontWeight: 'bold' } : {})
+                                                                    ...bgStyle,
+                                                                    height: 'auto',
+                                                                    minHeight: '22px',
+                                                                    lineHeight: '1.2',
+                                                                    ...(isScheduleTask ? { backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 4px, transparent 4px, transparent 8px)` } : {})
                                                                 }}
                                                             >
-                                                                {task.title || '無標題'}
+                                                                <span className="truncate flex-1 font-medium select-none">{task.title || '無標題'}</span>
+
+                                                                {!isAllDay && (task.start_time || task.end_time) && (
+                                                                    <div className="flex flex-col items-end leading-none shrink-0 opacity-80" style={{ fontSize: '7px', transform: 'scale(0.95)', transformOrigin: 'right center' }}>
+                                                                        {task.start_time && <span>{formatTime(task.start_time)}</span>}
+                                                                        {task.end_time && <span>{formatTime(task.end_time)}</span>}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         )
                                                     })}
