@@ -436,6 +436,50 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     }, [highlightRange]);
 
 
+
+    // Sync local state when initialData updates (e.g. from Drag & Drop or external updates)
+    const prevInitialDataRef = useRef(initialData);
+    useEffect(() => {
+        const prevData = prevInitialDataRef.current;
+        if (!initialData || !prevData) {
+            prevInitialDataRef.current = initialData;
+            return;
+        }
+
+        if (initialData.id !== prevData.id) {
+            // Task switched completely, reset all
+            setTitle(initialData.title || '');
+            setDesc(initialData.description || '');
+            setStartDate(initialData.start_date || '');
+            setStartTime(initialData.start_time || '');
+            setEndTime(initialData.end_time || '');
+            setDuration(initialData.duration || 60);
+            setIsAllDay(initialData.is_all_day ?? true);
+            setSelectedTags(initialData.tags || []);
+            setImages(initialData.images || []);
+            setParentId(initialData.parent_id || null);
+            setIsProject(initialData.is_project || false);
+            setColor(initialData.color || 'gray');
+            setImportance(initialData.importance || 'unplanned');
+            // Reset other fields as needed
+        } else {
+            // Same task, selective update
+            if (initialData.title !== prevData.title) setTitle(initialData.title || '');
+            if (initialData.description !== prevData.description) setDesc(initialData.description || '');
+            if (initialData.start_date !== prevData.start_date) setStartDate(initialData.start_date || '');
+            if (initialData.start_time !== prevData.start_time) setStartTime(initialData.start_time || '');
+            if (initialData.end_time !== prevData.end_time) setEndTime(initialData.end_time || '');
+            if (initialData.duration !== prevData.duration) setDuration(initialData.duration || 60);
+            if (initialData.is_all_day !== prevData.is_all_day) setIsAllDay(initialData.is_all_day ?? true);
+
+            if (JSON.stringify(initialData.tags) !== JSON.stringify(prevData.tags)) {
+                setSelectedTags(initialData.tags || []);
+            }
+        }
+
+        prevInitialDataRef.current = initialData;
+    }, [initialData]);
+
     const handleRunAssistant = async (prompt?: string) => {
         // Get content to process - use plain text, not HTML
         let contentToProcess: string;
