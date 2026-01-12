@@ -560,6 +560,14 @@ export const ScheduleView = () => {
                             if (tNewMin < 0) tNewMin = 0;
                             updateData.start_time = minutesToTimeRaw(tNewMin);
 
+                            // Sync start_date time component
+                            if (updateData.start_date) {
+                                const d = new Date(updateData.start_date);
+                                d.setHours(Math.floor(tNewMin / 60));
+                                d.setMinutes(tNewMin % 60);
+                                updateData.start_date = d.toISOString();
+                            }
+
                             if (type === 'resize-bottom' || type === 'resize-top') {
                                 updateData.duration = currentDuration;
                             } else {
