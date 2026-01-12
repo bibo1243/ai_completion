@@ -50,7 +50,7 @@ export const AppContext = createContext<{
 
     logout: () => Promise<void>;
 
-    navigateToTask: (targetId: string, openForEdit?: boolean) => void;
+    navigateToTask: (targetId: string, openForEdit?: boolean, forcedView?: string) => void;
     navigateBack: () => void;
     canNavigateBack: boolean;
 
@@ -1062,7 +1062,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [historyStack, redoStack, tasks, editingTaskId]);
 
-    const navigateToTask = (targetId: string, openForEdit: boolean = false) => {
+    const navigateToTask = (targetId: string, openForEdit: boolean = false, forcedView?: string) => {
         const targetTask = tasks.find(t => t.id === targetId);
         if (!targetTask) return;
 
@@ -1076,24 +1076,26 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const inspirationTag = findTag(['someday', 'inspiration', '靈感', '將來/靈感']);
         const projectTag = findTag(['project', '專案']);
 
-        let targetView = 'all';
+        let targetView = forcedView || 'all';
 
         // Check task tags to determine view
-        if (noteTag && targetTask.tags.includes(noteTag.id)) {
-            targetView = 'journal'; // Note view (Knowledge Notes)
-        } else if (promptTag && targetTask.tags.includes(promptTag.id)) {
-            targetView = 'prompt';
-        } else if (journalTag && targetTask.tags.includes(journalTag.id)) {
-            targetView = 'journal';
-        } else if (inspirationTag && targetTask.tags.includes(inspirationTag.id)) {
-            targetView = 'waiting'; // Inspiration view
-        } else if (projectTag && targetTask.tags.includes(projectTag.id)) {
-            const hasChildren = tasks.some(t => t.parent_id === targetId && t.status !== 'deleted');
-            if (hasChildren) {
-                targetView = 'projects';
+        if (!forcedView) {
+            if (noteTag && targetTask.tags.includes(noteTag.id)) {
+                targetView = 'journal'; // Note view (Knowledge Notes)
+            } else if (promptTag && targetTask.tags.includes(promptTag.id)) {
+                targetView = 'prompt';
+            } else if (journalTag && targetTask.tags.includes(journalTag.id)) {
+                targetView = 'journal';
+            } else if (inspirationTag && targetTask.tags.includes(inspirationTag.id)) {
+                targetView = 'waiting'; // Inspiration view
+            } else if (projectTag && targetTask.tags.includes(projectTag.id)) {
+                const hasChildren = tasks.some(t => t.parent_id === targetId && t.status !== 'deleted');
+                if (hasChildren) {
+                    targetView = 'projects';
+                }
+            } else if (targetTask.start_date || targetTask.due_date) {
+                targetView = 'today'; // Tasks with dates go to today/schedule
             }
-        } else if (targetTask.start_date || targetTask.due_date) {
-            targetView = 'today'; // Tasks with dates go to today/schedule
         }
 
         // Save current state including editingTaskId for proper back navigation

@@ -103,7 +103,7 @@ const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對�
 
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false }: any) => {
-    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask, setView } = useContext(AppContext);
+    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
     const [dueDate, setDueDate] = useState<string | null>(initialData?.due_date || null);
@@ -2080,8 +2080,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 handleSubmit();
                                             }
                                             // Navigate to parent task
-                                            setView('all');
-                                            navigateToTask(parentId, true);
+                                            navigateToTask(parentId, true, 'all');
                                         }}
                                         className="flex items-center gap-1.5 text-xs text-theme-tertiary hover:text-indigo-600 transition-colors group/parent"
                                     >
