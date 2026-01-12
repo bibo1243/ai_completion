@@ -560,20 +560,9 @@ export const ScheduleView = () => {
                             if (tNewMin < 0) tNewMin = 0;
                             updateData.start_time = minutesToTimeRaw(tNewMin);
 
-                            if (type === 'resize-bottom') {
-                                // Absolute Height resize (batch set to same duration)
+                            if (type === 'resize-bottom' || type === 'resize-top') {
                                 updateData.duration = currentDuration;
-                            } else if (type === 'resize-top') {
-                                // Start time changed, duration changed
-                                // Logic above handles start time implicitly via delta
-                                // We need to set new Duration based on logic? 
-                                // For now, let's keep it simple: relative resize is hard.
-                                // Let's assume resize ONLY affects the dragged task in `moveIds` unless we implement complex logic.
-                                // But User requested unified drag. 
-                                // If I resize one, generally others should stay or resize? 
-                                // Let's stick to safe: Resize only dragged task (checked later).
                             } else {
-                                // Move: keep duration
                                 updateData.duration = t.duration || 60;
                             }
                             updateData.end_time = minutesToTimeRaw((timeToMinutes(updateData.start_time) || 0) + (updateData.duration || 60));
