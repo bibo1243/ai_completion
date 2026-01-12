@@ -1710,12 +1710,27 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
     const handleStartTimeChange = (val: string) => {
         setStartTime(val);
-        if (val && duration && !isNaN(Number(duration))) {
-            const [h, m] = val.split(':').map(Number);
-            const mins = Number(duration);
-            const date = new Date();
-            date.setHours(h, m + mins);
-            setEndTime(`${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`);
+        // User requested: Change Start -> Adjust Duration (Keep End Fixed)
+        if (val && endTime) {
+            const [sh, sm] = val.split(':').map(Number);
+            const [eh, em] = endTime.split(':').map(Number);
+
+            if (!isNaN(sh) && !isNaN(sm) && !isNaN(eh) && !isNaN(em)) {
+                const sMin = sh * 60 + sm;
+                const eMin = eh * 60 + em;
+
+                if (sMin < eMin) {
+                    // Start is before End: just update duration, keep End Time fixed
+                    setDuration((eMin - sMin).toString());
+                } else {
+                    // Start is after End: Move mode (Keep Duration)
+                    const currentDur = Number(duration) || 60;
+                    const newEndMin = sMin + currentDur;
+                    const newEh = Math.floor(newEndMin / 60) % 24;
+                    const newEm = newEndMin % 60;
+                    setEndTime(`${String(newEh).padStart(2, '0')}:${String(newEm).padStart(2, '0')}`);
+                }
+            }
         }
     };
 
