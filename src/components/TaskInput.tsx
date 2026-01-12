@@ -373,16 +373,46 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [suggestionIndex, setSuggestionIndex] = useState(-1);
 
     // Auto-save: Update task in database as you type (debounced)
+    // Auto-save: Update task in database as you type (debounced)
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (title !== initialData?.title || desc !== initialData?.description) {
-                if (initialData && !isQuickAdd) {
-                    updateTask(initialData.id, { title, description: desc }, [], { skipHistory: true });
+            if (initialData && !isQuickAdd) {
+                const updates: any = {};
+                let hasChanges = false;
+
+                if (title !== (initialData.title || '')) { updates.title = title; hasChanges = true; }
+                if (desc !== (initialData.description || '')) { updates.description = desc; hasChanges = true; }
+
+                if (startTime && startTime !== (initialData.start_time || '')) { updates.start_time = startTime; hasChanges = true; }
+                if (endTime && endTime !== (initialData.end_time || '')) { updates.end_time = endTime; hasChanges = true; }
+                if (duration && String(duration) !== String(initialData.duration || 60)) { updates.duration = Number(duration); hasChanges = true; }
+                if (isAllDay !== (initialData.is_all_day ?? true)) { updates.is_all_day = isAllDay; hasChanges = true; }
+
+                if (startDate && startDate !== initialData.start_date) {
+                    updates.start_date = startDate;
+                    hasChanges = true;
+                }
+
+                if (hasChanges) {
+                    // Sync start_date timestamp with start_time if needed
+                    if ((updates.start_time || updates.start_date) && !isAllDay) {
+                        const baseDateStr = updates.start_date || startDate || initialData.start_date;
+                        const baseTimeStr = updates.start_time || startTime || initialData.start_time || '00:00';
+                        if (baseDateStr) {
+                            const d = new Date(baseDateStr);
+                            const [h, m] = baseTimeStr.split(':').map(Number);
+                            if (!isNaN(h) && !isNaN(m)) {
+                                d.setHours(h, m, 0, 0);
+                                updates.start_date = d.toISOString();
+                            }
+                        }
+                    }
+                    updateTask(initialData.id, updates, [], { skipHistory: true });
                 }
             }
-        }, 1000);
+        }, 800);
         return () => clearTimeout(timer);
-    }, [title, desc, initialData, updateTask, isQuickAdd]);
+    }, [title, desc, startTime, endTime, duration, startDate, isAllDay, initialData, updateTask, isQuickAdd]);
 
     // Shortcut: Cmd+Shift+V to toggle Voice Recording
     useEffect(() => {
