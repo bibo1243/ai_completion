@@ -89,10 +89,44 @@ export const FocusView = () => {
                     setSelectedTaskIds([]);
                 }
             }
+            // Arrow Navigation
+            if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !editingTaskId) {
+                if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
+                e.preventDefault();
+
+                if (unscheduledTasks.length === 0) return;
+
+                let currentIndex = -1;
+                // Try to find index of the first selected task
+                if (selectedTaskIds.length > 0) {
+                    // Start from the first selected task validation
+                    currentIndex = unscheduledTasks.findIndex(t => selectedTaskIds.includes(t.id));
+                }
+
+                let nextIndex = 0;
+                if (e.key === 'ArrowDown') {
+                    if (currentIndex === -1) nextIndex = 0;
+                    else nextIndex = Math.min(unscheduledTasks.length - 1, currentIndex + 1);
+                } else { // Up
+                    if (currentIndex === -1) nextIndex = unscheduledTasks.length - 1;
+                    else nextIndex = Math.max(0, currentIndex - 1);
+                }
+
+                const nextTask = unscheduledTasks[nextIndex];
+                if (nextTask) {
+                    setSelectedTaskIds([nextTask.id]);
+                    setLastClickedIndex(nextIndex);
+                    // Scroll into view
+                    setTimeout(() => {
+                        const el = document.getElementById(`focus-task-${nextTask.id}`);
+                        el?.scrollIntoView({ block: 'nearest' });
+                    }, 0);
+                }
+            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isConstructionMode, isReschedulingMode, setSelectedTaskIds, setConstructionModeEnabled, selectedTaskIds, deleteTask, editingTaskId]);
+    }, [isConstructionMode, isReschedulingMode, setSelectedTaskIds, setConstructionModeEnabled, selectedTaskIds, deleteTask, editingTaskId, unscheduledTasks]);
 
     // 當選擇清空時，關閉施工模式
     useEffect(() => {
@@ -168,6 +202,7 @@ export const FocusView = () => {
         return (
             <div
                 key={task.id}
+                id={`focus-task-${task.id}`}
                 onClick={(e) => handleTaskClick(task.id, index, e)}
                 onDoubleClick={(e) => {
                     e.stopPropagation();
