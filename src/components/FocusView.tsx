@@ -89,6 +89,14 @@ export const FocusView = () => {
                     setSelectedTaskIds([]);
                 }
             }
+
+            // Enter to Edit
+            if (e.key === 'Enter' && !editingTaskId && selectedTaskIds.length > 0) {
+                if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
+                e.preventDefault();
+                setEditingTaskId(selectedTaskIds[0]);
+            }
+
             // Arrow Navigation
             if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !editingTaskId) {
                 if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
