@@ -198,6 +198,15 @@ export const FocusView = () => {
 
                 {/* 任務內容 */}
                 <div className="flex-1 min-w-0">
+                    {task.parent_id && (() => {
+                        const parent = tasks.find(t => t.id === task.parent_id);
+                        return parent ? (
+                            <div className="text-[9px] text-gray-400 truncate mb-0.5 flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                {parent.title}
+                            </div>
+                        ) : null;
+                    })()}
                     <div className={`${textSizeClass} ${fontFamilyClass} font-extralight text-theme-secondary truncate leading-tight`}>
                         {task.title || <span className="text-theme-tertiary italic">無標題</span>}
                     </div>
