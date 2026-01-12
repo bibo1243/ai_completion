@@ -2079,8 +2079,20 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             if (initialData && title.trim()) {
                                                 handleSubmit();
                                             }
-                                            // Navigate to parent task
-                                            navigateToTask(parentId, true);
+
+                                            // Check if parent is a Project (via is_project flag or tags)
+                                            const isParentProject = parentTask.is_project || (parentTask.tags && parentTask.tags.some(tid => {
+                                                const tObj = tags.find(tg => tg.id === tid);
+                                                return tObj && tObj.name.trim().toLowerCase() === 'project';
+                                            }));
+
+                                            if (isParentProject) {
+                                                // If parent is project, enter the project view (Album)
+                                                navigateToTask(parentId, false);
+                                            } else {
+                                                // Normal behavior: open parent for edit
+                                                navigateToTask(parentId, true);
+                                            }
                                         }}
                                         className="flex items-center gap-1.5 text-xs text-theme-tertiary hover:text-indigo-600 transition-colors group/parent"
                                     >

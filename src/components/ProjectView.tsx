@@ -31,7 +31,7 @@ interface ProjectData {
 
 
 export const ProjectView = () => {
-    const { tasks, tags, themeSettings, updateTask, setEditingTaskId, editingTaskId, addTask, addTag, setView, batchUpdateTasks, batchDeleteTasks } = useContext(AppContext);
+    const { tasks, tags, themeSettings, updateTask, setEditingTaskId, editingTaskId, addTask, addTag, setView, batchUpdateTasks, batchDeleteTasks, focusedTaskId } = useContext(AppContext);
 
     // State for project management
     const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -98,6 +98,16 @@ export const ProjectView = () => {
             };
         });
     }, [tasks, projectTag]);
+
+    // Automatically select project if focused via navigation
+    useEffect(() => {
+        if (focusedTaskId) {
+            const targetProject = projects.find(p => p.id === focusedTaskId);
+            if (targetProject) {
+                setSelectedProjectId(focusedTaskId);
+            }
+        }
+    }, [focusedTaskId, projects]);
 
     // Sort projects by saved order
     // Identify Annual Goal projects
