@@ -215,6 +215,59 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     useClickOutside(settingsRef, () => setShowSettings(false));
     useClickOutside(popoverRef, () => setPopoverId(null));
 
+    const handleImportGaaSchedule = async () => {
+        if (!confirm(language === 'zh' ? '確定要匯入 2025.12 的 GAA 日程資料嗎？' : 'Import 2025.12 from gaa_imported_schedule.json?')) return;
+        try {
+            const res = await fetch('/gaa_imported_schedule.json');
+            if (!res.ok) throw new Error('File not found');
+            const data = await res.json();
+            const sourceTasks = data.tasks as any[];
+
+            // Filter 2025-December
+            const targetTasks = sourceTasks.filter(t => t.start_date && t.start_date.startsWith('2025-12'));
+
+            if (targetTasks.length === 0) {
+                alert('No tasks found for 2025-12');
+                return;
+            }
+
+            // Find or Create Tag
+            let scheduleTagId = tags.find((t: any) => t.name.toLowerCase() === 'schedule')?.id;
+            if (!scheduleTagId) {
+                scheduleTagId = await addTag('Schedule') || undefined;
+            }
+            if (!scheduleTagId) {
+                alert('Failed to create Schedule tag');
+                return;
+            }
+
+            const newTasks = targetTasks.map(t => ({
+                title: t.title,
+                description: t.description,
+                status: 'todo',
+                tags: [scheduleTagId],
+                color: 'orange',
+                start_date: t.start_date,
+                start_time: t.start_time,
+                end_time: t.end_time,
+                is_all_day: t.is_all_day,
+                priority: t.priority
+            }));
+
+            if (batchAddTasks) {
+                await batchAddTasks(newTasks);
+                if (setToast) setToast({ msg: `Imported ${newTasks.length} tasks`, type: 'info' });
+                else alert(`Imported ${newTasks.length} tasks.`);
+            } else {
+                alert("batchAddTasks not available");
+            }
+            setShowSettings(false);
+        } catch (e: any) {
+            console.error(e);
+            alert('Import failed: ' + e.message);
+        }
+    };
+
     // Keyboard shortcut for search (Cmd+K) and ESC to close popover
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -1188,6 +1241,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 </button>
                                 <button onClick={handleImportInboxDump} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
                                     <Inbox size={12} /> {language === 'zh' ? '匯入收件匣整理清單' : 'Import Inbox Dump'}
+                                </button>
+                                <button onClick={handleImportGaaSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Clock size={12} /> {language === 'zh' ? '匯入 2025.12 GAA 日程' : 'Import 2025.12 GAA Schedule'}
                                 </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
                             </div>
