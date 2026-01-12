@@ -1090,7 +1090,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         } else if (projectTag && targetTask.tags.includes(projectTag.id)) {
             const hasChildren = tasks.some(t => t.parent_id === targetId && t.status !== 'deleted');
             if (hasChildren) {
-                targetView = 'project';
+                targetView = 'projects';
             }
         } else if (targetTask.start_date || targetTask.due_date) {
             targetView = 'today'; // Tasks with dates go to today/schedule

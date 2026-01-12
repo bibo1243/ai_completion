@@ -103,7 +103,7 @@ const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對�
 
 
 export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false }: any) => {
-    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask } = useContext(AppContext);
+    const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask, setView } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
     const [dueDate, setDueDate] = useState<string | null>(initialData?.due_date || null);
@@ -2079,20 +2079,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             if (initialData && title.trim()) {
                                                 handleSubmit();
                                             }
-
-                                            // Check if parent is a Project (via is_project flag or tags)
-                                            const isParentProject = parentTask.is_project || (parentTask.tags && parentTask.tags.some(tid => {
-                                                const tObj = tags.find(tg => tg.id === tid);
-                                                return tObj && tObj.name.trim().toLowerCase() === 'project';
-                                            }));
-
-                                            if (isParentProject) {
-                                                // If parent is project, enter the project view (Album)
-                                                navigateToTask(parentId, false);
-                                            } else {
-                                                // Normal behavior: open parent for edit
-                                                navigateToTask(parentId, true);
-                                            }
+                                            // Navigate to parent task
+                                            setView('all');
+                                            navigateToTask(parentId, true);
                                         }}
                                         className="flex items-center gap-1.5 text-xs text-theme-tertiary hover:text-indigo-600 transition-colors group/parent"
                                     >
