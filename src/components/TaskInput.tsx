@@ -120,6 +120,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const [isAllDay, setIsAllDay] = useState(initialData?.is_all_day !== undefined ? initialData.is_all_day : true);
     // Extract time from start_date if not all-day, otherwise use defaults
     const [startTime, setStartTime] = useState(() => {
+        if (initialData?.start_time) return initialData.start_time;
         if (initialData?.start_date && !initialData?.is_all_day) {
             const d = new Date(initialData.start_date);
             return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -127,10 +128,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         return '09:00';
     });
     const [endTime, setEndTime] = useState(() => {
+        if (initialData?.end_time) return initialData.end_time;
         if (initialData?.start_date && !initialData?.is_all_day) {
             const d = new Date(initialData.start_date);
-            // Default end time is 1 hour after start
-            d.setHours(d.getHours() + 1);
+            // Default end time based on duration or 1 hour
+            const dur = typeof initialData.duration === 'number' ? initialData.duration : 60;
+            d.setMinutes(d.getMinutes() + dur);
             return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
         return '10:00';
