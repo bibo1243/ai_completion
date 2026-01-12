@@ -2080,7 +2080,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 handleSubmit();
                                             }
                                             // Navigate to parent task
-                                            navigateToTask(parentId, true, 'all');
+                                            navigateToTask(parentId, true, 'allview');
                                         }}
                                         className="flex items-center gap-1.5 text-xs text-theme-tertiary hover:text-indigo-600 transition-colors group/parent"
                                     >
