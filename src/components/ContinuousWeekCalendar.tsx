@@ -423,10 +423,6 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                             ? `2px solid ${theme.color}`
                                                             : `1px solid ${borderColor}`;
 
-                                                        const bgColor = isScheduleTask
-                                                            ? `${theme.color}40` // Darker/Distinct background for schedule
-                                                            : (isAllDay ? undefined : `${theme.color}20`);
-
                                                         return (
                                                             <div
                                                                 key={task.id}
@@ -488,7 +484,8 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                                 `}
                                                                 style={{
                                                                     border: borderStyle,
-                                                                    backgroundColor: bgColor, // Faint background
+                                                                    backgroundColor: isScheduleTask ? `${theme.color}10` : (isAllDay ? undefined : `${theme.color}20`),
+                                                                    backgroundImage: isScheduleTask ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)` : undefined,
                                                                     color: isAllDay ? undefined : theme.color,    // Text color follows border/theme
                                                                     height: '20px',
                                                                     lineHeight: '18px',

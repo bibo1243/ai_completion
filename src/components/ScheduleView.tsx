@@ -1030,8 +1030,11 @@ export const ScheduleView = () => {
                                                 left: style.left,
                                                 width: style.width,
                                                 backgroundColor: isScheduleTask
-                                                    ? `${theme.color}40` // Darker for schedule
+                                                    ? `${theme.color}10` // Light base
                                                     : (isSelected ? theme.color + '40' : theme.color + '15'),
+                                                backgroundImage: isScheduleTask
+                                                    ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)`
+                                                    : undefined,
                                                 borderColor: theme.color + '50',
                                                 color: theme.color,
                                                 zIndex: 10,
