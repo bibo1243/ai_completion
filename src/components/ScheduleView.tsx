@@ -456,6 +456,7 @@ export const ScheduleView = () => {
                 let targetSection = dragState.currentSection;
                 let targetDate = dragState.currentDate;
                 let currentStartMin = dragState.currentStartMin;
+                let currentDuration = dragState.currentDuration;
 
                 const alldayEl = elements.find(el => el.getAttribute('data-drop-zone') === 'allday');
                 const gridEl = elements.find(el => el.getAttribute('data-drop-zone') === 'grid');
@@ -478,13 +479,38 @@ export const ScheduleView = () => {
 
                         if (dragState.type === 'move') {
                             rawMin = rawMin - dragState.startOffsetMin;
+                            currentStartMin = Math.round(rawMin / 15) * 15;
+                            currentStartMin = Math.max(0, Math.min(24 * 60 - 15, currentStartMin));
+                        } else if (dragState.type === 'resize-bottom') {
+                            const newEndMin = Math.round(rawMin / 15) * 15;
+                            const newDuration = Math.max(15, newEndMin - dragState.originalStartMin);
+
+                            // Update Locals
+                            dragState.currentDuration = newDuration; // Update Ref/State object directly? No, setState below.
+                            currentDuration = newDuration;
+                            currentStartMin = dragState.originalStartMin;
+                        } else if (dragState.type === 'resize-top') {
+                            let newStart = Math.round(rawMin / 15) * 15;
+                            const originalEnd = dragState.originalStartMin + dragState.originalDuration;
+                            let newDur = originalEnd - newStart;
+
+                            if (newDur < 15) {
+                                newDur = 15;
+                                newStart = originalEnd - 15;
+                            }
+                            currentDuration = newDur;
+                            currentStartMin = newStart;
                         }
-                        currentStartMin = Math.round(rawMin / 15) * 15;
-                        currentStartMin = Math.max(0, Math.min(24 * 60 - 15, currentStartMin)); // Clamp
                     }
                 }
 
-                setDragState(prev => prev ? ({ ...prev, currentDate: targetDate, currentSection: targetSection, currentStartMin }) : null);
+                setDragState(prev => prev ? ({
+                    ...prev,
+                    currentDate: targetDate,
+                    currentSection: targetSection,
+                    currentStartMin,
+                    currentDuration
+                }) : null);
             }
         };
 
