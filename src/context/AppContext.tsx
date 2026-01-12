@@ -52,9 +52,7 @@ export const AppContext = createContext<{
 
     navigateToTask: (targetId: string, openForEdit?: boolean, forcedView?: string) => void;
     navigateBack: () => void;
-    navigateForward: () => void;
     canNavigateBack: boolean;
-    canNavigateForward: boolean;
 
     toast: { msg: string, type?: 'info' | 'error', undo?: () => void, onClick?: () => void, actionLabel?: string } | null;
     setToast: (t: any) => void;
@@ -323,7 +321,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const [historyStack, setHistoryStack] = useState<HistoryRecord[]>([]);
     const [redoStack, setRedoStack] = useState<HistoryRecord[]>([]);
     const [navStack, setNavStack] = useState<NavRecord[]>([]);
-    const [navForwardStack, setNavForwardStack] = useState<NavRecord[]>([]);
 
     const tasksRef = useRef<TaskData[]>([]);
     const [dragState, setDragState] = useState<DragState>({ isDragging: false, draggedId: null, originalDepth: 0, dragOffsetX: 0, dropIndex: null, dropDepth: 0, indicatorTop: 0, indicatorLeft: 0, indicatorWidth: 0, ghostPosition: { x: 0, y: 0 }, anchorTaskIndex: null });
@@ -1060,16 +1057,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 if (e.shiftKey) redo();
                 else undo();
             }
-
-            // Navigation Back/Forward
-            if ((e.metaKey || e.ctrlKey) && e.key === '[') {
-                e.preventDefault();
-                navigateBack();
-            }
-            if ((e.metaKey || e.ctrlKey) && e.key === ']') {
-                e.preventDefault();
-                navigateForward();
-            }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
@@ -1113,7 +1100,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Save current state including editingTaskId for proper back navigation
         setNavStack(prev => [...prev, { view, focusedId: focusedTaskId, editingId: editingTaskId }]);
-        setNavForwardStack([]); // New navigation clears forward history
         setView(targetView);
         setFocusedTaskId(targetId);
 
@@ -1132,10 +1118,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const navigateBack = () => {
         if (navStack.length === 0) return;
         const last = navStack[navStack.length - 1];
-
-        // Push current state to Forward Stack
-        setNavForwardStack(prev => [...prev, { view, focusedId: focusedTaskId, editingId: editingTaskId }]);
-
         setNavStack(prev => prev.slice(0, -1));
 
         // Restore view and focus
@@ -1144,26 +1126,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Open the task in edit mode - prioritize editingId if it was saved
         const taskToEdit = last.editingId || last.focusedId;
-        if (taskToEdit) {
-            setTimeout(() => setEditingTaskId(taskToEdit), 150);
-        }
-    };
-
-    const navigateForward = () => {
-        if (navForwardStack.length === 0) return;
-        const next = navForwardStack[navForwardStack.length - 1];
-
-        // Push current state to Back Stack
-        setNavStack(prev => [...prev, { view, focusedId: focusedTaskId, editingId: editingTaskId }]);
-
-        setNavForwardStack(prev => prev.slice(0, -1));
-
-        // Restore view and focus
-        setView(next.view);
-        setFocusedTaskId(next.focusedId);
-
-        // Open the task in edit mode
-        const taskToEdit = next.editingId || next.focusedId;
         if (taskToEdit) {
             setTimeout(() => setEditingTaskId(taskToEdit), 150);
         }
@@ -3081,7 +3043,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     return (
         <AppContext.Provider value={{
-            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, navigateForward, canNavigateBack: navStack.length > 0, canNavigateForward: navForwardStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, expandedTaskIds, toggleExpansion,
+            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, expandedTaskIds, toggleExpansion,
             view, setView: setViewAndPersist,
             tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, leavingTaskIds, addLeavingTask, dismissLeavingTasks, initError,
             sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist, sidebarCollapsed, toggleSidebar,

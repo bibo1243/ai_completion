@@ -171,7 +171,7 @@ const SidebarNavItem = ({
 };
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast, deleteTask }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -216,18 +216,18 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     useClickOutside(popoverRef, () => setPopoverId(null));
 
     const handleImportGaaSchedule = async () => {
-        if (!confirm(language === 'zh' ? '確定要匯入 2025.12 的 GAA 日程資料嗎？' : 'Import 2025.12 from gaa_imported_schedule.json?')) return;
+        if (!confirm(language === 'zh' ? '確定要匯入所有行事曆資料嗎？' : 'Import all calendar events?')) return;
         try {
             const res = await fetch('/gaa_imported_schedule.json');
             if (!res.ok) throw new Error('File not found');
             const data = await res.json();
             const sourceTasks = data.tasks as any[];
 
-            // Filter 2025-December
-            const targetTasks = sourceTasks.filter(t => t.start_date && t.start_date.startsWith('2025-12'));
+            // Import all tasks without date filtering
+            const targetTasks = sourceTasks;
 
             if (targetTasks.length === 0) {
-                alert('No tasks found for 2025-12');
+                alert('No tasks found in file');
                 return;
             }
 
@@ -265,6 +265,34 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         } catch (e: any) {
             console.error(e);
             alert('Import failed: ' + e.message);
+        }
+    };
+
+    const handleClearSchedule = async () => {
+        const scheduleTag = tags.find((t: any) => t.name.toLowerCase() === 'schedule');
+        if (!scheduleTag) {
+            alert(language === 'zh' ? '找不到「Schedule」標籤' : 'Schedule tag not found');
+            return;
+        }
+
+        const tasksToDelete = tasks.filter((t: any) => t.tags.includes(scheduleTag.id));
+        if (tasksToDelete.length === 0) {
+            alert(language === 'zh' ? '沒有找到可刪除的行事曆任務' : 'No schedule tasks found to delete');
+            return;
+        }
+
+        if (!confirm(language === 'zh' ? `確定要刪除 ${tasksToDelete.length} 個行事曆任務嗎？此動作無法復原！` : `Delete ${tasksToDelete.length} schedule tasks? This cannot be undone!`)) return;
+
+        if (confirm(language === 'zh' ? '再次確認：這將會永久刪除這些任務！' : 'Double check: This will permanently delete these tasks!')) {
+            let count = 0;
+            // Use array of promises for potential speedup, though serial is safer for state stability if batching isn't supported
+            for (const t of tasksToDelete) {
+                await deleteTask(t.id);
+                count++;
+            }
+            if (setToast) setToast({ msg: `已刪除 ${count} 個行事曆任務`, type: 'info' });
+            else alert(language === 'zh' ? `已刪除 ${count} 個任務` : `Deleted ${count} tasks`);
+            setShowSettings(false);
         }
     };
 
@@ -1243,7 +1271,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     <Inbox size={12} /> {language === 'zh' ? '匯入收件匣整理清單' : 'Import Inbox Dump'}
                                 </button>
                                 <button onClick={handleImportGaaSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                    <Clock size={12} /> {language === 'zh' ? '匯入 2025.12 GAA 日程' : 'Import 2025.12 GAA Schedule'}
+                                    <Clock size={12} /> {language === 'zh' ? '匯入 GAA 行事曆' : 'Import GAA Calendar'}
+                                </button>
+                                <button onClick={handleClearSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-red-600">
+                                    <Trash2 size={12} /> {language === 'zh' ? '刪除已匯入行事曆' : 'Clear Imported Calendar'}
                                 </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
                             </div>
