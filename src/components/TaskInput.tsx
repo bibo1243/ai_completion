@@ -2986,11 +2986,11 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     onDeleteItem={deleteTag}
                                     multiSelect={true}
                                     theme={theme}
-                                    onSelect={async (id: string | null, newName?: string) => {
+                                    onSelect={async (id: string | null, newName?: string, parentId?: string | null) => {
                                         if (id) {
                                             setSelectedTags(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
                                         } else if (newName) {
-                                            const newId = await addTag(newName);
+                                            const newId = await addTag(newName, parentId ?? null);
                                             if (newId) setSelectedTags(prev => [...prev, newId]);
                                         }
                                     }}

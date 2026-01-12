@@ -211,7 +211,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     else newOrderValue = currentOrder + 10000;
                     const promptTag = tags.find(tg => tg.name.toLowerCase() === 'prompt');
                     const newData: any = { title: '', parent_id: parentId, status: currentTask.data.status, tags: view === 'prompt' && promptTag ? [promptTag.id] : currentTask.data.tags, color: currentTask.data.color, start_date: currentTask.data.start_date, order_index: newOrderValue, view_orders: { [view]: newOrderValue } };
-                    addTask(newData).then(newId => { setEditingTaskId(newId); });
+                    addTask(newData).then(newId => { setPendingFocusTaskId(newId); setSelectedTaskIds([]); });
                 } else {
                     // No task selected - create new task at the end based on current view
                     const today = new Date().toISOString().split('T')[0];
@@ -279,8 +279,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     }
 
                     addTask(newData).then(newId => {
-                        setEditingTaskId(newId);
-                        setFocusedTaskId(newId);
+                        setPendingFocusTaskId(newId);
+                        setSelectedTaskIds([]);
                     });
                 }
             } else if ((e.key === 'Delete' || e.key === 'Backspace') && !editingTaskId) {
@@ -304,8 +304,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
     }, [effectiveVisibleTasks, focusedTaskId, expandedTaskIds, editingTaskId, selectionAnchor, addTask, setEditingTaskId, setFocusedTaskId, effectiveHandleSelection, view, tags, selectedTaskIds, batchDeleteTasks, batchUpdateTasks, duplicateTasks]);
 
-    const isReviewView = view === 'waiting' || view === 'prompt' || view === 'logbook' || view === 'log';
-    const pendingReviewCount = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at).length : 0;
+    const isReviewView = false; // Disable review view logic
+    const pendingReviewCount = 0;
 
     const handleDragOver = (e: React.DragEvent) => {
         if (view === 'focus' || view === 'upcoming' || view === 'recent') return;
@@ -334,11 +334,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         let anchorTaskIndex = closestIndex;  // The task the indicator is "attached" to
         if (closestRect) { const centerY = closestRect.top + closestRect.height / 2; if (clientY > centerY) { if (closestIndex < effectiveVisibleTasks.length) targetDropIndex = closestIndex + 1; /* anchorTaskIndex stays at closestIndex - indicator is at BOTTOM of this task */ } else { /* anchorTaskIndex stays at closestIndex - indicator is at TOP of this task */ } }
 
-        // Block dropping into or reordering within the Review Zone
-        if (isReviewView && targetDropIndex <= pendingReviewCount) {
-            updateDropState({ dropIndex: null, anchorTaskIndex: null });
-            return;
-        }
+
 
         const virtualLeft = x - dragState.dragOffsetX + (dragState.originalDepth * INDENT_SIZE);
         let targetDepth = Math.floor(virtualLeft / INDENT_SIZE);
@@ -376,8 +372,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     const getIndicatorColor = (): TaskColor => { if (dragState.dropIndex === null || dragState.dropIndex === 0) return 'blue'; const prevTask = effectiveVisibleTasks[dragState.dropIndex - 1]; return prevTask?.data.color || 'blue'; };
 
-    const pendingReview = isReviewView ? effectiveVisibleTasks.filter(t => !t.data.reviewed_at) : [];
-    const mainTasks = isReviewView ? effectiveVisibleTasks.filter(t => !!t.data.reviewed_at) : effectiveVisibleTasks;
+    const pendingReview: typeof effectiveVisibleTasks = [];
+    const mainTasks = effectiveVisibleTasks;
 
     // Build "Leaving Tasks" for inbox view - tasks that no longer match inbox criteria but should still be shown temporarily
     const leavingFlatTasks = useMemo(() => {
@@ -707,14 +703,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 : (
                     <div className="relative group">
                         <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
-                        {isReviewView && !item.data.reviewed_at && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); reviewTask(item.data.id); }}
-                                className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 px-3 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-full shadow-lg hover:bg-indigo-700 transition-all flex items-center gap-1"
-                            >
-                                <Check size={10} /> 審核通過
-                            </button>
-                        )}
                     </div>
                 )
             }
@@ -768,24 +756,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     </div>
                 )}
 
-                {isReviewView && pendingReview.length > 0 && (
-                    <div className="mb-12">
-                        <div className="flex items-center gap-2 mb-4 px-2">
-                            <h3 className="text-[11px] font-bold text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded">待審核專區 ({pendingReview.length})</h3>
-                            <div className="flex-1 h-px bg-indigo-100"></div>
-                        </div>
-                        <div className="bg-indigo-50/20 rounded-2xl p-4 border border-indigo-100/50">
-                            {renderTaskGroup(pendingReview)}
-                        </div>
-                    </div>
-                )}
 
-                {isReviewView && mainTasks.length > 0 && pendingReview.length > 0 && (
-                    <div className="flex items-center gap-2 mt-8 mb-4 px-2">
-                        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-2 py-0.5">已審核列表 ({mainTasks.length})</h3>
-                        <div className="flex-1 h-px bg-gray-100"></div>
-                    </div>
-                )}
 
                 {/* Today view with date separators */}
                 {view === 'today' ? (

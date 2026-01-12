@@ -1,13 +1,14 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { isOverdue, isToday } from '../utils';
 import { SearchModal } from './SearchModal';
 import { GOALS_2026_DATA } from '../data/goals2026';
+import { INBOX_DUMP_DATA } from '../data/inbox_dump';
 
 const TAG_COLORS = [
     '#6366f1', // indigo
@@ -214,7 +215,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     useClickOutside(settingsRef, () => setShowSettings(false));
     useClickOutside(popoverRef, () => setPopoverId(null));
 
-    // Keyboard shortcut for search (Cmd+K)
+    // Keyboard shortcut for search (Cmd+K) and ESC to close popover
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // Cmd+Shift+F or Cmd+Shift+S to open search
@@ -223,13 +224,17 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 e.stopPropagation();
                 setSearchOpen(true);
             }
-            if (e.key === 'Escape' && searchOpen) {
-                setSearchOpen(false);
+            if (e.key === 'Escape') {
+                if (popoverId) {
+                    setPopoverId(null);
+                } else if (searchOpen) {
+                    setSearchOpen(false);
+                }
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [searchOpen]);
+    }, [searchOpen, popoverId]);
 
     useEffect(() => {
         if (isAddingTag && newTagInputRef.current) {
@@ -247,55 +252,117 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     }, [isAddingTag, editingTagId]);
 
     const handleImport2026Goals = async () => {
-        if (!confirm('匯入 2026 年度目標？')) return;
+        if (!confirm('匯入 2026 年度目標 (九宮格版)？')) return;
         try {
-            // 1. Create Project Task
+            // 1. Get/Create Tags
             const projectTag = tags.find((t: any) => t.name.toLowerCase() === 'project' || t.name === '專案');
-            const goalTagIds = projectTag ? [projectTag.id] : [];
 
-            const projectId = await addTask({
-                title: GOALS_2026_DATA.title,
-                description: GOALS_2026_DATA.description,
-                tags: goalTagIds,
-                status: 'active'
-            });
+            // Helper to get or create tag
+            const getOrCreateTag = async (name: string) => {
+                let tag = tags.find((t: any) => t.name === name);
+                if (!tag) {
+                    const id = await addTag(name, null);
+                    return id;
+                }
+                return tag.id;
+            }
 
-            if (!projectId) return;
+            let projectTagId = projectTag?.id;
+            if (!projectTagId) projectTagId = await getOrCreateTag('Project');
 
-            // 2. Add Core Goals as Tasks
-            const promises = GOALS_2026_DATA.coreGoals.map(async (goal) => {
-                const goalTaskId = await addTask({
-                    title: goal.title,
-                    description: goal.description,
-                    parent_id: projectId,
-                    status: 'active'
-                }, [], undefined); // explicit args to avoid mismatch
-                if (goalTaskId && goal.subtasks) {
-                    await batchAddTasks(goal.subtasks.map(s => ({
+            const annualGoalTagId = await getOrCreateTag('2026年度目標');
+
+            // Define Categories Map matching AnnualPlanView GRID_CELLS
+            const CATEGORY_MAP: Record<string, string> = {
+                learning: '學習、成長',
+                experience: '體驗、挑戰',
+                leisure: '休閒、放鬆',
+                work: '工作、事業',
+                core: '核心詞',
+                family: '家庭、生活',
+                social: '人際、社群',
+                finance: '財務、理財',
+                health: '健康、身體',
+            };
+
+            // 2. Iterate Projects
+            const goalsData = GOALS_2026_DATA as any;
+
+            const promises = (goalsData.projects || []).map(async (proj: any) => {
+                const categoryTagName = CATEGORY_MAP[proj.category];
+                let categoryTagId = null;
+                if (categoryTagName) {
+                    categoryTagId = await getOrCreateTag(categoryTagName);
+                }
+
+                const taskTags = [projectTagId, annualGoalTagId];
+                if (categoryTagId) taskTags.push(categoryTagId);
+
+                const taskId = await addTask({
+                    title: proj.title,
+                    description: proj.description,
+                    tags: taskTags,
+                    status: 'active',
+                    color: proj.color
+                });
+
+                if (taskId && proj.subtasks) {
+                    await batchAddTasks(proj.subtasks.map((s: any) => ({
                         title: s.title,
-                        parent_id: goalTaskId,
+                        parent_id: taskId,
                         status: 'active'
                     })));
                 }
             });
 
-            // 3. Add Life Intentions
-            const intentTaskId = await addTask({
-                title: "人生意圖 (Thinking & Being)",
-                parent_id: projectId,
-                status: 'active'
-            }, [], undefined);
-            if (intentTaskId) {
-                await batchAddTasks(GOALS_2026_DATA.lifeIntentions.sections.map(s => ({
-                    title: s.title,
-                    description: s.description,
-                    parent_id: intentTaskId,
-                    status: 'active'
-                })));
+            await Promise.all(promises);
+            setToast({ msg: "匯入成功！已建立九宮格目標。", type: 'info' });
+
+        } catch (e) {
+            console.error(e);
+            setToast({ msg: "匯入失敗", type: 'error' });
+        }
+    };
+
+    const handleImportInboxDump = async () => {
+        if (!confirm('匯入收件匣雜事清單 (共' + INBOX_DUMP_DATA.length + '項)？')) return;
+        try {
+            // Helper to get or create tag
+            const getOrCreateTag = async (name: string) => {
+                name = name.trim();
+                if (!name) return null;
+                // If tag starts with @ remove it for search but maybe keep format?
+                // The provided data uses tags like "@組織發展會議". Let's simply process them.
+                if (name.startsWith('@')) name = name.substring(1);
+
+                let tag = tags.find((t: any) => t.name === name || t.name === '@' + name);
+                if (!tag) {
+                    const id = await addTag(name, null);
+                    return id;
+                }
+                return tag.id;
             }
 
+            const promises = INBOX_DUMP_DATA.map(async (item: any) => {
+                // Process Tags
+                const taskTags = [];
+                for (const tagName of item.tags) {
+                    const tagId = await getOrCreateTag(tagName);
+                    if (tagId) taskTags.push(tagId);
+                }
+
+                await addTask({
+                    title: item.title,
+                    description: item.description,
+                    tags: taskTags,
+                    status: 'active', // All to Inbox (active with no project parent)
+                    start_date: item.date || undefined
+                });
+            });
+
             await Promise.all(promises);
-            setToast({ msg: "匯入成功！", type: 'info' });
+            setToast({ msg: `成功匯入 ${INBOX_DUMP_DATA.length} 項目任務`, type: 'info' });
+
         } catch (e) {
             console.error(e);
             setToast({ msg: "匯入失敗", type: 'error' });
@@ -616,7 +683,11 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
             e.stopPropagation();
-            if (confirm('Delete this tag?')) handleDeleteTag(id);
+            // Use setTimeout to prevent keyboard event from auto-canceling the dialog
+            const tagId = id; // capture id
+            setTimeout(() => {
+                if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tagId);
+            }, 10);
         }
     };
 
@@ -695,7 +766,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             const rect = e.currentTarget.getBoundingClientRect();
-                                            setPopoverPosition({ top: rect.bottom + 4, left: rect.right - 208 }); // 208 = w-52 (13rem = 208px)
+                                            const popoverHeight = 180; // Approximate height of popover
+                                            const viewportHeight = window.innerHeight;
+                                            // Check if popover would be clipped at bottom
+                                            const wouldClip = rect.bottom + 4 + popoverHeight > viewportHeight;
+                                            const top = wouldClip
+                                                ? rect.top - popoverHeight - 4 // Position above
+                                                : rect.bottom + 4; // Position below
+                                            setPopoverPosition({ top: Math.max(8, top), left: Math.max(8, rect.right - 208) }); // 208 = w-52 (13rem = 208px)
                                             setPopoverId(popoverId === tag.id ? null : tag.id);
                                         }}
                                         className="p-0.5 hover:bg-gray-200 rounded text-gray-400"
@@ -743,7 +821,17 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                         <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] text-theme-secondary font-medium">
                                             <Edit2 size={11} /> {t('rename')}
                                         </button>
-                                        <button onClick={() => { if (confirm(t('deleteTagConfirm'))) handleDeleteTag(tag.id); }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-red-50 rounded text-[11px] text-red-600 font-medium">
+                                        <button onClick={(e) => {
+                                            e.stopPropagation();
+                                            const tagId = tag.id;
+                                            setPopoverId(null); // Close popover first
+                                            // Use setTimeout to ensure popover closes before confirm dialog
+                                            setTimeout(() => {
+                                                if (confirm(t('deleteTagConfirm'))) {
+                                                    handleDeleteTag(tagId);
+                                                }
+                                            }, 10);
+                                        }} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-red-50 rounded text-[11px] text-red-600 font-medium">
                                             <Trash2 size={11} /> {t('deleteTag')}
                                         </button>
                                     </div>
@@ -861,6 +949,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     <NavItem id="waiting" label="將來/靈感" normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" acceptsDrop={true} />
                     <NavItem id="journal" label="知識庫" normalCount={counts.note} active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" acceptsDrop={true} />
                     <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Lightbulb} color="#fbbf24" acceptsDrop={true} />
+                    <NavItem id="worklog" label="工作日誌" active={view === 'worklog'} icon={FileText} color="#0ea5e9" />
                 </div>
 
                 {/* Logbook, Recent & Trash - Separated */}
@@ -1096,6 +1185,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 </button>
                                 <button onClick={handleImport2026Goals} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
                                     <Target size={12} /> {language === 'zh' ? '匯入 2026 年度目標' : 'Import 2026 Goals'}
+                                </button>
+                                <button onClick={handleImportInboxDump} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Inbox size={12} /> {language === 'zh' ? '匯入收件匣整理清單' : 'Import Inbox Dump'}
                                 </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
                             </div>

@@ -28,6 +28,7 @@ interface ContinuousWeekCalendarProps {
 export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarProps) => {
     const {
         tasks,
+        tags,
         batchUpdateTasks,
         addTask,
         setEditingTaskId,
@@ -410,6 +411,8 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                         const theme = COLOR_THEMES[rootTask.color] || COLOR_THEMES[task.color] || COLOR_THEMES.gray;
                                                         const isAllDay = task.is_all_day;
                                                         const isSelected = selectedTaskIds.includes(task.id);
+                                                        const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
+                                                        const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
 
                                                         // 樣式邏輯：邊框改細改淡 (使用 hex alpha)
                                                         // 整日：邊框極淡 (20% opacity)
@@ -419,6 +422,10 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                         const borderStyle = isSelected
                                                             ? `2px solid ${theme.color}`
                                                             : `1px solid ${borderColor}`;
+
+                                                        const bgColor = isScheduleTask
+                                                            ? `${theme.color}40` // Darker/Distinct background for schedule
+                                                            : (isAllDay ? undefined : `${theme.color}20`);
 
                                                         return (
                                                             <div
@@ -481,10 +488,11 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                                                                 `}
                                                                 style={{
                                                                     border: borderStyle,
-                                                                    backgroundColor: isAllDay ? undefined : `${theme.color}20`, // Faint background
+                                                                    backgroundColor: bgColor, // Faint background
                                                                     color: isAllDay ? undefined : theme.color,    // Text color follows border/theme
                                                                     height: '20px',
-                                                                    lineHeight: '18px'
+                                                                    lineHeight: '18px',
+                                                                    ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                                                 }}
                                                             >
                                                                 {task.title || '無標題'}

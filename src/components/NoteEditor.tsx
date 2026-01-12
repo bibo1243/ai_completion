@@ -359,11 +359,13 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     const { isRecording, recordingTime, addMarker, currentRecordingId } = useContext(RecordingContext);
     const recordingTimeRef = useRef(recordingTime);
     const currentRecordingIdRef = useRef(currentRecordingId);
+    const isRecordingRef = useRef(isRecording);
 
     useEffect(() => {
         recordingTimeRef.current = recordingTime;
         currentRecordingIdRef.current = currentRecordingId;
-    }, [recordingTime, currentRecordingId]);
+        isRecordingRef.current = isRecording;
+    }, [recordingTime, currentRecordingId, isRecording]);
 
 
 
@@ -508,6 +510,217 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                 renderLabel({ node }) {
                     return node.attrs.label ?? node.attrs.id;
                 },
+                suggestion: {
+                    char: '@',
+                    allowSpaces: false,
+                    items: ({ query }: { query: string }) => {
+                        const tags = tagsRef.current;
+                        if (!query) return tags.slice(0, 10);
+                        const lowerQuery = query.toLowerCase();
+                        const filtered = tags.filter(tag =>
+                            tag.name.toLowerCase().includes(lowerQuery)
+                        );
+                        return filtered.slice(0, 10);
+                    },
+                    render: () => {
+                        let popup: HTMLDivElement | null = null;
+                        let selectedIndex = 0;
+                        let items: any[] = [];
+                        let component: {
+                            onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+                            updateItems: (newItems: any[], query: string) => void;
+                            selectItem: (index: number) => void;
+                            command: ((item: any) => void) | null;
+                            query: string;
+                            range: { from: number; to: number } | null;
+                        } | null = null;
+
+                        return {
+                            onStart: (props: any) => {
+                                isMentionOpenRef.current = true;
+                                items = props.items;
+                                selectedIndex = 0;
+
+                                // Create popup container
+                                popup = document.createElement('div');
+                                popup.className = 'mention-suggestion-popup fixed z-[99999] bg-white dark:bg-gray-800 shadow-lg rounded-lg border border-gray-200 dark:border-gray-700 py-1 min-w-[200px] max-w-[300px] max-h-[300px] overflow-y-auto';
+                                document.body.appendChild(popup);
+
+                                // Store command, query, and range for later use
+                                component = {
+                                    command: props.command,
+                                    query: props.query,
+                                    range: props.range, // {from: number, to: number} - position of @query
+                                    onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+                                        if (event.key === 'ArrowDown') {
+                                            event.preventDefault();
+                                            const maxIndex = items.length > 0 ? items.length : 0;
+                                            // +1 for "create new" option if query exists
+                                            const hasCreateOption = component?.query && component.query.trim().length > 0;
+                                            const totalItems = hasCreateOption ? maxIndex + 1 : maxIndex;
+                                            selectedIndex = (selectedIndex + 1) % totalItems;
+                                            component?.updateItems(items, component.query);
+                                            return true;
+                                        }
+                                        if (event.key === 'ArrowUp') {
+                                            event.preventDefault();
+                                            const hasCreateOption = component?.query && component.query.trim().length > 0;
+                                            const totalItems = hasCreateOption ? items.length + 1 : items.length;
+                                            selectedIndex = (selectedIndex - 1 + totalItems) % totalItems;
+                                            component?.updateItems(items, component.query);
+                                            return true;
+                                        }
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            component?.selectItem(selectedIndex);
+                                            return true;
+                                        }
+                                        if (event.key === 'Escape') {
+                                            event.preventDefault();
+                                            return true;
+                                        }
+                                        return false;
+                                    },
+                                    updateItems: (newItems: any[], query: string) => {
+                                        items = newItems;
+                                        if (!popup) return;
+
+                                        const hasCreateOption = query && query.trim().length > 0 && !newItems.some(t => t.name.toLowerCase() === query.toLowerCase());
+
+                                        popup.innerHTML = '';
+
+                                        if (newItems.length === 0 && !hasCreateOption) {
+                                            popup.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">找不到標籤</div>';
+                                            return;
+                                        }
+
+                                        newItems.forEach((item, index) => {
+                                            const div = document.createElement('div');
+                                            div.className = `px-3 py-2 cursor-pointer flex items-center gap-2 text-sm ${index === selectedIndex ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}`;
+                                            div.innerHTML = `
+                                                <span class="w-2 h-2 rounded-full" style="background-color: ${item.color || '#6366f1'}"></span>
+                                                <span class="truncate">${item.name}</span>
+                                            `;
+                                            div.addEventListener('mouseenter', () => {
+                                                selectedIndex = index;
+                                                component?.updateItems(items, query);
+                                            });
+                                            div.addEventListener('mousedown', (e) => {
+                                                e.preventDefault();
+                                                component?.selectItem(index);
+                                            });
+                                            popup!.appendChild(div);
+                                        });
+
+                                        // Add "create new tag" option
+                                        if (hasCreateOption) {
+                                            const createIndex = newItems.length;
+                                            const createDiv = document.createElement('div');
+                                            createDiv.className = `px-3 py-2 cursor-pointer flex items-center gap-2 text-sm border-t border-gray-100 dark:border-gray-700 ${selectedIndex === createIndex ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`;
+                                            createDiv.innerHTML = `
+                                                <span class="text-green-500">+</span>
+                                                <span>新增標籤 "<strong>${query}</strong>"</span>
+                                            `;
+                                            createDiv.addEventListener('mouseenter', () => {
+                                                selectedIndex = createIndex;
+                                                component?.updateItems(items, query);
+                                            });
+                                            createDiv.addEventListener('mousedown', (e) => {
+                                                e.preventDefault();
+                                                component?.selectItem(createIndex);
+                                            });
+                                            popup!.appendChild(createDiv);
+                                        }
+                                    },
+                                    selectItem: async (index: number) => {
+                                        const hasCreateOption = component?.query && component.query.trim().length > 0 && !items.some((t: any) => t.name.toLowerCase() === component!.query.toLowerCase());
+
+                                        // Save command and range references before any async operation
+                                        const savedCommand = component?.command;
+                                        const savedRange = component?.range;
+                                        const currentEditor = editorRef.current;
+
+                                        if (index < items.length) {
+                                            // Select existing tag - synchronous, command handles range correctly
+                                            const item = items[index];
+                                            if (savedCommand) {
+                                                savedCommand({ id: item.id, label: item.name });
+                                            }
+                                        } else if (hasCreateOption && onCreateTagRef.current && savedRange && currentEditor) {
+                                            // Create new tag - async operation needs manual range handling
+                                            const queryToCreate = component!.query.trim();
+
+                                            // Save the range before async - this is the position of "@query"
+                                            const { from, to } = savedRange;
+
+                                            // Close popup before async operation
+                                            if (popup) {
+                                                popup.remove();
+                                                popup = null;
+                                            }
+                                            isMentionOpenRef.current = false;
+
+                                            // Create the tag asynchronously
+                                            const newTag = await onCreateTagRef.current(queryToCreate);
+                                            if (newTag && editorRef.current) {
+                                                // Manually delete @query and insert mention node
+                                                // Because command loses range context after async
+                                                editorRef.current.chain()
+                                                    .focus()
+                                                    .deleteRange({ from, to })
+                                                    .insertContentAt(from, {
+                                                        type: 'mention',
+                                                        attrs: {
+                                                            id: newTag.id,
+                                                            label: newTag.name,
+                                                        },
+                                                    })
+                                                    .run();
+                                            }
+                                        }
+                                    }
+                                };
+
+                                component.updateItems(items, props.query);
+
+                                // Position popup near cursor
+                                const rect = props.clientRect?.();
+                                if (rect && popup) {
+                                    popup.style.left = `${rect.left}px`;
+                                    popup.style.top = `${rect.bottom + 5}px`;
+                                }
+                            },
+                            onUpdate: (props: any) => {
+                                items = props.items;
+                                if (component) {
+                                    component.query = props.query;
+                                    component.range = props.range; // Update range as query changes
+                                    // Reset selection when items change
+                                    selectedIndex = 0;
+                                    component.updateItems(items, props.query);
+                                }
+
+                                // Reposition popup
+                                const rect = props.clientRect?.();
+                                if (rect && popup) {
+                                    popup.style.left = `${rect.left}px`;
+                                    popup.style.top = `${rect.bottom + 5}px`;
+                                }
+                            },
+                            onKeyDown: (props: any) => {
+                                return component?.onKeyDown(props) ?? false;
+                            },
+                            onExit: () => {
+                                isMentionOpenRef.current = false;
+                                if (popup) {
+                                    popup.remove();
+                                    popup = null;
+                                }
+                                component = null;
+                            },
+                        };
+                    },
+                },
             }),
             KeyboardNavigation(onExit, handleEnter),
         ],
@@ -624,12 +837,57 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             }
         };
 
-        // Track IME composition state (for Chinese/Japanese input methods)
+        // Track cursor position when IME composition starts
+        let compositionStartPos: number | null = null;
+
         const handleCompositionStart = () => {
             (window as any).__imeComposing = true;
+            // Record cursor position at start of composition
+            if (editor) {
+                compositionStartPos = editor.state.selection.from;
+            }
         };
         const handleCompositionEnd = () => {
             (window as any).__imeComposing = false;
+
+            // After IME composition ends, apply timestamp mark to the composed text
+            if (isRecording && recordingTimeRef.current >= 0 && editor && compositionStartPos !== null) {
+                const currentTime = recordingTimeRef.current;
+                const recId = currentRecordingIdRef.current;
+                const startPos = compositionStartPos;
+                compositionStartPos = null; // Reset for next composition
+
+                // Short delay to ensure the composed text is fully inserted into the editor DOM
+                setTimeout(() => {
+                    if (editor && isRecordingRef.current) {
+                        const { selection } = editor.state;
+                        const endPos = selection.from; // Current cursor is at end of composed text
+
+                        // Only proceed if we have a valid range (text was actually inserted)
+                        if (endPos > startPos) {
+                            // Check if user is typing a mention
+                            const $from = selection.$from;
+                            const textBefore = $from.parent.textContent.substring(0, $from.parentOffset);
+                            const lastAtIndex = textBefore.lastIndexOf('@');
+                            if (lastAtIndex !== -1) {
+                                const textAfterAt = textBefore.substring(lastAtIndex + 1);
+                                if (!textAfterAt.includes(' ')) {
+                                    return; // Skip for mentions
+                                }
+                            }
+
+                            // Apply timestamp mark to the entire composed text range
+                            editor.chain()
+                                .setTextSelection({ from: startPos, to: endPos })
+                                .setMark('timestamp', { time: currentTime, recordingId: recId })
+                                .setTextSelection(endPos) // Restore cursor to end
+                                .run();
+                        }
+                    }
+                }, 10);
+            } else {
+                compositionStartPos = null; // Reset even if not recording
+            }
         };
 
         // Get the editor DOM element and attach composition listeners

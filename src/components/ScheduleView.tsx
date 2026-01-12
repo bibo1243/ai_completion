@@ -15,6 +15,7 @@ const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
 export const ScheduleView = () => {
     const {
         tasks,
+        tags,
         calendarDate,
         setCalendarDate,
         setEditingTaskId,
@@ -1011,6 +1012,8 @@ export const ScheduleView = () => {
                                     const rootTask = getRootTask(task, tasks);
                                     const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                     const isSelected = selectedTaskIds.includes(task.id);
+                                    const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
+                                    const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
 
                                     return (
                                         <div
@@ -1026,12 +1029,15 @@ export const ScheduleView = () => {
                                                 height: getYFromMinutes(start + dur) - getYFromMinutes(start),
                                                 left: style.left,
                                                 width: style.width,
-                                                backgroundColor: isSelected ? theme.color + '40' : theme.color + '15',
+                                                backgroundColor: isScheduleTask
+                                                    ? `${theme.color}40` // Darker for schedule
+                                                    : (isSelected ? theme.color + '40' : theme.color + '15'),
                                                 borderColor: theme.color + '50',
                                                 color: theme.color,
                                                 zIndex: 10,
                                                 boxShadow: '2px 2px 3px rgba(0,0,0,0.06)',
-                                                '--tw-ring-color': isSelected ? theme.color + '60' : undefined
+                                                '--tw-ring-color': isSelected ? theme.color + '60' : undefined,
+                                                ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                             } as React.CSSProperties}
                                         >
                                             <div className="font-extralight text-[11px] truncate leading-normal pointer-events-none">{task.title || '無標題'}</div>

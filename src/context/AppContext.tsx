@@ -1152,6 +1152,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const somedayTagId = inspirationTagId; // Alias check (sometimes separated)
         // Find #prompt keyword tag (separate from 'prompt' tag for prompts library)
         const hashPromptTagId = tags.find(tg => tg.name === '#prompt')?.id;
+        const scheduleTagId = helperFindTagId(['schedule', '行程']);
 
         if (currentView === 'schedule') {
             return currentTasks.filter(t => (!!t.due_date || !!t.start_date) && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => { const dateA = new Date(a.start_date || a.due_date || 0).getTime(); const dateB = new Date(b.start_date || b.due_date || 0).getTime(); return dateA - dateB; }).map((t, index) => ({ data: t, depth: 0, hasChildren: false, isExpanded: false, path: [], index }));
@@ -1207,7 +1208,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         // Also check if valid title
                         if (!t.title) console.log(`[Inbox Debug] Hidden task (ID: ${t.id}): Empty title`);
                     });
-                    return (t: TaskData) => t.status === 'inbox' && !t.parent_id;
+                    return (t: TaskData) => {
+                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                        return t.status === 'inbox' && !t.parent_id;
+                    };
                 case 'all':
                     // Inbox: 根任務沒有日期的任務（及其子任務）
                     return (t: TaskData) => {
@@ -1221,7 +1225,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         if (journalTagId && t.tags.includes(journalTagId)) return false;
                         if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
                         if (noteTagId && t.tags.includes(noteTagId)) return false;
-                        if (somedayTagId && t.tags.includes(somedayTagId)) return false;
+                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+
+                        // Check someday by tag NAME (not just single ID) to handle multiple tags with similar names
+                        const hasSomedayTagByName = t.tags.some(tagId => {
+                            const tagObj = tags.find(tg => tg.id === tagId);
+                            if (!tagObj) return false;
+                            const name = tagObj.name.trim().toLowerCase();
+                            return name === 'someday' || name === 'inspiration' || name === '靈感' || name === '將來/靈感';
+                        });
+
+                        if (hasSomedayTagByName) {
+                            return false;
+                        }
 
                         // Exclude if task has #prompt keyword tag
                         if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
@@ -1285,6 +1301,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 case 'today': return (t: TaskData) => {
                     // Skip deleted/logged tasks
                     if (t.status === 'logged' || t.status === 'deleted') return false;
+                    if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
 
                     // Helper to check if a task has ANY date set (not just today)
                     const hasDateSet = (task: TaskData): boolean => {
@@ -1335,9 +1352,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     if (t.status === 'deleted' || t.status === 'logged') return false;
                     const isWaitingStatus = t.status === 'waiting';
                     const isSomedayStatus = t.status === 'someday';
-                    const isInspiration = inspirationTagId && t.tags.includes(inspirationTagId);
-                    const hasSomedayTag = somedayTagId && t.tags.includes(somedayTagId);
-                    return isWaitingStatus || isSomedayStatus || isInspiration || hasSomedayTag;
+
+                    // Check someday by tag NAME (not just single ID) to handle multiple tags with similar names
+                    const hasSomedayTagByName = t.tags.some(tagId => {
+                        const tagObj = tags.find(tg => tg.id === tagId);
+                        if (!tagObj) return false;
+                        const name = tagObj.name.trim().toLowerCase();
+                        return name === 'someday';
+                    });
+
+                    return isWaitingStatus || isSomedayStatus || hasSomedayTagByName;
                 };
                 case 'journal': return (t: TaskData) => {
                     if (!journalTagId) return false;
@@ -1448,7 +1472,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return flatten(roots);
     }, [tags]);
 
-    const visibleTasks = useMemo(() => { return calculateVisibleTasks(tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters); }, [tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters, calculateVisibleTasks]);
+    const visibleTasks = useMemo(() => { return calculateVisibleTasks(tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters); }, [tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters, calculateVisibleTasks, tags]);
 
     // Auto-initialize view_orders.today for tasks entering today view without a today order
     useEffect(() => {
@@ -1506,6 +1530,56 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const updates: { id: string; view_orders: any }[] = sorted.map((vt, index) => ({
             id: vt.data.id,
             view_orders: { ...(vt.data.view_orders || {}), today: maxOrder + 10000 * (index + 1) }
+        }));
+
+        // Update local state
+        setTasks(prev => {
+            const next = prev.map(t => {
+                const update = updates.find(u => u.id === t.id);
+                if (update) return { ...t, view_orders: update.view_orders };
+                return t;
+            });
+            tasksRef.current = next;
+            return next;
+        });
+
+        // Update database (batch)
+        updates.forEach(async ({ id, view_orders }) => {
+            if (supabaseClient) {
+                await supabaseClient.from('tasks').update({ view_orders }).eq('id', id);
+            }
+        });
+    }, [view, visibleTasks, supabaseClient]);
+
+    // Auto-initialize view_orders.waiting for tasks entering waiting view without a waiting order
+    useEffect(() => {
+        if (view !== 'waiting' || !supabaseClient) return;
+
+        // Find tasks in waiting view that don't have view_orders.waiting
+        let tasksNeedingWaitingOrder = visibleTasks.filter(vt => {
+            const t = vt.data;
+            return t.view_orders?.waiting === undefined;
+        });
+
+        if (tasksNeedingWaitingOrder.length === 0) return;
+
+        console.log('[Waiting] Initializing view_orders.waiting for', tasksNeedingWaitingOrder.length, 'tasks');
+
+        // Find max existing waiting order
+        let maxOrder = 0;
+        visibleTasks.forEach(vt => {
+            const order = vt.data.view_orders?.waiting;
+            if (order !== undefined && order > maxOrder) maxOrder = order;
+        });
+
+        // Assign new orders starting from max + 10000, sorted by created_at
+        const sorted = [...tasksNeedingWaitingOrder].sort((a, b) =>
+            a.data.created_at.localeCompare(b.data.created_at)
+        );
+
+        const updates: { id: string; view_orders: any }[] = sorted.map((vt, index) => ({
+            id: vt.data.id,
+            view_orders: { ...(vt.data.view_orders || {}), waiting: maxOrder + 10000 * (index + 1) }
         }));
 
         // Update local state
@@ -2862,7 +2936,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         );
 
         const projectTag = findTag(['project', '專案']);
-        const somedayTag = findTag(['someday', 'inspiration', '靈感', '將來/靈感']);
+        // Prioritize 'someday' tag for waiting view - don't match '靈感' here
+        const somedayTag = findTag(['someday']);
         const journalTag = findTag(['journal', 'note', '知識庫', '知識筆記']);
         const promptTag = findTag(['prompt', '提示詞']);
 

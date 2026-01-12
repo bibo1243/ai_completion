@@ -13,6 +13,7 @@ import { Mission72Manager } from './Mission72Manager';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { MobileTaskEditor } from './MobileTaskEditor';
 import { MatrixView } from './MatrixView';
+import { WorkLogView } from './WorkLogView';
 import { DragGhost } from './DragGhost';
 // import GTDGuide from './GTDGuide'; // Temporarily disabled
 
@@ -219,6 +220,8 @@ export const MainLayout = () => {
             <AnnualPlanView />
           ) : view === 'matrix' ? (
             <MatrixView />
+          ) : view === 'worklog' ? (
+            <WorkLogView />
           ) : (
             <div className="w-full md:w-[calc(100%-100px)] mx-auto mt-2 md:mt-8">
               <TaskList />
