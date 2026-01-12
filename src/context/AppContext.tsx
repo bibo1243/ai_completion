@@ -1303,6 +1303,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     if (t.status === 'logged' || t.status === 'deleted') return false;
                     if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
 
+                    // Exclude 'note' and 'Project' tags (and their children)
+                    const restrictedNames = ['note', 'project'];
+                    const restrictedTagIds = tags
+                        .filter(tg => restrictedNames.includes(tg.name.trim().toLowerCase()))
+                        .map(tg => tg.id);
+
+                    const isRestricted = (task: TaskData) => task.tags && task.tags.some(id => restrictedTagIds.includes(id));
+
+                    if (isRestricted(t)) return false;
+
                     // Helper to check if a task has ANY date set (not just today)
                     const hasDateSet = (task: TaskData): boolean => {
                         if (task.status === 'logged' || task.status === 'deleted') return false;
@@ -1314,31 +1324,33 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         return hasStartDate || hasDueDate || isCompletedToday;
                     };
 
-                    // Check if task itself has a date
-                    if (hasDateSet(t)) return true;
+                    const hasSelfDate = hasDateSet(t);
+                    let hasAncestralDate = false;
 
-                    // Check if any ancestor has a date (child inherits from parent)
-                    if (!t.parent_id) return false;
+                    // Walk up to check restrictions and date inheritance
+                    if (t.parent_id) {
+                        let currParentId: string | null = t.parent_id;
+                        const visited = new Set<string>();
+                        let depth = 0;
 
-                    let currParentId: string | null = t.parent_id;
-                    const visited = new Set<string>();
-                    // Limit depth to avoid infinite loops
-                    let depth = 0;
+                        while (currParentId && !visited.has(currParentId) && depth < 20) {
+                            visited.add(currParentId);
+                            const parent = currentTasks.find(p => p.id === currParentId);
 
-                    while (currParentId && !visited.has(currParentId) && depth < 20) {
-                        visited.add(currParentId);
-                        const parent = currentTasks.find(p => p.id === currParentId);
+                            // If parent not found or is strictly hidden (deleted/logged), stop
+                            if (!parent || parent.status === 'logged' || parent.status === 'deleted') return false;
 
-                        // If parent not found or is strictly hidden (deleted/logged), stop
-                        if (!parent || parent.status === 'logged' || parent.status === 'deleted') return false;
+                            // If parent has restricted tag, child is also excluded
+                            if (isRestricted(parent)) return false;
 
-                        if (hasDateSet(parent)) return true;
+                            if (hasDateSet(parent)) hasAncestralDate = true;
 
-                        currParentId = parent.parent_id || null;
-                        depth++;
+                            currParentId = parent.parent_id || null;
+                            depth++;
+                        }
                     }
 
-                    return false;
+                    return hasSelfDate || hasAncestralDate;
                 };
                 case 'waiting': return (t: TaskData) => {
                     // View Tag Filters
