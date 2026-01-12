@@ -1136,8 +1136,8 @@ export const ScheduleView = () => {
                                                     {task.start_time} - {task.end_time}
                                                 </div>
                                             )}
-                                            <div className="absolute top-0 left-0 w-full h-2 cursor-ns-resize z-20" onMouseDown={(e) => handleTaskMouseDown(e, task, day, 'resize-top', false)} />
-                                            <div className="absolute bottom-0 left-0 w-full h-2 cursor-ns-resize z-20" onMouseDown={(e) => handleTaskMouseDown(e, task, day, 'resize-bottom', false)} />
+                                            <div className="absolute top-0 left-0 w-full h-3 cursor-ns-resize z-50 hover:bg-black/5 transition-colors" onMouseDown={(e) => handleTaskMouseDown(e, task, day, 'resize-top', false)} />
+                                            <div className="absolute bottom-0 left-0 w-full h-3 cursor-ns-resize z-50 hover:bg-black/5 transition-colors" onMouseDown={(e) => handleTaskMouseDown(e, task, day, 'resize-bottom', false)} />
                                         </div>
                                     );
                                 })}
@@ -1218,7 +1218,7 @@ export const ScheduleView = () => {
 
                         return (
                             <div
-                                className="fixed rounded-xl border px-2 py-1.5 shadow-2xl overflow-hidden select-none flex flex-col z-[100] cursor-grabbing bg-white ring-2 ring-indigo-400/50"
+                                className={`fixed rounded-xl border px-2 py-1.5 shadow-2xl overflow-hidden select-none flex flex-col z-[100] bg-white ring-2 ring-indigo-400/50 ${dragState.type.startsWith('resize') ? 'cursor-ns-resize' : 'cursor-grabbing'}`}
                                 style={{
                                     top: Math.max(containerRect.top + DATE_HEADER_HEIGHT + allDayHeight + 4, topPos),
                                     height: durationH,
