@@ -260,7 +260,15 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
         for (let d = 1; d <= daysInMonth; d++) {
             const date = new Date(year, month, d);
             const isTodayDate = isSameDay(date, new Date());
-            const dayTasks = getTasksForDate(date);
+            const rawTasks = getTasksForDate(date);
+            const dayTasks = rawTasks.sort((a: any, b: any) => {
+                if (a.is_all_day && !b.is_all_day) return -1;
+                if (!a.is_all_day && b.is_all_day) return 1;
+                if (!a.is_all_day && !b.is_all_day) {
+                    return (a.start_time || '').localeCompare(b.start_time || '');
+                }
+                return 0;
+            });
             const holiday = getTaiwanHoliday(date);
             const lunar = getLunarDate(date);
             const isFlashing = placedDateFlash === date.toDateString();
@@ -300,20 +308,38 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
                     <div className="space-y-0.5 overflow-hidden">
                         {dayTasks.slice(0, 3).map((task: any) => {
                             const theme = COLOR_THEMES[task.color] || COLOR_THEMES.gray;
+                            const isAllDay = task.is_all_day;
+
+                            // Style: All-Day gets solid color (darker), Time-based gets light bg
+                            const style: React.CSSProperties = isAllDay ? {
+                                backgroundColor: theme.color,
+                                color: 'white',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                            } : {
+                                backgroundColor: theme.bg,
+                                color: theme.text,
+                                borderLeft: `2px solid ${theme.accent}`
+                            };
+
+                            const formatTime = (t: string) => t ? t.replace(':', '') : '';
+
                             return (
                                 <div
                                     key={task.id}
                                     className={`
-                    text-[10px] px-1.5 py-0.5 rounded truncate
-                    transition-all
-                  `}
-                                    style={{
-                                        backgroundColor: theme.bg,
-                                        color: theme.text,
-                                        borderLeft: `2px solid ${theme.accent}`
-                                    }}
+                                        text-[10px] px-1.5 py-0.5 rounded
+                                        transition-all flex items-center justify-between gap-1
+                                    `}
+                                    style={style}
                                 >
-                                    {task.title || '無標題'}
+                                    <span className="truncate flex-1 font-medium">{task.title || '無標題'}</span>
+
+                                    {!isAllDay && (task.start_time || task.end_time) && (
+                                        <div className="flex flex-col items-end leading-none opacity-80 shrink-0" style={{ fontSize: '7px' }}>
+                                            {task.start_time && <span>{formatTime(task.start_time)}</span>}
+                                            {task.end_time && <span>{formatTime(task.end_time)}</span>}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
