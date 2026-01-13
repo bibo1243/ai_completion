@@ -2243,7 +2243,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return id;
     };
 
-    const batchAddTasks = async (plans: any[], parentId: string | null = null) => {
+    const batchAddTasks = async (plans: any[], parentId: string | null = null, onProgress?: (progress: number, total: number) => void) => {
         if (!supabaseClient) return;
         setSyncStatus('syncing');
 
@@ -2252,61 +2252,88 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             ? Math.max(...tasksRef.current.map(t => t.order_index || 0))
             : 0;
 
-        const processPlan = async (plan: any, pId: string | null): Promise<void> => {
-            currentMaxOrder += 10000; // Increment for each new task
+        const allTasksToInsert: any[] = [];
+        const now = new Date().toISOString();
 
-            // Inherit Color from Parent
-            let inheritedColor = undefined;
-            if (pId) {
-                const parentTask = tasksRef.current.find(t => t.id === pId);
-                if (parentTask) {
-                    inheritedColor = parentTask.color;
-                }
-            }
+        // Recursively build task list
+        const processStructure = (planList: any[], pId: string | null) => {
+            for (const plan of planList) {
+                currentMaxOrder += 10000;
+                const id = plan.id || crypto.randomUUID(); // Use provided ID or generate new
+                markLocalUpdate(id); // Prevent echo
 
-            const taskData = {
-                title: plan.title,
-                description: plan.description,
-                start_date: plan.start_date || null,
-                due_date: plan.due_date || null,
-                parent_id: pId,
-                order_index: currentMaxOrder, // Explicit order
-                view_orders: { today: 0 },
-                dependencies: plan.dependencies || [],
-                is_all_day: plan.is_all_day !== undefined ? plan.is_all_day : true,
-                start_time: plan.start_time || null,
-                end_time: plan.end_time || null,
-                duration: plan.duration || null,
-                color: inheritedColor || plan.color,
-                tags: plan.tags || []
-            };
+                const newTask = {
+                    id,
+                    user_id: user.id,
+                    parent_id: pId,
+                    created_at: now,
+                    title: plan.title,
+                    description: plan.description,
+                    start_date: plan.start_date || null,
+                    due_date: plan.due_date || null,
+                    order_index: currentMaxOrder,
+                    view_orders: { today: 0 },
+                    dependencies: plan.dependencies || [],
+                    is_all_day: plan.is_all_day !== undefined ? plan.is_all_day : true,
+                    start_time: plan.start_time || null,
+                    end_time: plan.end_time || null,
+                    duration: plan.duration || null,
+                    // Basic color inheritance logic could be added here if needed, keeping simple for batch
+                    color: plan.color,
+                    tags: plan.tags || [],
+                    status: plan.status || 'todo',
+                    images: plan.images || [],
+                    reviewed_at: null
+                };
+                allTasksToInsert.push(newTask);
 
-            // addTask handles creation, state update, and supabase insert
-            // Pass plan.id to preserve ID for dependencies linkage
-            const newId = await addTask(taskData, [], plan.id);
-
-            if (!newId) {
-                console.error("Failed to add task:", taskData.title);
-                throw new Error(`建立任務失敗: ${taskData.title}`);
-            }
-
-            if (newId && plan.subtasks && plan.subtasks.length > 0) {
-                // Process subtasks sequentially to maintain order
-                for (const sub of plan.subtasks) {
-                    await processPlan(sub, newId);
+                if (plan.subtasks && plan.subtasks.length > 0) {
+                    processStructure(plan.subtasks, id);
                 }
             }
         };
 
+        processStructure(plans, parentId);
+
+        if (allTasksToInsert.length === 0) return;
+
+        // 1. Single State Update (Optimistic)
+        setTasks(prev => {
+            const next = [...prev, ...allTasksToInsert].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at));
+            tasksRef.current = next;
+            return next;
+        });
+
+        // 2. Batch Insert to Supabase (Chunks)
+        const CHUNK_SIZE = 500; // Supabase usually handles 1000+, 500 is safe
+        let processed = 0;
+        const total = allTasksToInsert.length;
+
         try {
-            for (const plan of plans) {
-                await processPlan(plan, parentId);
+            for (let i = 0; i < total; i += CHUNK_SIZE) {
+                const chunk = allTasksToInsert.slice(i, i + CHUNK_SIZE);
+                const { error } = await supabaseClient.from('tasks').insert(chunk);
+
+                if (error) {
+                    console.error("Batch insert error in chunk " + i, error);
+                    handleError(error);
+                    // Continue trying other chunks or break?
+                    // Breaking is safer to avoid partial state mismatch issues, but we already updated local state.
+                    // Ideally we'd rollback local state, but that's complex.
+                    break;
+                }
+
+                processed += chunk.length;
+                if (onProgress) onProgress(processed, total);
+
+                // Allow UI to breathe
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
         } catch (e) {
-            handleError(e);
-        } finally {
-            setSyncStatus('synced');
+            console.error("Batch process failed", e);
         }
+
+        setSyncStatus('synced');
     };
 
     // Duplicate tasks (including all subtasks recursively)

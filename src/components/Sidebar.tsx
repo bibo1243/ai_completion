@@ -10,6 +10,28 @@ import { SearchModal } from './SearchModal';
 import { GOALS_2026_DATA } from '../data/goals2026';
 import { INBOX_DUMP_DATA } from '../data/inbox_dump';
 
+const ImportProgressModal = ({ current, total }: { current: number, total: number }) => {
+    const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-[#1e1e1e] p-6 rounded-xl shadow-2xl w-80 border border-white/10 text-center">
+                <h3 className="text-lg font-bold text-white mb-4">Importing Calendar...</h3>
+                <div className="w-full bg-gray-700 h-2 rounded-full mb-2 overflow-hidden">
+                    <div
+                        className="bg-indigo-500 h-full transition-all duration-200"
+                        style={{ width: `${percentage}%` }}
+                    />
+                </div>
+                <div className="flex justify-between text-xs text-gray-400 mt-2">
+                    <span>{current} / {total}</span>
+                    <span>{percentage}%</span>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+};
+
 const TAG_COLORS = [
     '#6366f1', // indigo
     '#f43f5e', // rose
@@ -171,6 +193,7 @@ const SidebarNavItem = ({
 };
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
+    const [importProgress, setImportProgress] = useState<{ current: number, total: number, importing: boolean } | null>(null);
     const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast, deleteTask }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
@@ -270,16 +293,20 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             }));
 
             if (batchAddTasks) {
-                await batchAddTasks(newTasks);
+                setImportProgress({ current: 0, total: newTasks.length, importing: true });
+                await batchAddTasks(newTasks, null, (current, total) => {
+                    setImportProgress({ current, total, importing: true });
+                });
                 if (setToast) setToast({ msg: `Imported ${newTasks.length} tasks`, type: 'info' });
-                else alert(`Imported ${newTasks.length} tasks.`);
             } else {
                 alert("batchAddTasks not available");
             }
+            setImportProgress(null);
             setShowSettings(false);
         } catch (e: any) {
             console.error(e);
             alert('Import failed: ' + e.message);
+            setImportProgress(null);
         }
     };
 
@@ -1361,6 +1388,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 </div>,
                 document.body
             )}
+            {importProgress && <ImportProgressModal current={importProgress.current} total={importProgress.total} />}
             <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
         </aside>
     );
