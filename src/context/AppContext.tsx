@@ -403,7 +403,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const fetchData = async () => {
             try {
                 if (supabaseClient) {
-                    const { data: tks } = await supabaseClient.from('tasks').select('*').eq('user_id', user.id).order('order_index', { ascending: true }).order('created_at', { ascending: true });
+                    const { data: tks } = await supabaseClient.from('tasks').select('*').eq('user_id', user.id).order('order_index', { ascending: true }).order('created_at', { ascending: true }).limit(50000);
 
                     // Simple tags fetch to avoid 400 errors
                     const { data: tgs, error: tagError } = await supabaseClient.from('tags').select('*').eq('user_id', user.id);
