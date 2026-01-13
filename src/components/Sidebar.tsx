@@ -216,20 +216,35 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     useClickOutside(popoverRef, () => setPopoverId(null));
 
     const handleImportGaaSchedule = async () => {
-        if (!confirm(language === 'zh' ? '確定要匯入所有行事曆資料嗎？' : 'Import all calendar events?')) return;
+        const input = prompt(
+            language === 'zh'
+                ? '請輸入要匯入的年份 (例如 2026)，或輸入 "all" 匯入全部：'
+                : 'Enter year to import (e.g. 2026), or "all" for everything:',
+            new Date().getFullYear().toString()
+        );
+
+        if (input === null) return; // Cancelled
+
         try {
             const res = await fetch('/gaa_imported_schedule.json');
             if (!res.ok) throw new Error('File not found');
             const data = await res.json();
             const sourceTasks = data.tasks as any[];
 
-            // Import all tasks without date filtering
-            const targetTasks = sourceTasks;
+            const filterYear = input.trim().toLowerCase();
+            let targetTasks = sourceTasks;
 
-            if (targetTasks.length === 0) {
-                alert('No tasks found in file');
-                return;
+            if (filterYear !== 'all') {
+                targetTasks = sourceTasks.filter(t => t.start_date && t.start_date.startsWith(filterYear));
+                if (targetTasks.length === 0) {
+                    alert(language === 'zh' ? `找不到 ${filterYear} 年的資料` : `No tasks found for year ${filterYear}`);
+                    return;
+                }
             }
+
+            if (!confirm(language === 'zh'
+                ? `確定要匯入 ${filterYear === 'all' ? '所有' : filterYear + ' 年'} 共 ${targetTasks.length} 筆資料嗎？`
+                : `Confirm import of ${targetTasks.length} tasks for ${filterYear === 'all' ? 'all time' : filterYear}?`)) return;
 
             // Find or Create Tag
             let scheduleTagId = tags.find((t: any) => t.name.toLowerCase() === 'schedule')?.id;
