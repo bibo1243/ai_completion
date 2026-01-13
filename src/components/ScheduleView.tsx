@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useContext, useLayoutEffect, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { isSameDay, getRootTask } from '../utils';
 import { Clock, CalendarCheck } from 'lucide-react';
@@ -99,6 +99,22 @@ export const ScheduleView = () => {
         startOffsetMin: number;
         colWidth: number;
     } | null>(null);
+
+    const tasksByDate = useMemo(() => {
+        const map = new Map<string, TaskData[]>();
+        tasks.forEach(t => {
+            if (t.status === 'deleted' || t.status === 'logged') return;
+            // Prioritize start_date, fallback to due_date
+            const dStr = t.start_date || t.due_date;
+            if (dStr) {
+                const d = new Date(dStr);
+                const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key)!.push(t);
+            }
+        });
+        return map;
+    }, [tasks]);
 
     // --- Work View State & Geometry ---
     const [isWorkView, setIsWorkView] = useState(false);
@@ -956,10 +972,14 @@ export const ScheduleView = () => {
                 {/* Grid */}
                 {days.map((day, columnIndex) => {
                     const isToday = isSameDay(day, now);
-                    const dayTasks = tasks.filter(t =>
-                        t.status !== 'deleted' &&
-                        !t.is_all_day && t.start_time && t.start_date &&
-                        isSameDay(new Date(t.start_date), day)
+                    const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+                    const rawDayTasks = tasksByDate.get(dayKey) || [];
+
+                    const dayTasks = rawDayTasks.filter(t =>
+                        !t.is_all_day && t.start_time && t.start_date
+                    );
+                    const allDayTasks = rawDayTasks.filter(t =>
+                        t.is_all_day || !t.start_time
                     );
                     const layout = getLayoutForDay(dayTasks);
 
@@ -995,7 +1015,7 @@ export const ScheduleView = () => {
                                     style={{ height: allDayHeight }}
                                     onDoubleClick={(e) => handleAllDayDoubleClick(e, day)}
                                 >
-                                    {tasks.filter(t => t.status !== 'deleted' && (t.is_all_day || !t.start_time) && isSameDay(new Date(t.start_date!), day)).map(task => {
+                                    {allDayTasks.map(task => {
                                         const rootTask = getRootTask(task, tasks);
                                         const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
                                         const isSelected = selectedTaskIds.includes(task.id);

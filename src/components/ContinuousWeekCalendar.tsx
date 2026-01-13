@@ -96,17 +96,27 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
 
     // ... scroll logic ...
 
-    const getTasksForDate = useCallback((date: Date) => {
-        return filteredTasks.filter(t => {
-            // 已刪除或已記錄的任務不顯示
-            if (t.status === 'deleted' || t.status === 'logged') return false;
-            // 未完成且有開始日期的
-            if (t.start_date && isSameDay(new Date(t.start_date), date) && !t.completed_at) return true;
-            // 已完成且有開始日期（但顯示在該日期？通常日曆顯示未完成的，或者已完成的劃掉？） -> 這裡應該顯示所有 scheduled for this date
-            if (t.start_date && isSameDay(new Date(t.start_date), date)) return true;
+    const tasksByDate = React.useMemo(() => {
+        const map = new Map<string, any[]>();
+        filteredTasks.forEach(t => {
+            if (t.status === 'deleted' || t.status === 'logged') return;
+            // Support start_date or due_date
+            const dStr = t.start_date || t.due_date;
+            if (dStr) {
+                const d = new Date(dStr);
+                const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                if (!map.has(key)) map.set(key, []);
+                map.get(key)!.push(t);
+            }
+        });
+        return map;
+    }, [filteredTasks]);
 
-            return false;
-        }).sort((a, b) => {
+    const getTasksForDate = useCallback((date: Date) => {
+        const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+        const tasksForDay = tasksByDate.get(key) || [];
+        // Sort safely without mutating the map entry
+        return tasksForDay.slice().sort((a, b) => {
             if (a.is_all_day && !b.is_all_day) return -1;
             if (!a.is_all_day && b.is_all_day) return 1;
             if (!a.is_all_day && !b.is_all_day) {
@@ -114,7 +124,7 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
             }
             return (a.order_index || 0) - (b.order_index || 0);
         });
-    }, [filteredTasks]);
+    }, [tasksByDate]);
 
     // 初始化週數據
     useEffect(() => {
