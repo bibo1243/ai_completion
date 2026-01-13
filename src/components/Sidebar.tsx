@@ -220,7 +220,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             language === 'zh'
                 ? '請輸入要匯入的年份 (例如 2026)，或輸入 "all" 匯入全部：'
                 : 'Enter year to import (e.g. 2026), or "all" for everything:',
-            new Date().getFullYear().toString()
+            'all'
         );
 
         if (input === null) return; // Cancelled
