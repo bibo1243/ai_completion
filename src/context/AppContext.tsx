@@ -1259,6 +1259,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     // All: 完整任務總表（只排除已刪除的任務）
                     return (t: TaskData) => {
                         if (t.parent_id || t.status === 'deleted') return false;
+                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
                         return true;
                     };
                 case 'newtable':
@@ -1407,7 +1408,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 case 'logbook': return (t: TaskData) => t.status === 'logged';
                 case 'recent': return (t: TaskData) => t.status !== 'deleted'; // Show all non-deleted tasks
                 case 'trash': return (t: TaskData) => t.status === 'deleted';
-                default: return (t: TaskData) => t.status !== 'deleted' && t.status !== 'logged';
+                default: return (t: TaskData) => {
+                    if (t.status === 'deleted' || t.status === 'logged') return false;
+                    if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                    return true;
+                };
             }
         };
         const filterFn = getFilter();
