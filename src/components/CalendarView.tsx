@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useRef } from 'react';
+import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
@@ -370,11 +370,24 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
     else { const d = new Date(calendarDate); d.setDate(d.getDate() + (viewMode === 'week' ? 7 : customDays)); setCalendarDate(d); }
   };
 
-  const getTasksForDate = (date: Date) => tasks.filter(t => {
-    if (t.status === 'deleted' || t.status === 'logged') return false;
-    const d = t.start_date ? new Date(t.start_date) : (t.due_date ? new Date(t.due_date) : null);
-    return d && isSameDay(d, date);
-  });
+  const tasksByDate = useMemo(() => {
+    const map = new Map<string, TaskData[]>();
+    tasks.forEach(t => {
+      if (t.status === 'deleted' || t.status === 'logged') return;
+      const d = t.start_date ? new Date(t.start_date) : (t.due_date ? new Date(t.due_date) : null);
+      if (d) {
+        const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(t);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  const getTasksForDate = (date: Date) => {
+    const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    return tasksByDate.get(key) || [];
+  };
 
   const handleTimedDrop = async (e: React.DragEvent, date: Date) => {
     e.preventDefault();
