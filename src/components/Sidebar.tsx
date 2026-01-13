@@ -522,8 +522,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
             return true;
         }).length,
-        todayOverdue: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date)).length,
-        todayScheduled: tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && (isToday(t.start_date || t.due_date))).length,
+        todayOverdue: (() => {
+            const scheduleTag = tags.find((tg: any) => tg.name.toLowerCase() === 'schedule');
+            return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date) && (!scheduleTag || !t.tags.includes(scheduleTag.id))).length;
+        })(),
+        todayScheduled: (() => {
+            const scheduleTag = tags.find((tg: any) => tg.name.toLowerCase() === 'schedule');
+            return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && isToday(t.start_date || t.due_date) && (!scheduleTag || !t.tags.includes(scheduleTag.id))).length;
+        })(),
         prompt: tasks.filter((t: any) => {
             const promptTag = tags.find((tg: any) => ['prompt', '提示詞'].some(n => tg.name.trim().toLowerCase() === n));
             return t.status !== 'deleted' && t.status !== 'logged' && promptTag && t.tags.includes(promptTag.id) && !t.reviewed_at;
