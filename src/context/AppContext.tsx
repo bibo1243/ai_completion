@@ -403,7 +403,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const fetchData = async () => {
             try {
                 if (supabaseClient) {
-                    const { data: tks } = await supabaseClient.from('tasks').select('*').eq('user_id', user.id).order('order_index', { ascending: true }).order('created_at', { ascending: true }).limit(50000);
+                    console.log("[Debug] Fetching tasks...");
+                    const { data: tks, error: fetchError } = await supabaseClient.from('tasks').select('*').eq('user_id', user.id).order('order_index', { ascending: true }).order('created_at', { ascending: true }).range(0, 50000);
+                    if (fetchError) console.error("[Debug] Fetch Error:", fetchError);
+                    else console.log(`[Debug] Fetched ${tks?.length} tasks.`);
 
                     // Simple tags fetch to avoid 400 errors
                     const { data: tgs, error: tagError } = await supabaseClient.from('tags').select('*').eq('user_id', user.id);
@@ -2201,6 +2204,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const addTask = async (data: any, _childIds: string[] = [], specificId?: string) => {
+        console.log("[Debug] addTask called", data);
         if (!supabaseClient) return '';
         setSyncStatus('syncing');
         const id = specificId || crypto.randomUUID();
