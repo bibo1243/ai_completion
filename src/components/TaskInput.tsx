@@ -7,7 +7,6 @@ import { RecordingContext } from '../context/RecordingContext';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { TaskData, TaskColor, AIHistoryEntry, RepeatRule, RepeatType, ImportanceLevel } from '../types';
 import { COLOR_THEMES, ThemeColor } from '../constants';
-import { isDescendant } from '../utils';
 import { ThingsCheckbox } from './ThingsCheckbox';
 import { SmartDateInput } from './SmartDateInput';
 import { DropdownSelect } from './DropdownSelect';
@@ -1003,7 +1002,27 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
     const eligibleParents = useMemo(() => {
         if (!initialData?.id) return tasks.filter(t => t.status !== 'deleted');
-        return tasks.filter(t => t.id !== initialData.id && !isDescendant(initialData.id, t.id, tasks) && t.status !== 'deleted');
+
+        // Pre-compute all descendant IDs of current task using iterative approach
+        // This is O(n) instead of O(n²) for calling isDescendant on every task
+        const descendantIds = new Set<string>();
+        const queue = [initialData.id];
+
+        while (queue.length > 0) {
+            const parentId = queue.shift()!;
+            for (const task of tasks) {
+                if (task.parent_id === parentId && !descendantIds.has(task.id)) {
+                    descendantIds.add(task.id);
+                    queue.push(task.id);
+                }
+            }
+        }
+
+        return tasks.filter(t =>
+            t.id !== initialData.id &&
+            !descendantIds.has(t.id) &&
+            t.status !== 'deleted'
+        );
     }, [tasks, initialData]);
 
     const hierarchicalTags = useMemo(() => {

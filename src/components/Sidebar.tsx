@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText, Calendar, Filter } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText, Calendar } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -65,7 +65,6 @@ const SidebarNavItem = ({
     setEditingViewName,
     setEditingViewId,
     saveViewName,
-    hasActiveFilters,
     setHoveredDropTarget,
     sidebarCollapsed,
     sidebarTextClass,
@@ -74,7 +73,7 @@ const SidebarNavItem = ({
     setTagFilter,
     onEditFilter
 }: any) => {
-    const { dragState, updateGhostPosition, endDrag, selectedTaskIds, moveTaskToView, setFocusedTaskId, setSelectedTaskIds }: any = useContext(AppContext);
+    const { dragState, updateGhostPosition, endDrag, selectedTaskIds, moveTaskToView }: any = useContext(AppContext);
 
     // Use custom color if provided, otherwise use accent color when active
     const iconColor = color || (active ? 'var(--accent-color)' : undefined);
@@ -142,15 +141,12 @@ const SidebarNavItem = ({
                     if (!isEditing && setView) {
                         setView(id);
                         if (setTagFilter) setTagFilter(null);
-                        setFocusedTaskId(null);
-                        setSelectedTaskIds([]);
                     }
                 }}
                 onDoubleClick={(e) => {
                     e.stopPropagation();
-                    if (setEditingViewId) {
-                        setEditingViewId(id);
-                        setEditingViewName(label);
+                    if (onEditFilter) {
+                        onEditFilter(id);
                     }
                 }}
                 style={{
@@ -180,22 +176,16 @@ const SidebarNavItem = ({
                             <span>{label}</span>
                         )
                     )}
-                    {!sidebarCollapsed && hasActiveFilters && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" title="已套用標籤過濾" />
-                    )}
+                    {/* Filter indicator removed per user request */}
                 </div>
                 {!sidebarCollapsed && <div className="flex gap-2 items-center">
-                    {onEditFilter && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onEditFilter(id); }}
-                            className={`p-0.5 rounded opacity-0 group-hover/nav-wrapper:opacity-60 hover:!opacity-100 transition-opacity ${hasActiveFilters ? 'text-indigo-500' : 'text-theme-tertiary hover:text-theme-secondary'}`}
-                            title="編輯標籤篩選"
-                        >
-                            <Filter size={12} />
-                        </button>
-                    )}
+                    {/* Filter button removed - use double-click instead */}
                     {overdueCount > 0 && <span className="text-[11px] font-semibold text-white bg-rose-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{overdueCount}</span>}
-                    {normalCount > 0 && <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>}
+                    {normalCount > 0 && (
+                        id === 'matrix'
+                            ? <span className="text-[11px] font-semibold text-white bg-yellow-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{normalCount}</span>
+                            : <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>
+                    )}
                 </div>}
             </button>
         </div>
@@ -214,6 +204,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             return JSON.parse(localStorage.getItem('custom_view_names') || '{}');
         } catch { return {}; }
     });
+    const [editingViewNameTemp, setEditingViewNameTemp] = useState('');
     const [isAddingTag, setIsAddingTag] = useState(false);
     const [addingSubTagTo, setAddingSubTagTo] = useState<string | null>(null);
     const [newTagName, setNewTagName] = useState('');
@@ -247,6 +238,24 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
     useClickOutside(settingsRef, () => setShowSettings(false));
     useClickOutside(popoverRef, () => setPopoverId(null));
+
+    // ESC key to close filter modal
+    useEffect(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && editingFilterView) {
+                setEditingFilterView(null);
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [editingFilterView]);
+
+    // Initialize temp name when filter modal opens
+    useEffect(() => {
+        if (editingFilterView) {
+            setEditingViewNameTemp(viewNames[editingFilterView] || '');
+        }
+    }, [editingFilterView, viewNames]);
 
     const handleImportGaaSchedule = async () => {
         const input = prompt(
@@ -643,7 +652,20 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
         return {
             inbox: tasks.filter((t: any) => {
+                // Basic: No parent, not deleted/logged
+                if (t.parent_id) return false;
                 if (t.status === 'deleted' || t.status === 'logged') return false;
+
+                // Tasks without any dates AND without any tags should be in inbox
+                const hasNoDateAndNoTags = !t.start_date && !t.due_date && (!t.tags || t.tags.length === 0);
+                if (hasNoDateAndNoTags) return true;
+
+                // Completed but not logged tasks also show in inbox
+                const isCompletedNotLogged = !!t.completed_at;
+
+                // Status must be 'inbox' or completed not logged
+                const isInboxStatus = t.status === 'inbox';
+                if (!isInboxStatus && !isCompletedNotLogged) return false;
 
                 // Exclude tags
                 if (promptTagId && t.tags.includes(promptTagId)) return false;
@@ -658,28 +680,33 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                     if (hasChildren) return false;
                 }
 
-                // Exclude if task has dates
-                if (t.start_date || t.due_date) return false;
-
-                // Check if any parent has dates
-                let curr = t;
-                const visited = new Set<string>();
-                while (curr.parent_id) {
-                    if (visited.has(curr.id)) break;
-                    visited.add(curr.id);
-                    const parent = tasks.find((p: any) => p.id === curr.parent_id);
-                    if (!parent) break;
-                    if (parent.start_date || parent.due_date) return false;
-                    curr = parent;
-                }
+                // Exclude if task has dates (unless completed)
+                if (!isCompletedNotLogged && (t.start_date || t.due_date)) return false;
 
                 return true;
             }).length,
             todayOverdue: (() => {
-                return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date) && (!scheduleTagId || !t.tags.includes(scheduleTagId))).length;
+                return tasks.filter((t: any) => {
+                    if (t.status === 'completed' || t.status === 'deleted' || t.status === 'logged' || t.status === 'waiting' || t.status === 'someday') return false;
+                    if (!isOverdue(t.start_date || t.due_date)) return false;
+                    if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                    // Exclude note and project tags
+                    if (noteTagId && t.tags.includes(noteTagId)) return false;
+                    if (projectTagId && t.tags.includes(projectTagId)) return false;
+                    return true;
+                }).length;
             })(),
             todayScheduled: (() => {
-                return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && isToday(t.start_date || t.due_date) && (!scheduleTagId || !t.tags.includes(scheduleTagId))).length;
+                return tasks.filter((t: any) => {
+                    if (t.status === 'completed' || t.status === 'deleted' || t.status === 'logged' || t.status === 'waiting' || t.status === 'someday') return false;
+                    if (isOverdue(t.start_date || t.due_date)) return false;
+                    if (!isToday(t.start_date || t.due_date)) return false;
+                    if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                    // Exclude note and project tags
+                    if (noteTagId && t.tags.includes(noteTagId)) return false;
+                    if (projectTagId && t.tags.includes(projectTagId)) return false;
+                    return true;
+                }).length;
             })(),
             prompt: tasks.filter((t: any) => {
                 return t.status !== 'deleted' && t.status !== 'logged' && promptTagId && t.tags.includes(promptTagId) && !t.reviewed_at;
@@ -693,6 +720,26 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             note: tasks.filter((t: any) => {
                 if (t.status === 'deleted' || t.status === 'logged') return false;
                 return noteTagId && t.tags.includes(noteTagId);
+            }).length,
+            matrixUrgent: tasks.filter((t: any) => {
+                // Only root tasks (no parent_id)
+                if (t.parent_id) return false;
+                // Not deleted, logged, or completed
+                if (t.status === 'deleted' || t.status === 'logged' || t.status === 'completed') return false;
+                // Exclude schedule tasks
+                if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                // Must be urgent importance
+                return t.importance === 'urgent';
+            }).length,
+            matrixPlanned: tasks.filter((t: any) => {
+                // Only root tasks (no parent_id)
+                if (t.parent_id) return false;
+                // Not deleted, logged, or completed
+                if (t.status === 'deleted' || t.status === 'logged' || t.status === 'completed') return false;
+                // Exclude schedule tasks
+                if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                // Must be important (planned) importance
+                return t.importance === 'important';
             }).length
         };
     }, [tasks, tags]);
@@ -1125,18 +1172,18 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
     const NavItem = (props: any) => {
         const isEditing = editingViewId === props.id;
-        const filter = viewTagFilters[props.id] || { include: [] as string[], exclude: [] as string[] };
-        const { include = [], exclude = [] } = Array.isArray(filter) ? { include: filter, exclude: [] } : filter;
-        const hasActiveFilters = include.length > 0 || exclude.length > 0;
 
         // Disable filter editing for specific views
         const disableFilterEditing = ['logbook', 'recent', 'trash', 'worklog'].includes(props.id);
 
+        // Use custom view name if available
+        const customLabel = viewNames[props.id] || props.label;
+
         return (
             <SidebarNavItem
                 {...props}
+                label={customLabel}
                 isEditing={isEditing}
-                hasActiveFilters={hasActiveFilters}
                 editingViewName={editingViewName}
                 setEditingViewName={setEditingViewName}
                 setEditingViewId={setEditingViewId}
@@ -1189,7 +1236,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 <div className="mb-6">
                     <NavItem id="today" label={t('today')} overdueCount={counts.todayOverdue} normalCount={counts.todayScheduled} active={view === 'today' && !tagFilter} icon={Star} color="#f5c94c" acceptsDrop={true} />
                     <NavItem id="allview" label="所有任務" active={view === 'allview' && !tagFilter} icon={Layers} color="#10b981" />
-                    <NavItem id="matrix" label="重要性" active={view === 'matrix'} icon={Layout} color="#6366f1" />
+                    <NavItem id="matrix" label="重要性" normalCount={counts.matrixUrgent} active={view === 'matrix'} icon={Layout} color="#6366f1" />
                 </div>
 
                 {/* Projects & Focus */}
@@ -1201,8 +1248,8 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
 
                 {/* Ideas & Notes */}
                 <div className="mb-6">
-                    <NavItem id="waiting" label="將來/靈感" normalCount={counts.waiting} active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" acceptsDrop={true} />
-                    <NavItem id="journal" label="知識庫" normalCount={counts.note} active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" acceptsDrop={true} />
+                    <NavItem id="waiting" label="將來/靈感" active={view === 'waiting' && !tagFilter} icon={Clock} color="#a855f7" acceptsDrop={true} />
+                    <NavItem id="journal" label="知識庫" active={view === 'journal' && !tagFilter} icon={Book} color="#34d399" acceptsDrop={true} />
                     <NavItem id="prompt" label={t('prompt')} normalCount={counts.prompt} active={view === 'prompt'} icon={Lightbulb} color="#fbbf24" acceptsDrop={true} />
                     <NavItem id="worklog" label="工作日誌" active={view === 'worklog'} icon={FileText} color="#0ea5e9" />
                 </div>
@@ -1211,7 +1258,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 <div className="mb-6">
                     <NavItem id="logbook" label={t('logbook')} normalCount={counts.logbook} active={view === 'logbook'} icon={Archive} color="#a16207" />
                     <NavItem id="recent" label="最近變動" active={view === 'recent'} icon={History} color="#0891b2" />
-                    <NavItem id="trash" label={t('trash')} normalCount={counts.trash} active={view === 'trash'} icon={Trash2} color="#9ca3af" />
+                    <NavItem id="trash" label={t('trash')} normalCount={counts.trash > 1000 ? counts.trash : undefined} active={view === 'trash'} icon={Trash2} color="#9ca3af" />
                 </div>
                 {!sidebarCollapsed && (
                     <div className="mt-2">
@@ -1465,9 +1512,37 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             {editingFilterView && createPortal(
                 <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999] flex items-center justify-center" onClick={() => setEditingFilterView(null)}>
                     <div className="bg-white rounded-xl shadow-2xl w-80 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                            <h3 className="font-bold text-gray-700">自定義顯示標籤</h3>
-                            <button onClick={() => setEditingFilterView(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                        <div className="p-4 border-b border-gray-100 bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-bold text-gray-700 text-sm">視圖設定</h3>
+                                <button onClick={() => setEditingFilterView(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">名稱：</span>
+                                <input
+                                    type="text"
+                                    value={editingViewNameTemp}
+                                    onChange={(e) => setEditingViewNameTemp(e.target.value)}
+                                    onBlur={() => {
+                                        // Save on blur - empty string means use default
+                                        const newNames = { ...viewNames };
+                                        if (editingViewNameTemp.trim()) {
+                                            newNames[editingFilterView] = editingViewNameTemp;
+                                        } else {
+                                            delete newNames[editingFilterView]; // Remove to use default
+                                        }
+                                        setViewNames(newNames);
+                                        localStorage.setItem('custom_view_names', JSON.stringify(newNames));
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            (e.target as HTMLInputElement).blur();
+                                        }
+                                    }}
+                                    className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder={t(editingFilterView) || editingFilterView}
+                                />
+                            </div>
                         </div>
                         <div className="p-2 overflow-y-auto flex-1 text-sm">
                             <p className="px-2 py-2 text-xs text-gray-500 mb-2 bg-yellow-50 rounded border border-yellow-100">

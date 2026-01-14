@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useContext, useState, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Repeat2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Repeat2, Paperclip } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
 import { INDENT_SIZE, COLOR_THEMES } from '../constants';
@@ -63,6 +64,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
     const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
     const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [isLongPressing, setIsLongPressing] = useState(false);
+    const [attachmentTooltip, setAttachmentTooltip] = useState<{ visible: boolean; x: number; y: number; attachments: any[] } | null>(null);
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     const isExpanded = flatTask.isExpanded;
@@ -735,6 +737,44 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                     </>
                                 )}
                                 {task.description && <FileText size={12} className="text-slate-400 mr-2 flex-shrink-0" />}
+                                {task.attachments && task.attachments.length > 0 && (
+                                    <>
+                                        <div
+                                            className="mr-2 flex-shrink-0 cursor-pointer"
+                                            onMouseEnter={(e) => {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setAttachmentTooltip({
+                                                    visible: true,
+                                                    x: rect.left + rect.width / 2,
+                                                    y: rect.top - 8,
+                                                    attachments: task.attachments || []
+                                                });
+                                            }}
+                                            onMouseLeave={() => setAttachmentTooltip(null)}
+                                        >
+                                            <Paperclip size={12} className="text-slate-400" />
+                                        </div>
+                                        {attachmentTooltip?.visible && attachmentTooltip.attachments === task.attachments && createPortal(
+                                            <div
+                                                className="fixed z-[99999] pointer-events-none"
+                                                style={{
+                                                    left: attachmentTooltip.x,
+                                                    top: attachmentTooltip.y,
+                                                    transform: 'translate(-50%, -100%)'
+                                                }}
+                                            >
+                                                <div className="bg-gray-800 text-white text-[10px] px-2.5 py-2 rounded-lg shadow-2xl max-w-[220px]">
+                                                    <div className="font-semibold mb-1 text-[11px]">{task.attachments.length} 個附件</div>
+                                                    {task.attachments.slice(0, 5).map((att, idx) => (
+                                                        <div key={idx} className="truncate opacity-80 py-0.5">{att.name}</div>
+                                                    ))}
+                                                    {task.attachments.length > 5 && <div className="opacity-60 pt-1">...還有 {task.attachments.length - 5} 個</div>}
+                                                </div>
+                                            </div>,
+                                            document.body
+                                        )}
+                                    </>
+                                )}
                                 <div className={`ml-auto ${isCompletedOrCanceled ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
                             </div>
                             <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">

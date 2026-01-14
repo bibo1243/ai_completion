@@ -1263,31 +1263,58 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         if (!t.title) console.log(`[Inbox Debug] Hidden task (ID: ${t.id}): Empty title`);
                     });
                     return (t: TaskData) => {
-                        // Basic Inbox Definition: No parent, status is 'inbox'
-                        if (t.status !== 'inbox' || t.parent_id) return false;
+                        // Basic Inbox Definition: No parent, not deleted/logged
+                        if (t.parent_id) return false;
+                        if (t.status === 'deleted' || t.status === 'logged') return false;
 
-                        // 1. Exclude tasks with dates (Today/Focus/Schedule)
-                        if (t.start_date || t.due_date) return false;
+                        // Completed tasks that haven't been logged should still show in inbox
+                        const isCompletedNotLogged = !!t.completed_at;
 
-                        // 2. Exclude Schedule tags (Strong check)
-                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
-                        if (t.tags.some(id => {
-                            const tag = tags.find(tg => tg.id === id);
-                            return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
-                        })) return false;
+                        // Tasks without any dates AND without any tags should be in inbox
+                        const hasNoDateAndNoTags = !t.start_date && !t.due_date && (!t.tags || t.tags.length === 0);
 
-                        // 3. Exclude Special View Tags
-                        // Project
-                        if (projectTagId && t.tags.includes(projectTagId)) return false;
-                        // Annual Plan
-                        if (annualTagId && t.tags.includes(annualTagId)) return false;
-                        // Waiting/Inspiration (Someday) - handled by status usually, but check tags too
-                        if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
-                        // Knowledge/Journal
-                        if (journalTagId && t.tags.includes(journalTagId)) return false;
-                        // Prompt
-                        if (promptTagId && t.tags.includes(promptTagId)) return false;
-                        if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
+                        // Also include tasks with status 'inbox'
+                        const isInboxStatus = t.status === 'inbox';
+
+                        // If task has no dates and no tags, it belongs to inbox
+                        if (hasNoDateAndNoTags) {
+                            // Apply viewTagFilters even for tagless tasks (exclude filter won't match, include filter skipped if empty)
+                            const filter = currentViewTagFilters['inbox'] || { include: [] as string[], exclude: [] as string[] };
+                            const include = Array.isArray(filter) ? filter : (filter.include || []);
+                            // If include filter is set, tagless tasks won't match - skip them
+                            if (include.length > 0) return false;
+                            return true;
+                        }
+
+                        // For tasks with tags/dates, use existing logic
+                        if (!isInboxStatus && !isCompletedNotLogged) return false;
+
+                        // 1. Exclude tasks with dates (Today/Focus/Schedule) - but allow if completed
+                        if (!isCompletedNotLogged && (t.start_date || t.due_date)) return false;
+
+                        // 2. Exclude Schedule tags (Strong check) - but allow if completed
+                        if (!isCompletedNotLogged) {
+                            if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                            if (t.tags.some(id => {
+                                const tag = tags.find(tg => tg.id === id);
+                                return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
+                            })) return false;
+                        }
+
+                        // 3. Exclude Special View Tags - but allow if completed
+                        if (!isCompletedNotLogged) {
+                            // Project
+                            if (projectTagId && t.tags.includes(projectTagId)) return false;
+                            // Annual Plan
+                            if (annualTagId && t.tags.includes(annualTagId)) return false;
+                            // Waiting/Inspiration (Someday) - handled by status usually, but check tags too
+                            if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
+                            // Knowledge/Journal
+                            if (journalTagId && t.tags.includes(journalTagId)) return false;
+                            // Prompt
+                            if (promptTagId && t.tags.includes(promptTagId)) return false;
+                            if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
+                        }
 
                         // Apply viewTagFilters
                         const filter = currentViewTagFilters['inbox'] || { include: [] as string[], exclude: [] as string[] };

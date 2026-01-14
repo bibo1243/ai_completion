@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useContext, useMemo, useState, useCallback } from 'react';
 import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive, MoveRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
 import { INDENT_SIZE } from '../constants';
 import { TaskInput } from './TaskInput';
@@ -18,42 +17,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     // Auto-update date at midnight
     const [currentDate, setCurrentDate] = useState(new Date());
-    // Auto-scroll to focused task when it changes (e.g. from ReminderPanel or keyboard navigation)
-    // In 'today' view, skip if we're creating a new task (pendingFocusTaskId is set)
-    useEffect(() => {
-        const isCreatingTask = pendingFocusTaskId !== null;
-        const shouldScroll = focusedTaskId && !editingTaskId && (view !== 'today' || !isCreatingTask);
-
-        if (shouldScroll) {
-            // Wait for render to complete, especially for large lists
-            const timer = setTimeout(() => {
-                requestAnimationFrame(() => {
-                    const taskEl = containerRef.current?.querySelector(`[data-task-id="${focusedTaskId}"]`) as HTMLElement;
-                    if (taskEl) {
-                        taskEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                    }
-                });
-            }, 300);
-            return () => clearTimeout(timer);
-        }
-    }, [focusedTaskId, editingTaskId, view, pendingFocusTaskId]);
-
-    // Handle initial focus from pendingFocusTaskId (e.g. from search nav)
-    useEffect(() => {
-        if (pendingFocusTaskId) {
-            // Wait for render
-            setTimeout(() => {
-                const taskEl = containerRef.current?.querySelector(`[data-task-id="${pendingFocusTaskId}"]`) as HTMLElement;
-                if (taskEl) {
-                    taskEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                    taskEl.focus({ preventScroll: true });
-                    setFocusedTaskId(pendingFocusTaskId);
-                    setPendingFocusTaskId(null); // Clear pending focus
-                }
-            }, 100);
-        }
-    }, [pendingFocusTaskId, setFocusedTaskId, setPendingFocusTaskId]);
-
     useEffect(() => {
         const checkDate = () => {
             const now = new Date();
@@ -81,7 +44,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         if (!rootParentId) return visibleTasks;
 
         const getSortValue = (t: any) => {
-            const orderKey = (view === 'allview' || view === 'project') ? 'inbox' : view;
+            const orderKey = (view === 'allview' || view === 'project') ? 'all' : view;
             if (t.view_orders && t.view_orders[orderKey] !== undefined) return t.view_orders[orderKey];
             return t.order_index || 0;
         };
@@ -255,7 +218,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     const promptTag = tags.find(tg => tg.name.toLowerCase() === 'prompt');
                     const noteTag = tags.find(tg => tg.name.toLowerCase() === 'note');
                     const journalTag = tags.find(tg => tg.name.toLowerCase() === 'journal');
-                    const somedayTag = tags.find(tg => tg.name.toLowerCase() === 'someday');
+                    const inspirationTag = tags.find(tg => tg.name.includes('靈感'));
 
                     // Calculate order value - add after the last task
                     const getOrderValue = (t: any) => {
@@ -303,8 +266,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                         if (noteTag) newData.tags = [noteTag.id];
                         else if (journalTag) newData.tags = [journalTag.id];
                     } else if (view === 'waiting') {
-                        newData.status = 'someday';
-                        if (somedayTag) newData.tags = [somedayTag.id];
+                        newData.status = 'waiting';
+                        if (inspirationTag) newData.tags = [inspirationTag.id];
                     } else if (view === 'focus') {
                         newData.status = 'active';
                     } else if (view === 'upcoming') {
@@ -396,7 +359,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
             setFocusedTaskId(targetId);
             setSelectedTaskIds([targetId]);
             setTimeout(() => {
-                const taskEl = containerRef.current?.querySelector(`[data - task - id= "${targetId}"]`) as HTMLElement;
+                const taskEl = containerRef.current?.querySelector(`[data-task-id="${targetId}"]`) as HTMLElement;
                 if (taskEl) {
                     taskEl.focus();
                     taskEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -486,7 +449,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     <div className="flex-1 h-[2px] rounded-full bg-gradient-to-r from-gray-200 to-transparent" />
                 </div>
                 {archivedFlatTasks.map((item) => (
-                    <div key={item.data.id} className="relative group" style={{ marginLeft: `${item.depth * 24} px` }}>
+                    <div key={item.data.id} className="relative group" style={{ marginLeft: `${item.depth * 24}px` }}>
                         <TaskItem flatTask={item} isFocused={false} onEdit={() => { }} />
                         <button
                             onClick={(e) => { e.stopPropagation(); restoreArchivedTask(item.data.id); }}
@@ -502,19 +465,16 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     if (effectiveVisibleTasks.length === 0 && (view !== 'allview' || archivedFlatTasks.length === 0)) return <div className="text-center py-20 opacity-20"><Inbox size={48} className="mx-auto" /><p className="text-xs mt-2">No tasks</p></div>;
 
-    // Get effective date string for a task (using local timezone to match separators)
+    // Get effective date string for a task
     const getTaskDateString = (task: typeof effectiveVisibleTasks[0]['data']): string => {
-        const dateStr = task.start_date || task.due_date;
-        if (dateStr) {
-            const d = new Date(dateStr);
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
+        if (task.start_date) {
+            return new Date(task.start_date).toISOString().split('T')[0];
         }
-        // No date - treat as today (local)
-        const now = new Date();
-        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        if (task.due_date) {
+            return new Date(task.due_date).toISOString().split('T')[0];
+        }
+        // No date - treat as today
+        return new Date().toISOString().split('T')[0];
     };
 
     // Render Today view with date separators
@@ -683,7 +643,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                     futureTasks.forEach(item => {
                         const dateStr = getTaskDateString(item.data);
                         const d = new Date(dateStr + 'T12:00:00');
-                        const key = `${d.getFullYear()} -${String(d.getMonth() + 1).padStart(2, '0')} `;
+                        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                         if (!monthGroups.has(key)) monthGroups.set(key, []);
                         monthGroups.get(key)!.push(item);
                     });
@@ -736,28 +696,18 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         );
     };
 
-    const renderTaskGroup = (items: typeof effectiveVisibleTasks) => {
-        // Virtualization caused blank spaces on scroll in All View.
-        // Disabling it for now to ensure stability. React can handle hundreds of items fine.
-        /* 
-        if (items.length > 500) { // Increased threshold or just disabled
-             // ... virtualization code ...
-        }
-        */
-
-        return items.map((item) => (
-            <React.Fragment key={item.data.id}>
-                {editingTaskId === item.data.id
-                    ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
-                    : (
-                        <div className="relative group">
-                            <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
-                        </div>
-                    )
-                }
-            </React.Fragment>
-        ));
-    };
+    const renderTaskGroup = (items: typeof effectiveVisibleTasks) => items.map((item) => (
+        <React.Fragment key={item.data.id}>
+            {editingTaskId === item.data.id
+                ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
+                : (
+                    <div className="relative group">
+                        <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
+                    </div>
+                )
+            }
+        </React.Fragment>
+    ));
 
     return (
         <>
@@ -854,7 +804,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                                 {!archivedCollapsed && (
                                     <div className="opacity-60">
                                         {archivedFlatTasks.map((item) => (
-                                            <div key={item.data.id} className="relative group" style={{ marginLeft: `${item.depth * 24} px` }}>
+                                            <div key={item.data.id} className="relative group" style={{ marginLeft: `${item.depth * 24}px` }}>
                                                 <TaskItem flatTask={item} isFocused={false} onEdit={() => { }} />
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); restoreArchivedTask(item.data.id); }}
