@@ -54,6 +54,9 @@ export const AppContext = createContext<{
     navigateBack: () => void;
     canNavigateBack: boolean;
 
+    searchOpen: boolean;
+    setSearchOpen: React.Dispatch<React.SetStateAction<boolean>>;
+
     toast: { msg: string, type?: 'info' | 'error', undo?: () => void, onClick?: () => void, actionLabel?: string } | null;
     setToast: (t: any) => void;
     selectedTaskIds: string[];
@@ -138,6 +141,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     });
     const [viewTagFilters, setViewTagFilters] = useState<Record<string, { include: string[], exclude: string[] }>>({});
     const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
+    const [searchOpen, setSearchOpen] = useState(false);
     const [constructionModeEnabled, setConstructionModeEnabled] = useState(false);
 
     // Load viewTagFilters
@@ -197,7 +201,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         tags.forEach(t => resolve(t.id));
         return resolved;
     }, [tags]);
-    const [view, setView] = useState(() => localStorage.getItem(`last_view_${user?.id}`) || 'all');
+    const [view, setView] = useState(() => localStorage.getItem(`last_view_${user?.id}`) || 'inbox');
     const [tagFilter, setTagFilter] = useState<string | null>(null);
     // Tasks that have been modified and will leave the current view (shown in "Leaving" section)
     const [leavingTaskIds, setLeavingTaskIds] = useState<string[]>([]);
@@ -403,10 +407,39 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const fetchData = async () => {
             try {
                 if (supabaseClient) {
-                    console.log("[Debug] Fetching tasks...");
-                    const { data: tks, error: fetchError } = await supabaseClient.from('tasks').select('*').eq('user_id', user.id).order('order_index', { ascending: true }).order('created_at', { ascending: true }).range(0, 50000);
-                    if (fetchError) console.error("[Debug] Fetch Error:", fetchError);
-                    else console.log(`[Debug] Fetched ${tks?.length} tasks.`);
+                    console.log("[Debug] Fetching tasks with pagination...");
+                    let allTasks: any[] = [];
+                    let from = 0;
+                    const pageSize = 1000;
+                    let hasMore = true;
+
+                    while (hasMore) {
+                        const { data: chunk, error: fetchError } = await supabaseClient
+                            .from('tasks')
+                            .select('*')
+                            .eq('user_id', user.id)
+                            .order('order_index', { ascending: true })
+                            .order('created_at', { ascending: true })
+                            .range(from, from + pageSize - 1);
+
+                        if (fetchError) {
+                            console.error("[Debug] Fetch Error:", fetchError);
+                            break;
+                        }
+
+                        if (chunk && chunk.length > 0) {
+                            allTasks = [...allTasks, ...chunk];
+                            if (chunk.length < pageSize) {
+                                hasMore = false;
+                            } else {
+                                from += pageSize;
+                            }
+                        } else {
+                            hasMore = false;
+                        }
+                    }
+                    console.log(`[Debug] Total tasks fetched: ${allTasks.length}`);
+                    const tks = allTasks;
 
                     // Simple tags fetch to avoid 400 errors
                     const { data: tgs, error: tagError } = await supabaseClient.from('tags').select('*').eq('user_id', user.id);
@@ -1078,8 +1111,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const journalTag = noteTag; // Alias
         const inspirationTag = findTag(['someday', 'inspiration', '靈感', '將來/靈感']);
         const projectTag = findTag(['project', '專案']);
+        const scheduleTag = findTag(['schedule', '行程']);
 
-        let targetView = forcedView || 'all';
+        let targetView = forcedView || 'inbox';
 
         // Check task tags to determine view
         if (!forcedView) {
@@ -1096,13 +1130,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 if (hasChildren) {
                     targetView = 'projects';
                 }
+            } else if (scheduleTag && targetTask.tags.includes(scheduleTag.id)) {
+                targetView = 'focus'; // Schedule tasks go to focus (Calendar) view
             } else if (targetTask.start_date || targetTask.due_date) {
                 targetView = 'today'; // Tasks with dates go to today/schedule
             }
         }
 
         // Save current state including editingTaskId for proper back navigation
-        setNavStack(prev => [...prev, { view, focusedId: focusedTaskId, editingId: editingTaskId }]);
+        setNavStack(prev => [...prev, { view, focusedId: focusedTaskId, editingId: editingTaskId, searchOpen }]);
         setView(targetView);
         setFocusedTaskId(targetId);
 
@@ -1132,6 +1168,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (taskToEdit) {
             setTimeout(() => setEditingTaskId(taskToEdit), 150);
         }
+
+        // Restore search open state
+        if (last.searchOpen !== undefined) {
+            setSearchOpen(last.searchOpen);
+        }
     };
 
     // Listen for navigation events (used by toasts and other components that can't directly call navigateToTask)
@@ -1158,6 +1199,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         // Find #prompt keyword tag (separate from 'prompt' tag for prompts library)
         const hashPromptTagId = tags.find(tg => tg.name === '#prompt')?.id;
         const scheduleTagId = helperFindTagId(['schedule', '行程']);
+        const annualTagId = helperFindTagId(['annual', 'annualplan', '年度計畫', '年度']);
 
         if (currentView === 'schedule') {
             return currentTasks.filter(t => (!!t.due_date || !!t.start_date) && t.status !== 'deleted' && t.status !== 'logged').sort((a, b) => { const dateA = new Date(a.start_date || a.due_date || 0).getTime(); const dateB = new Date(b.start_date || b.due_date || 0).getTime(); return dateA - dateB; }).map((t, index) => ({ data: t, depth: 0, hasChildren: false, isExpanded: false, path: [], index }));
@@ -1189,6 +1231,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     // Check if task has the selected tag OR any of its descendants (via tags array or @mention)
                     if (!taskHasAnyTag(t, relatedTagIds)) return false;
 
+                    // Apply viewTagFilters for tag-based views (like 專案, 年度計畫, etc.)
+                    // Use the tag ID as the view key for filtering
+                    const filterTagView = currentViewTagFilters[currentFilter] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeTagView, exclude: excludeTagView } = Array.isArray(filterTagView) ? { include: filterTagView, exclude: [] as string[] } : filterTagView;
+                    if (includeTagView.length > 0 && !t.tags.some(id => includeTagView.includes(id))) return false;
+                    if (excludeTagView.length > 0 && t.tags.some(id => excludeTagView.includes(id))) return false;
+
                     // Advanced Filters
                     if (currentAdvancedFilters.additionalTags.length > 0) {
                         if (!currentAdvancedFilters.additionalTags.every(tag => t.tags?.includes(tag))) return false;
@@ -1214,47 +1263,37 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         if (!t.title) console.log(`[Inbox Debug] Hidden task (ID: ${t.id}): Empty title`);
                     });
                     return (t: TaskData) => {
-                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
-                        return t.status === 'inbox' && !t.parent_id;
-                    };
-                case 'all':
-                    // Inbox: 根任務沒有日期的任務（及其子任務）
-                    return (t: TaskData) => {
-                        // Exclude tasks that belong to other views
-                        if (t.parent_id || t.status === 'deleted' || t.status === 'logged') return false;
-                        // Exclude someday/waiting status tasks - they go to 將來/靈感
-                        if (t.status === 'someday' || t.status === 'waiting') return false;
+                        // Basic Inbox Definition: No parent, status is 'inbox'
+                        if (t.status !== 'inbox' || t.parent_id) return false;
 
-                        // Exclude if task has prompt, journal, inspiration, note, or someday tag
-                        if (promptTagId && t.tags.includes(promptTagId)) return false;
-                        if (journalTagId && t.tags.includes(journalTagId)) return false;
+                        // 1. Exclude tasks with dates (Today/Focus/Schedule)
+                        if (t.start_date || t.due_date) return false;
+
+                        // 2. Exclude Schedule tags (Strong check)
+                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                        if (t.tags.some(id => {
+                            const tag = tags.find(tg => tg.id === id);
+                            return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
+                        })) return false;
+
+                        // 3. Exclude Special View Tags
+                        // Project
+                        if (projectTagId && t.tags.includes(projectTagId)) return false;
+                        // Annual Plan
+                        if (annualTagId && t.tags.includes(annualTagId)) return false;
+                        // Waiting/Inspiration (Someday) - handled by status usually, but check tags too
                         if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
-                        if (noteTagId && t.tags.includes(noteTagId)) return false;
-                        if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
-
-                        // Check someday by tag NAME (not just single ID) to handle multiple tags with similar names
-                        const hasSomedayTagByName = t.tags.some(tagId => {
-                            const tagObj = tags.find(tg => tg.id === tagId);
-                            if (!tagObj) return false;
-                            const name = tagObj.name.trim().toLowerCase();
-                            return name === 'someday' || name === 'inspiration' || name === '靈感' || name === '將來/靈感';
-                        });
-
-                        if (hasSomedayTagByName) {
-                            return false;
-                        }
-
-                        // Exclude if task has #prompt keyword tag
+                        // Knowledge/Journal
+                        if (journalTagId && t.tags.includes(journalTagId)) return false;
+                        // Prompt
+                        if (promptTagId && t.tags.includes(promptTagId)) return false;
                         if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
 
-                        // Exclude Project tasks (have 'project' tag AND have children)
-                        if (projectTagId && t.tags.includes(projectTagId)) {
-                            const hasChildren = currentTasks.some(child => child.parent_id === t.id && child.status !== 'deleted');
-                            if (hasChildren) return false;
-                        }
-
-                        // Inbox only shows tasks WITHOUT dates
-                        if (t.start_date || t.due_date) return false;
+                        // Apply viewTagFilters
+                        const filter = currentViewTagFilters['inbox'] || { include: [] as string[], exclude: [] as string[] };
+                        const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+                        if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+                        if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
 
                         return true;
                     };
@@ -1263,6 +1302,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     return (t: TaskData) => {
                         if (t.parent_id || t.status === 'deleted') return false;
                         if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+
+                        // Apply viewTagFilters
+                        const filter = currentViewTagFilters['allview'] || { include: [] as string[], exclude: [] as string[] };
+                        const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+                        if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+                        if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
+
                         return true;
                     };
                 case 'newtable':
@@ -1305,9 +1351,21 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         return true;
                     };
                 case 'today': return (t: TaskData) => {
-                    // Skip deleted/logged tasks
-                    if (t.status === 'logged' || t.status === 'deleted') return false;
+                    // Skip deleted/logged/waiting tasks
+                    if (t.status === 'logged' || t.status === 'deleted' || t.status === 'waiting' || t.status === 'someday') return false;
+
+                    // Exclude Schedule
                     if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                    if (t.tags.some(id => {
+                        const tag = tags.find(tg => tg.id === id);
+                        return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
+                    })) return false;
+
+                    // Apply viewTagFilters
+                    const filterToday = currentViewTagFilters['today'] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeToday, exclude: excludeToday } = Array.isArray(filterToday) ? { include: filterToday, exclude: [] as string[] } : filterToday;
+                    if (includeToday.length > 0 && !t.tags.some(id => includeToday.includes(id))) return false;
+                    if (excludeToday.length > 0 && t.tags.some(id => excludeToday.includes(id))) return false;
 
                     // Exclude 'note' and 'Project' tags (and their children)
                     const restrictedNames = ['note', 'project'];
@@ -1315,48 +1373,23 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         .filter(tg => restrictedNames.includes(tg.name.trim().toLowerCase()))
                         .map(tg => tg.id);
 
-                    const isRestricted = (task: TaskData) => task.tags && task.tags.some(id => restrictedTagIds.includes(id));
+                    if (t.tags && t.tags.some(id => restrictedTagIds.includes(id))) return false;
 
-                    if (isRestricted(t)) return false;
+                    // STRICT CHECK: Must have self date set, no inheritance
+                    if (!t.start_date && !t.due_date) return false;
 
-                    // Helper to check if a task has ANY date set (not just today)
-                    const hasDateSet = (task: TaskData): boolean => {
-                        if (task.status === 'logged' || task.status === 'deleted') return false;
-                        // Has start_date or due_date set
-                        const hasStartDate = !!(task.start_date);
-                        const hasDueDate = !!(task.due_date);
-                        // Or completed today
-                        const isCompletedToday = !!(task.completed_at && isToday(task.completed_at));
-                        return hasStartDate || hasDueDate || isCompletedToday;
-                    };
+                    // Check if relevant date is within 7 days from now (matching date separators)
+                    const now = new Date();
+                    const endOfRange = new Date(now);
+                    endOfRange.setDate(endOfRange.getDate() + 7);
+                    endOfRange.setHours(23, 59, 59, 999);
 
-                    const hasSelfDate = hasDateSet(t);
-                    let hasAncestralDate = false;
+                    const taskDate = t.start_date ? new Date(t.start_date) : (t.due_date ? new Date(t.due_date) : null);
 
-                    // Walk up to check restrictions and date inheritance
-                    if (t.parent_id) {
-                        let currParentId: string | null = t.parent_id;
-                        const visited = new Set<string>();
-                        let depth = 0;
+                    // Include: overdue (past) + today + next 7 days
+                    if (!taskDate || taskDate > endOfRange) return false;
 
-                        while (currParentId && !visited.has(currParentId) && depth < 20) {
-                            visited.add(currParentId);
-                            const parent = currentTasks.find(p => p.id === currParentId);
-
-                            // If parent not found or is strictly hidden (deleted/logged), stop
-                            if (!parent || parent.status === 'logged' || parent.status === 'deleted') return false;
-
-                            // If parent has restricted tag, child is also excluded
-                            if (isRestricted(parent)) return false;
-
-                            if (hasDateSet(parent)) hasAncestralDate = true;
-
-                            currParentId = parent.parent_id || null;
-                            depth++;
-                        }
-                    }
-
-                    return hasSelfDate || hasAncestralDate;
+                    return true;
                 };
                 case 'waiting': return (t: TaskData) => {
                     // View Tag Filters
@@ -1407,21 +1440,65 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
                     return t.status !== 'deleted' && t.status !== 'logged' && t.tags.includes(promptTag.id);
                 };
-                case 'log': return (t: TaskData) => t.status === 'logged';
-                case 'logbook': return (t: TaskData) => t.status === 'logged';
-                case 'recent': return (t: TaskData) => t.status !== 'deleted'; // Show all non-deleted tasks
-                case 'trash': return (t: TaskData) => t.status === 'deleted';
+                case 'log':
+                case 'logbook': return (t: TaskData) => {
+                    if (t.status !== 'logged') return false;
+
+                    // Apply viewTagFilters
+                    const filterLog = currentViewTagFilters['logbook'] || currentViewTagFilters['log'] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeLog, exclude: excludeLog } = Array.isArray(filterLog) ? { include: filterLog, exclude: [] as string[] } : filterLog;
+                    if (includeLog.length > 0 && !t.tags.some(id => includeLog.includes(id))) return false;
+                    if (excludeLog.length > 0 && t.tags.some(id => excludeLog.includes(id))) return false;
+
+                    return true;
+                };
+                case 'recent': return (t: TaskData) => {
+                    if (t.status === 'deleted') return false;
+
+                    // Apply viewTagFilters
+                    const filterRecent = currentViewTagFilters['recent'] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeRecent, exclude: excludeRecent } = Array.isArray(filterRecent) ? { include: filterRecent, exclude: [] as string[] } : filterRecent;
+                    if (includeRecent.length > 0 && !t.tags.some(id => includeRecent.includes(id))) return false;
+                    if (excludeRecent.length > 0 && t.tags.some(id => excludeRecent.includes(id))) return false;
+
+                    return true;
+                };
+                case 'trash': return (t: TaskData) => {
+                    if (t.status !== 'deleted') return false;
+
+                    // Apply viewTagFilters
+                    const filterTrash = currentViewTagFilters['trash'] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeTrash, exclude: excludeTrash } = Array.isArray(filterTrash) ? { include: filterTrash, exclude: [] as string[] } : filterTrash;
+                    if (includeTrash.length > 0 && !t.tags.some(id => includeTrash.includes(id))) return false;
+                    if (excludeTrash.length > 0 && t.tags.some(id => excludeTrash.includes(id))) return false;
+
+                    return true;
+                };
                 default: return (t: TaskData) => {
                     if (t.status === 'deleted' || t.status === 'logged') return false;
+
+                    // Stronger exclusion for schedule tasks
                     if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+                    const hasScheduleTagByName = t.tags.some(id => {
+                        const tag = tags.find(tg => tg.id === id);
+                        return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
+                    });
+                    if (hasScheduleTagByName) return false;
+
+                    // Apply viewTagFilters (works for matrix, project, and other unhandled views)
+                    const filterDefault = currentViewTagFilters[currentView] || { include: [] as string[], exclude: [] as string[] };
+                    const { include: includeDefault, exclude: excludeDefault } = Array.isArray(filterDefault) ? { include: filterDefault, exclude: [] as string[] } : filterDefault;
+                    if (includeDefault.length > 0 && !t.tags.some(id => includeDefault.includes(id))) return false;
+                    if (excludeDefault.length > 0 && t.tags.some(id => excludeDefault.includes(id))) return false;
+
                     return true;
                 };
             }
         };
         const filterFn = getFilter();
 
-        // Map views that share ordering - allview uses 'all' ordering
-        const orderKey = (currentView === 'allview' || currentView === 'project') ? 'all' : currentView;
+        // Map views that share ordering - allview uses 'inbox' ordering
+        const orderKey = (currentView === 'allview' || currentView === 'project') ? 'inbox' : currentView;
 
         const getSortValue = (t: TaskData) => {
             if (t.view_orders && t.view_orders[orderKey] !== undefined) return t.view_orders[orderKey];
@@ -1432,16 +1509,14 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             // For today view, sort by date first, then by view_orders.today within each date
             const getEffectiveDate = (t: TaskData): string => {
                 // Priority: start_date > due_date > today
-                if (t.start_date) {
-                    const d = new Date(t.start_date);
-                    return d.toISOString().split('T')[0];
+                const dateStr = t.start_date || t.due_date;
+                if (dateStr) {
+                    const d = new Date(dateStr);
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 }
-                if (t.due_date) {
-                    const d = new Date(t.due_date);
-                    return d.toISOString().split('T')[0];
-                }
-                // No date - treat as today
-                return new Date().toISOString().split('T')[0];
+                // No date - treat as today (local timezone)
+                const now = new Date();
+                return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
             };
 
             const getTodaySortValue = (t: TaskData) => {
@@ -1673,7 +1748,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const currentVisibleTasks = overrideVisibleTasks || visibleTasks;
 
         // Map views that share ordering
-        const orderKey = (view === 'allview' || view === 'project') ? 'all' : view;
+        const orderKey = (view === 'allview' || view === 'project') ? 'inbox' : view;
 
         const moveIds = selectedTaskIds.includes(draggedId) ? selectedTaskIds : [draggedId];
 
@@ -1849,7 +1924,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Map views that share ordering
         // Map views that share ordering
-        const orderKey = (view === 'allview' || view === 'project') ? 'all' : view;
+        const orderKey = (view === 'allview' || view === 'project') ? 'inbox' : view;
 
         const getSortValue = (t: TaskData) => {
             if (t.view_orders && t.view_orders[orderKey] !== undefined) return t.view_orders[orderKey];
@@ -1890,9 +1965,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 // Today view: flat list within the same date only
                 // This ensures we only move within the current date group
                 const getEffectiveDate = (t: TaskData) => {
-                    if (t.start_date) return t.start_date.split('T')[0];
-                    if (t.due_date) return t.due_date.split('T')[0];
-                    return new Date().toISOString().split('T')[0];
+                    const dateStr = t.start_date || t.due_date;
+                    if (dateStr) {
+                        const d = new Date(dateStr);
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    }
+                    const now = new Date();
+                    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 };
                 const movingTaskDate = getEffectiveDate(movingTask);
                 siblings = visibleTasks
@@ -1916,13 +1995,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     // At the top of current date section in today view - try to move to previous date
                     if (isTodayView) {
                         const getEffectiveDate = (t: TaskData) => {
-                            if (t.start_date) return t.start_date.split('T')[0];
-                            if (t.due_date) return t.due_date.split('T')[0];
+                            const dateStr = t.start_date || t.due_date;
+                            if (dateStr) {
+                                const d = new Date(dateStr);
+                                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            }
                             const now = new Date();
-                            const year = now.getFullYear();
-                            const month = String(now.getMonth() + 1).padStart(2, '0');
-                            const day = String(now.getDate()).padStart(2, '0');
-                            return `${year}-${month}-${day}`;
+                            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                         };
                         const currentDate = getEffectiveDate(movingTask);
 
@@ -1939,14 +2018,20 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                                 .sort((a, b) => getSortValue(a) - getSortValue(b));
 
                             // Insert at the end of previous date section
-                            const lastTaskOrder = prevDateTasks.length > 0
-                                ? getSortValue(prevDateTasks[prevDateTasks.length - 1])
-                                : 0;
+                            let baseOrder: number;
+                            if (prevDateTasks.length > 0) {
+                                // Has existing tasks - insert after last
+                                const lastTaskOrder = getSortValue(prevDateTasks[prevDateTasks.length - 1]);
+                                baseOrder = lastTaskOrder + 10000;
+                            } else {
+                                // Empty section - use a reasonable starting value
+                                baseOrder = 0;
+                            }
 
                             const updates = movingTasks.map((t, i) => ({
                                 id: t.id,
                                 start_date: prevDate,
-                                view_orders: { ...(t.view_orders || {}), [orderKey]: lastTaskOrder + 10000 * (i + 1) }
+                                view_orders: { ...(t.view_orders || {}), [orderKey]: baseOrder + 10000 * i }
                             }));
                             applyBatchUpdates(updates);
                             return;
@@ -1971,13 +2056,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     // At the end of current date section in today view - try to move to next date
                     if (isTodayView) {
                         const getEffectiveDate = (t: TaskData) => {
-                            if (t.start_date) return t.start_date.split('T')[0];
-                            if (t.due_date) return t.due_date.split('T')[0];
+                            const dateStr = t.start_date || t.due_date;
+                            if (dateStr) {
+                                const d = new Date(dateStr);
+                                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            }
                             const now = new Date();
-                            const year = now.getFullYear();
-                            const month = String(now.getMonth() + 1).padStart(2, '0');
-                            const day = String(now.getDate()).padStart(2, '0');
-                            return `${year}-${month}-${day}`;
+                            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                         };
                         const currentDate = getEffectiveDate(movingTask);
 
@@ -1988,10 +2073,22 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                         if (currentDateIndex < allDates.length - 1) {
                             // Move to next date
                             const nextDate = allDates[currentDateIndex + 1];
+                            const nextDateTasks = visibleTasks
+                                .filter(vt => getEffectiveDate(vt.data) === nextDate)
+                                .map(vt => vt.data)
+                                .sort((a, b) => getSortValue(a) - getSortValue(b));
 
                             // Insert at the beginning of next date section
-                            // Use negative orders to ensure tasks always appear first
-                            const baseOrder = -10000 * (movingTasks.length + 1);
+                            let baseOrder: number;
+                            if (nextDateTasks.length > 0) {
+                                // Has existing tasks - insert before first
+                                const firstTaskOrder = getSortValue(nextDateTasks[0]);
+                                baseOrder = firstTaskOrder - 10000 * movingTasks.length;
+                            } else {
+                                // Empty section - use a reasonable starting value
+                                baseOrder = 0;
+                            }
+
                             const updates = movingTasks.map((t, i) => ({
                                 id: t.id,
                                 start_date: nextDate,
@@ -2429,8 +2526,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         markLocalUpdate(id);
         const original = tasks.find(t => t.id === id);
 
-        // Check if task will leave inbox view (view === 'all' is the inbox)
-        if (view === 'all' && original && !original.parent_id) {
+        // Check if task will leave inbox view (view === 'inbox' is the inbox)
+        if (view === 'inbox' && original && !original.parent_id) {
             // Find special tags that indicate task should leave inbox
             const projectTag = tags.find(t => t.name.trim().toLowerCase() === 'project');
             const inspirationTag = tags.find(t => t.name.includes('靈感'));
@@ -2439,6 +2536,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             const hashPromptTag = tags.find(t => t.name === '#prompt');
             const journalTag = tags.find(t => t.name.trim().toLowerCase() === 'journal');
             const somedayTag = tags.find(t => t.name.trim().toLowerCase() === 'someday');
+            const annualTag = tags.find(t => ['annual', 'annualplan', '年度計畫', '年度'].some(n => t.name.trim().toLowerCase().includes(n)));
+            const scheduleTag = tags.find(t => ['schedule', '行程'].includes(t.name.trim().toLowerCase()));
 
             // Check if new tags include special tags that would move task out of inbox
             const newTags = data.tags || original.tags || [];
@@ -2451,7 +2550,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 (promptTag && newTags.includes(promptTag.id) && !originalTags.includes(promptTag.id)) ||
                 (hashPromptTag && newTags.includes(hashPromptTag.id) && !originalTags.includes(hashPromptTag.id)) ||
                 (journalTag && newTags.includes(journalTag.id) && !originalTags.includes(journalTag.id)) ||
-                (somedayTag && newTags.includes(somedayTag.id) && !originalTags.includes(somedayTag.id))
+                (somedayTag && newTags.includes(somedayTag.id) && !originalTags.includes(somedayTag.id)) ||
+                (annualTag && newTags.includes(annualTag.id) && !originalTags.includes(annualTag.id)) ||
+                (scheduleTag && newTags.includes(scheduleTag.id) && !originalTags.includes(scheduleTag.id))
             );
 
             // Check if status is changing to someday/waiting (moves to 將來/靈感)
@@ -2612,8 +2713,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         if (!supabaseClient || updates.length === 0) return;
         setSyncStatus('syncing');
 
-        // Check if any tasks will leave inbox view (view === 'all' is the inbox)
-        if (view === 'all') {
+        // Check if any tasks will leave inbox view (view === 'inbox' is the inbox)
+        if (view === 'inbox') {
             // Find special tags that indicate task should leave inbox
             const projectTag = tags.find(t => t.name.trim().toLowerCase() === 'project');
             const inspirationTag = tags.find(t => t.name.includes('靈感'));
@@ -2760,21 +2861,61 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         });
 
         // 4. DB Update
+        // 4. DB Update
         if (supabaseClient) {
-            const { error } = await supabaseClient.from('tasks').delete().in('id', ids);
-            if (error) {
-                handleError(error);
-                // Restore local
-                setTasks(prev => {
-                    const next = [...prev, ...tasksToDelete].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at));
-                    tasksRef.current = next;
-                    return next;
-                });
-                return;
+            const BATCH_SIZE = 100;
+            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+                const chunk = ids.slice(i, i + BATCH_SIZE);
+                const { error } = await supabaseClient.from('tasks').delete().in('id', chunk);
+                if (error) {
+                    console.error("Batch delete chunk error:", error);
+                    // If error, we might want to alert but for now just log
+                    // Reverting partial state is complex
+                }
             }
+
+
         }
         setSyncStatus('synced');
         setToast({ msg: `已永久刪除 ${ids.length} 個任務`, type: 'info' });
+    };
+
+    const batchImportTasks = async (newTasks: Partial<TaskData>[]) => {
+        if (!supabaseClient || !user) return;
+        setSyncStatus('syncing');
+
+        // Chunking
+        const BATCH_SIZE = 100;
+        const insertedTasks: TaskData[] = [];
+
+        for (let i = 0; i < newTasks.length; i += BATCH_SIZE) {
+            const chunk = newTasks.slice(i, i + BATCH_SIZE).map(t => ({
+                ...t,
+                user_id: user.id,
+                updated_at: new Date().toISOString(),
+                created_at: t.created_at || new Date().toISOString()
+            }));
+
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .insert(chunk)
+                .select();
+
+            if (error) {
+                console.error("Batch Add Error:", error);
+                setToast({ msg: `批次新增失敗: ${error.message}`, type: 'error' });
+            } else if (data) {
+                insertedTasks.push(...(data as TaskData[]));
+            }
+        }
+
+        // Update Local State efficiently
+        if (insertedTasks.length > 0) {
+            setTasks(prev => [...prev, ...insertedTasks]);
+            setToast({ msg: `成功匯入 ${insertedTasks.length} 個任務`, type: 'info' });
+        }
+        setSyncStatus('synced');
+        return insertedTasks;
     };
 
     const deleteTask = async (id: string, permanent: boolean = false) => {
@@ -3098,6 +3239,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             searchHistory,
             addSearchHistory,
             deleteSearchHistory,
+            searchOpen,
+            setSearchOpen,
         }}>
             {children}
         </AppContext.Provider>

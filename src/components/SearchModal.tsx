@@ -111,12 +111,30 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
             // Date filter
             let matchesDate = true;
             if (filters.startDate || filters.endDate) {
-                const taskDate = task.start_date || task.due_date;
-                if (!taskDate) {
+                const taskDateStr = task.start_date || task.due_date;
+                if (!taskDateStr) {
                     matchesDate = false;
                 } else {
-                    if (filters.startDate && taskDate < filters.startDate) matchesDate = false;
-                    if (filters.endDate && taskDate > filters.endDate) matchesDate = false;
+                    const parseSafe = (dStr: string) => {
+                        const d = new Date(dStr);
+                        return isNaN(d.getTime()) ? NaN : d.setHours(0, 0, 0, 0);
+                    };
+
+                    const tDate = parseSafe(taskDateStr);
+
+                    // If task date is invalid, filter out
+                    if (isNaN(tDate)) {
+                        matchesDate = false;
+                    } else {
+                        if (filters.startDate) {
+                            const sDate = parseSafe(filters.startDate);
+                            if (!isNaN(sDate) && tDate < sDate) matchesDate = false;
+                        }
+                        if (filters.endDate) {
+                            const eDate = parseSafe(filters.endDate);
+                            if (!isNaN(eDate) && tDate > eDate) matchesDate = false;
+                        }
+                    }
                 }
             }
 
@@ -488,7 +506,7 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
                                 <div className="space-y-1">
                                     {searchResults.map(task => {
                                         const dateStr = task.start_date || task.due_date;
-                                        const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }) : null;
+                                        const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('zh-TW', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
                                         const isEditing = editingTaskId === task.id;
 
                                         const goToTask = () => {

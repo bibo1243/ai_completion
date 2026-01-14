@@ -24,9 +24,13 @@ interface WeekData {
 
 interface ContinuousWeekCalendarProps {
     onDateClick?: (date: Date) => void;
+    filterTags?: string[];
+    filterTagsExclude?: string[];
+    filterColors?: string[];
+    filterProjects?: string[];
 }
 
-export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarProps) => {
+export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTagsExclude = [], filterColors = [], filterProjects = [] }: ContinuousWeekCalendarProps) => {
     const {
         tasks,
         tags,
@@ -53,25 +57,59 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
     const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
     const [internalSelectedDate, setInternalSelectedDate] = useState<Date | null>(null);
     const [draftTask, setDraftTask] = useState<{ date: Date; title: string } | null>(null);
+    // Virtualization state: start with large range to ensure initial render is visible
+    const [visibleRange, setVisibleRange] = useState({ start: 0, end: 200 });
 
     const filteredTasks = React.useMemo(() => {
-        // 僅在 Focus 視圖下應用 Focus 的標籤過濾
-        // 如果這個組件被用於其他視圖（如 Schedule），應適配
+        // Apply all filters
+        let res = tasks.filter(t => t.status !== 'deleted');
+
+        // Tag filter from viewTagFilters (existing behavior)
         if (view === 'focus') {
             const filter = viewTagFilters['focus'] || { include: [] as string[], exclude: [] as string[] };
             const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
 
-            let res = tasks;
             if (include.length > 0) {
                 res = res.filter(t => t.tags.some(id => include.includes(id)));
             }
             if (exclude.length > 0) {
                 res = res.filter(t => !t.tags.some(id => exclude.includes(id)));
             }
-            return res;
         }
-        return tasks;
-    }, [tasks, view, viewTagFilters]);
+
+        // Additional tag filter from props (include)
+        if (filterTags.length > 0) {
+            res = res.filter(t => t.tags.some(id => filterTags.includes(id)));
+        }
+
+        // Additional tag filter from props (exclude)
+        if (filterTagsExclude.length > 0) {
+            res = res.filter(t => !t.tags.some(id => filterTagsExclude.includes(id)));
+        }
+
+        // Color filter
+        if (filterColors.length > 0) {
+            res = res.filter(t => filterColors.includes(t.color));
+        }
+
+        // Project filter (tasks under selected projects)
+        if (filterProjects.length > 0) {
+            res = res.filter(t => {
+                // Check if task is a child of any selected project
+                if (filterProjects.includes(t.id)) return true;
+                if (t.parent_id && filterProjects.includes(t.parent_id)) return true;
+                // Check ancestors
+                let parent = tasks.find(p => p.id === t.parent_id);
+                while (parent) {
+                    if (filterProjects.includes(parent.id)) return true;
+                    parent = tasks.find(p => p.id === parent?.parent_id);
+                }
+                return false;
+            });
+        }
+
+        return res;
+    }, [tasks, view, viewTagFilters, filterTags, filterTagsExclude, filterColors, filterProjects]);
 
     // 生成指定日期所在的週數據
     const generateWeek = (baseDate: Date): WeekData => {
@@ -210,6 +248,20 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
             const midWeekDate = week.days[3].date;
             setCurrentViewDate(midWeekDate);
         }
+
+        // Virtualization: Calculate visible range
+        const buffer = 6; // Buffer weeks above/below
+        const startNode = Math.floor(scrollTop / WEEK_HEIGHT) - buffer;
+        const endNode = Math.ceil((scrollTop + clientHeight) / WEEK_HEIGHT) + buffer;
+
+        // Update only if changed to avoid renders
+        setVisibleRange(prev => {
+            if (prev.start === startNode && prev.end === endNode) return prev;
+            return {
+                start: Math.max(0, startNode),
+                end: endNode // Max end checked in render
+            };
+        });
 
     }, [weeks]);
 
@@ -359,12 +411,16 @@ export const ContinuousWeekCalendar = ({ onDateClick }: ContinuousWeekCalendarPr
                     {/* 使用絕對定位渲染可見區域，或者直接渲染（因為 DOM 數量不多） */}
                     {/* 為了性能，我們這裡採用直接渲染，因为 100 行 DOM 現代瀏覽器完全沒問題 */}
                     {weeks.map((week, index) => {
-                        // 簡單的虛擬化：只渲染視口附近的
-                        // 實際項目建議用 react-window，這邊手寫簡單版
-                        if (!containerRef.current) return null;
+                        // Virtualization Check
+                        if (index < visibleRange.start || index > visibleRange.end) {
+                            // Use empty div with height to maintain scrollbar if purely relative?
+                            // But here we use absolute positioning for rows, so we just don't render the content.
+                            // The parent container has explicit height set: style={{ height: weeks.length * WEEK_HEIGHT }}
+                            // So we can strictly return null.
+                            return null;
+                        }
 
-                        // 我們可以選擇全部渲染，因為 div 結構簡單。
-                        // 先全部渲染試試流暢度。
+                        if (!containerRef.current) return null;
 
                         return (
                             <div

@@ -359,7 +359,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                 setInlineEditingTaskId(task.id);
             }
         }
-        if (e.key === ' ' && (view === 'all' || view === 'inbox' || view === 'today' || view === 'schedule' || view === 'waiting' || view === 'focus')) {
+        if (e.key === ' ' && (view === 'inbox' || view === 'today' || view === 'schedule' || view === 'waiting' || view === 'focus')) {
             e.preventDefault(); e.stopPropagation();
             const currentIdx = visibleTasks.findIndex(t => t.data.id === task.id);
 
@@ -406,7 +406,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
             // Build new task data based on view
             const newTaskData: any = {
                 title: '',
-                status: view === 'waiting' ? 'waiting' : 'inbox',
+                status: view === 'waiting' ? 'someday' : 'inbox',
                 parent_id: useParentId,
                 order_index: newOrderValue,
                 view_orders: { [view]: newOrderValue }
@@ -419,6 +419,10 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                 newTaskData.start_date = inheritedDate;
                 newTaskData.status = 'active';
                 newTaskData.is_all_day = true;
+            } else if (view === 'waiting') {
+                // Add someday tag to keep task visible in waiting view
+                const somedayTag = tags.find(tg => tg.name.toLowerCase() === 'someday');
+                if (somedayTag) newTaskData.tags = [somedayTag.id];
             }
 
             addTask(newTaskData, [], undefined).then(newId => {

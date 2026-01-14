@@ -12,7 +12,15 @@ const INITIAL_BUFFER_DAYS = 15;
 const LOAD_THRESHOLD = 500;
 const WEEKDAY_ZH = ['日', '一', '二', '三', '四', '五', '六'];
 
-export const ScheduleView = () => {
+
+interface ScheduleViewProps {
+    filterTags?: string[];
+    filterTagsExclude?: string[];
+    filterColors?: string[];
+    filterProjects?: string[];
+}
+
+export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterColors = [], filterProjects = [] }: ScheduleViewProps) => {
     const {
         tasks,
         tags,
@@ -102,9 +110,41 @@ export const ScheduleView = () => {
 
     const tasksByDate = useMemo(() => {
         const map = new Map<string, TaskData[]>();
-        tasks.forEach(t => {
-            if (t.status === 'deleted' || t.status === 'logged') return;
-            // Prioritize start_date, fallback to due_date
+
+        // First apply filters
+        let filteredTasks = tasks.filter(t => t.status !== 'deleted' && t.status !== 'logged');
+
+        // Tag filter (include)
+        if (filterTags.length > 0) {
+            filteredTasks = filteredTasks.filter(t => t.tags.some(id => filterTags.includes(id)));
+        }
+
+        // Tag filter (exclude)
+        if (filterTagsExclude.length > 0) {
+            filteredTasks = filteredTasks.filter(t => !t.tags.some(id => filterTagsExclude.includes(id)));
+        }
+
+        // Color filter
+        if (filterColors.length > 0) {
+            filteredTasks = filteredTasks.filter(t => filterColors.includes(t.color));
+        }
+
+        // Project filter (tasks under selected projects)
+        if (filterProjects.length > 0) {
+            filteredTasks = filteredTasks.filter(t => {
+                if (filterProjects.includes(t.id)) return true;
+                if (t.parent_id && filterProjects.includes(t.parent_id)) return true;
+                let parent = tasks.find(p => p.id === t.parent_id);
+                while (parent) {
+                    if (filterProjects.includes(parent.id)) return true;
+                    parent = tasks.find(p => p.id === parent?.parent_id);
+                }
+                return false;
+            });
+        }
+
+        // Group by date
+        filteredTasks.forEach(t => {
             const dStr = t.start_date || t.due_date;
             if (dStr) {
                 const d = new Date(dStr);
@@ -114,7 +154,7 @@ export const ScheduleView = () => {
             }
         });
         return map;
-    }, [tasks]);
+    }, [tasks, filterTags, filterTagsExclude, filterColors, filterProjects]);
 
     // --- Work View State & Geometry ---
     const [isWorkView, setIsWorkView] = useState(false);

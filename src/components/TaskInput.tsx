@@ -98,6 +98,7 @@ const cleanHtml = (html: string): string => {
 import ReactMarkdown from 'react-markdown';
 
 import { AttachmentLink } from '../types';
+import { ReminderSetting } from './ReminderSetting';
 
 const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對與標點符號修正），嚴禁任何開場白、結尾、說明或感想。輸出內容必須僅包含潤飾後的正文內容。";
 
@@ -140,6 +141,33 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     });
     const [duration, setDuration] = useState<number | string>(initialData?.duration || '');
     const [repeatRule, setRepeatRule] = useState<RepeatRule | null>(initialData?.repeat_rule || null);
+
+    // Load reminder from localStorage since DB column may not exist yet
+    const [reminderMinutes, setReminderMinutes] = useState<number | null>(() => {
+        if (initialData?.id) {
+            try {
+                const saved = localStorage.getItem(`task_reminder_${initialData.id}`);
+                if (saved !== null) {
+                    return JSON.parse(saved);
+                }
+            } catch (e) { /* ignore */ }
+        }
+        return initialData?.reminder_minutes ?? null;
+    });
+
+    // Save reminder to localStorage when it changes
+    useEffect(() => {
+        if (initialData?.id) {
+            try {
+                if (reminderMinutes !== null) {
+                    localStorage.setItem(`task_reminder_${initialData.id}`, JSON.stringify(reminderMinutes));
+                } else {
+                    localStorage.removeItem(`task_reminder_${initialData.id}`);
+                }
+            } catch (e) { /* ignore */ }
+        }
+    }, [reminderMinutes, initialData?.id]);
+
     const [showRepeatPicker, setShowRepeatPicker] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -1057,6 +1085,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             attachment_links: attachmentLinks,
             ai_history: aiHistory,
             repeat_rule: repeatRule
+            // reminder_minutes: reminderMinutes  // TODO: Enable after running DB migration
         };
 
         if (onClose) {
@@ -1071,16 +1100,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         else { const newId = await addTask(data, childIds); setFocusedTaskId(newId); setSelectedTaskIds([newId]); }
     };
 
-    const resetForm = () => { setTitle(''); setDesc(''); setDueDate(null); setStartDate(null); setSelectedTags([]); setImages([]); setAttachments([]); setParentId(null); setChildIds([]); setIsProject(false); setIsAllDay(true); setStartTime('09:00'); setEndTime('10:00'); setDuration(''); setRepeatRule(null); };
+    const resetForm = () => { setTitle(''); setDesc(''); setDueDate(null); setStartDate(null); setSelectedTags([]); setImages([]); setAttachments([]); setParentId(null); setChildIds([]); setIsProject(false); setIsAllDay(true); setStartTime('09:00'); setEndTime('10:00'); setDuration(''); setRepeatRule(null); setReminderMinutes(null); };
 
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
-        let files: File[] = [];
-        if ('files' in e.target && (e.target as HTMLInputElement).files) {
-            files = Array.from((e.target as HTMLInputElement).files!);
-        } else if ('dataTransfer' in e && (e as React.DragEvent).dataTransfer.files) {
-            files = Array.from((e as React.DragEvent).dataTransfer.files);
-        }
-
+    const uploadFiles = async (files: File[]) => {
         if (files.length === 0 || !supabase) return;
         setIsUploading(true);
 
@@ -1109,7 +1131,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
                 const fileExt = file.name.split('.').pop() || (isImage ? 'jpg' : 'bin');
                 const fileName = `${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
-                const filePath = `${user.id}/${fileName}`;
+                const userId = user?.id || 'anonymous';
+                const filePath = `${userId}/${fileName}`;
 
                 const { error: uploadError } = await supabase.storage.from('attachments').upload(filePath, uploadFile, {
                     contentType: file.type,
@@ -1148,6 +1171,37 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             setIsUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
+    };
+
+    const handlePaste = async (e: React.ClipboardEvent) => {
+        // If pasting text into an input or textarea, let default behavior happen
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+            // Check if clipboard has files
+            if (e.clipboardData.files.length > 0) {
+                e.preventDefault(); // Prevent default if we handle files
+                const files = Array.from(e.clipboardData.files);
+                await uploadFiles(files);
+                return;
+            }
+            return;
+        }
+
+        if (e.clipboardData.files.length > 0) {
+            e.preventDefault();
+            const files = Array.from(e.clipboardData.files);
+            await uploadFiles(files);
+        }
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+        let files: File[] = [];
+        if ('files' in e.target && (e.target as HTMLInputElement).files) {
+            files = Array.from((e.target as HTMLInputElement).files!);
+        } else if ('dataTransfer' in e && (e as React.DragEvent).dataTransfer.files) {
+            files = Array.from((e as React.DragEvent).dataTransfer.files);
+        }
+        await uploadFiles(files);
     };
 
     const handleRemoveImage = async (url: string) => {
@@ -2024,6 +2078,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             ref={containerRef}
             className={`group transition-all w-full relative ${(isQuickAdd || isEmbedded) ? 'bg-transparent' : `mb-3 bg-white rounded-xl border ${borderClass} shadow-[0_4px_8px_rgba(0,0,0,0.08)]`} ${isDraggingFile ? 'ring-2 ring-indigo-400 border-indigo-400 bg-indigo-50/10' : ''}`}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onDragOver={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -3063,6 +3118,14 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">整日</span>
                                         </label>
                                     </div>
+                                )}
+
+                                {/* Reminder Setting */}
+                                {startDate && (
+                                    <ReminderSetting
+                                        value={reminderMinutes}
+                                        onChange={setReminderMinutes}
+                                    />
                                 )}
 
                                 <SmartDateInput tabIndex={-1} label="期限" value={dueDate || undefined} onChange={setDueDate} colorClass="text-red-500" tasks={tasks} theme={theme} />

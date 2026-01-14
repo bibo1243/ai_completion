@@ -1,7 +1,7 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText, Calendar, Filter } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
@@ -71,7 +71,8 @@ const SidebarNavItem = ({
     sidebarTextClass,
     sidebarFontClass,
     setView,
-    setTagFilter
+    setTagFilter,
+    onEditFilter
 }: any) => {
     const { dragState, updateGhostPosition, endDrag, selectedTaskIds, moveTaskToView, setFocusedTaskId, setSelectedTaskIds }: any = useContext(AppContext);
 
@@ -184,6 +185,15 @@ const SidebarNavItem = ({
                     )}
                 </div>
                 {!sidebarCollapsed && <div className="flex gap-2 items-center">
+                    {onEditFilter && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onEditFilter(id); }}
+                            className={`p-0.5 rounded opacity-0 group-hover/nav-wrapper:opacity-60 hover:!opacity-100 transition-opacity ${hasActiveFilters ? 'text-indigo-500' : 'text-theme-tertiary hover:text-theme-secondary'}`}
+                            title="編輯標籤篩選"
+                        >
+                            <Filter size={12} />
+                        </button>
+                    )}
                     {overdueCount > 0 && <span className="text-[11px] font-semibold text-white bg-rose-400 rounded-full px-3.5 py-0.5 min-w-[26px] text-center shadow-sm">{overdueCount}</span>}
                     {normalCount > 0 && <span className="text-[11px] text-gray-400 font-medium">{normalCount}</span>}
                 </div>}
@@ -194,7 +204,7 @@ const SidebarNavItem = ({
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [importProgress, setImportProgress] = useState<{ current: number, total: number, importing: boolean } | null>(null);
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast, deleteTask }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast, deleteTask, batchDeleteTasks, batchImportTasks, user, searchOpen, setSearchOpen }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -224,12 +234,12 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [popoverId, setPopoverId] = useState<string | null>(null);
     const [popoverPosition, setPopoverPosition] = useState<{ top: number, left: number } | null>(null);
 
-    const [searchOpen, setSearchOpen] = useState(false);
     const [isTagsExpanded, setIsTagsExpanded] = useState(() => {
         const saved = localStorage.getItem('sidebar_tags_expanded');
         return saved !== null ? saved === 'true' : true;
     });
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const icsInputRef = useRef<HTMLInputElement>(null);
 
     const settingsRef = useRef<HTMLDivElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
@@ -326,14 +336,10 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         if (!confirm(language === 'zh' ? `確定要刪除 ${tasksToDelete.length} 個行事曆任務嗎？此動作無法復原！` : `Delete ${tasksToDelete.length} schedule tasks? This cannot be undone!`)) return;
 
         if (confirm(language === 'zh' ? '再次確認：這將會永久刪除這些任務！' : 'Double check: This will permanently delete these tasks!')) {
-            let count = 0;
-            // Use array of promises for potential speedup, though serial is safer for state stability if batching isn't supported
-            for (const t of tasksToDelete) {
-                await deleteTask(t.id);
-                count++;
-            }
-            if (setToast) setToast({ msg: `已刪除 ${count} 個行事曆任務`, type: 'info' });
-            else alert(language === 'zh' ? `已刪除 ${count} 個任務` : `Deleted ${count} tasks`);
+            const ids = tasksToDelete.map((t: any) => t.id);
+            await batchDeleteTasks(ids, true);
+            // batchDeleteTasks handles the toast
+            setShowSettings(false);
             setShowSettings(false);
         }
     };
@@ -492,6 +498,108 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         }
     };
 
+
+
+    const handleICSUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const rawContent = event.target?.result as string;
+            if (!rawContent) return;
+
+            // 1. Unfold
+            const content = rawContent.replace(/\r\n /g, '').replace(/\n /g, '');
+
+            // 2. Parse Events
+            const events = [];
+            const lines = content.split(/\r?\n/);
+            let currentEvent: any = null;
+
+            for (const line of lines) {
+                if (line.startsWith('BEGIN:VEVENT')) {
+                    currentEvent = {};
+                } else if (line.startsWith('END:VEVENT')) {
+                    if (currentEvent && currentEvent.SUMMARY) {
+                        events.push(currentEvent);
+                    }
+                    currentEvent = null;
+                } else if (currentEvent) {
+                    const parts = line.split(':');
+                    const keyPart = parts[0];
+                    const value = parts.slice(1).join(':');
+
+                    const [keyName, ...paramsArr] = keyPart.split(';');
+                    const params = paramsArr.join(';');
+
+                    if (keyName === 'SUMMARY') currentEvent.SUMMARY = value;
+                    if (keyName === 'DTSTART') currentEvent.DTSTART = { value, params };
+                    if (keyName === 'DESCRIPTION') currentEvent.DESCRIPTION = value;
+                    if (keyName === 'UID') currentEvent.UID = value;
+                }
+            }
+
+            if (confirm(`Found ${events.length} events. Import now?`)) {
+                // Resolve '行程' tag
+                const tagName = '行程';
+                let scheduleTagId = tags.find((t: any) => t.name === tagName || t.name === 'schedule')?.id;
+
+                if (!scheduleTagId && user) {
+                    scheduleTagId = await addTag(tagName, null);
+                }
+
+                // Prepare Tasks
+                const validEvents: any[] = [];
+                for (const evt of events) {
+                    if (!evt.DTSTART) continue;
+
+                    let dateStr = evt.DTSTART.value;
+                    let isAllDay = evt.DTSTART.params?.includes('VALUE=DATE') || (dateStr.length === 8 && !dateStr.includes('T'));
+
+                    let startDate = null;
+                    try {
+                        if (dateStr.length === 8 && !dateStr.includes('T')) {
+                            const y = dateStr.substring(0, 4);
+                            const m = dateStr.substring(4, 6);
+                            const d = dateStr.substring(6, 8);
+                            startDate = `${y}-${m}-${d}`;
+                        } else if (dateStr.includes('T')) {
+                            const y = dateStr.substring(0, 4);
+                            const m = dateStr.substring(4, 6);
+                            const d = dateStr.substring(6, 8);
+                            const timePart = dateStr.split('T')[1];
+                            const h = timePart.substring(0, 2);
+                            const min = timePart.substring(2, 4);
+                            const s = timePart.substring(4, 6);
+                            startDate = `${y}-${m}-${d}T${h}:${min}:${s}`;
+                            if (dateStr.endsWith('Z')) startDate += 'Z';
+                        }
+                    } catch (e) { console.warn(e); }
+
+                    if (startDate) {
+                        validEvents.push({
+                            title: evt.SUMMARY,
+                            description: evt.DESCRIPTION || '',
+                            status: 'active',
+                            start_date: startDate,
+                            is_all_day: isAllDay,
+                            things_id: evt.UID,
+                            tags: scheduleTagId ? [scheduleTagId] : []
+                        });
+                    }
+                }
+
+                if (validEvents.length > 0) {
+                    await batchImportTasks(validEvents);
+                }
+            }
+
+            if (icsInputRef.current) icsInputRef.current.value = '';
+        };
+        reader.readAsText(file);
+    };
+
     const handleAddTagAction = async (e?: React.FormEvent, parentId: string | null = null) => {
         e?.preventDefault();
         if (newTagName.trim()) {
@@ -508,72 +616,86 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         }
     };
 
-    const counts = {
-        all: tasks.filter((t: any) => {
-            if (t.status === 'deleted' || t.status === 'logged') return false;
+    const counts = useMemo(() => {
+        // Hoist tag lookups
+        const promptNames = ['prompt', '提示詞'];
+        const journalNames = ['journal', 'note', '知識庫', '知識筆記'];
+        const inspirationNames = ['someday', 'inspiration', '靈感', '將來/靈感'];
+        const noteNames = ['note', 'journal', '知識庫', '知識筆記'];
+        const projectNames = ['project', '專案'];
+        const scheduleNames = ['schedule', '行程'];
 
-            // Exclude if task has prompt, journal, inspiration, or note tag
-            const promptTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'prompt');
-            const journalTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'journal');
-            const inspirationTag = tags.find((tg: any) => tg.name.includes('靈感'));
-            const noteTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'note');
-            const projectTag = tags.find((tg: any) => tg.name.trim().toLowerCase() === 'project');
-            const hashPromptTag = tags.find((tg: any) => tg.name === '#prompt');
+        const promptTag = tags.find((tg: any) => promptNames.some(n => tg.name.trim().toLowerCase() === n));
+        const journalTag = tags.find((tg: any) => journalNames.some(n => tg.name.trim().toLowerCase() === n));
+        const inspirationTag = tags.find((tg: any) => inspirationNames.some(n => tg.name.trim().toLowerCase() === n));
+        const noteTag = tags.find((tg: any) => noteNames.some(n => tg.name.trim().toLowerCase() === n));
+        const projectTag = tags.find((tg: any) => projectNames.some(n => tg.name.trim().toLowerCase() === n));
+        const hashPromptTag = tags.find((tg: any) => tg.name === '#prompt');
+        const scheduleTag = tags.find((tg: any) => scheduleNames.some(n => tg.name.toLowerCase() === n));
 
-            if (promptTag && t.tags.includes(promptTag.id)) return false;
-            if (journalTag && t.tags.includes(journalTag.id)) return false;
-            if (inspirationTag && t.tags.includes(inspirationTag.id)) return false;
-            if (noteTag && t.tags.includes(noteTag.id)) return false;
-            if (hashPromptTag && t.tags.includes(hashPromptTag.id)) return false;
+        const promptTagId = promptTag?.id;
+        const journalTagId = journalTag?.id;
+        const inspirationTagId = inspirationTag?.id;
+        const noteTagId = noteTag?.id;
+        const projectTagId = projectTag?.id;
+        const hashPromptTagId = hashPromptTag?.id;
+        const scheduleTagId = scheduleTag?.id;
 
-            // Exclude Project tasks (have 'project' tag AND have children)
-            if (projectTag && t.tags.includes(projectTag.id)) {
-                const hasChildren = tasks.some((child: any) => child.parent_id === t.id && child.status !== 'deleted');
-                if (hasChildren) return false;
-            }
+        return {
+            inbox: tasks.filter((t: any) => {
+                if (t.status === 'deleted' || t.status === 'logged') return false;
 
-            // Exclude if task has dates
-            if (t.start_date || t.due_date) return false;
+                // Exclude tags
+                if (promptTagId && t.tags.includes(promptTagId)) return false;
+                if (journalTagId && t.tags.includes(journalTagId)) return false;
+                if (inspirationTagId && t.tags.includes(inspirationTagId)) return false;
+                if (noteTagId && t.tags.includes(noteTagId)) return false;
+                if (hashPromptTagId && t.tags.includes(hashPromptTagId)) return false;
 
-            // Check if any parent has dates
-            let curr = t;
-            const visited = new Set<string>();
-            while (curr.parent_id) {
-                if (visited.has(curr.id)) break;
-                visited.add(curr.id);
-                const parent = tasks.find((p: any) => p.id === curr.parent_id);
-                if (!parent) break;
-                if (parent.start_date || parent.due_date) return false;
-                curr = parent;
-            }
+                // Exclude Project tasks (have 'project' tag AND have children)
+                if (projectTagId && t.tags.includes(projectTagId)) {
+                    const hasChildren = tasks.some((child: any) => child.parent_id === t.id && child.status !== 'deleted');
+                    if (hasChildren) return false;
+                }
 
-            return true;
-        }).length,
-        todayOverdue: (() => {
-            const scheduleTag = tags.find((tg: any) => tg.name.toLowerCase() === 'schedule');
-            return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date) && (!scheduleTag || !t.tags.includes(scheduleTag.id))).length;
-        })(),
-        todayScheduled: (() => {
-            const scheduleTag = tags.find((tg: any) => tg.name.toLowerCase() === 'schedule');
-            return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && isToday(t.start_date || t.due_date) && (!scheduleTag || !t.tags.includes(scheduleTag.id))).length;
-        })(),
-        prompt: tasks.filter((t: any) => {
-            const promptTag = tags.find((tg: any) => ['prompt', '提示詞'].some(n => tg.name.trim().toLowerCase() === n));
-            return t.status !== 'deleted' && t.status !== 'logged' && promptTag && t.tags.includes(promptTag.id) && !t.reviewed_at;
-        }).length,
-        logbook: tasks.filter((t: any) => t.status === 'logged' && !t.reviewed_at).length,
-        waiting: tasks.filter((t: any) => {
-            if (t.status === 'deleted' || t.status === 'logged') return false;
-            const inspirationTag = tags.find((tg: any) => ['someday', 'inspiration', '靈感', '將來/靈感'].some(n => tg.name.trim().toLowerCase() === n));
-            return (t.status === 'waiting' || (inspirationTag && t.tags.includes(inspirationTag.id))) && !t.reviewed_at;
-        }).length,
-        trash: tasks.filter((t: any) => t.status === 'deleted').length,
-        note: tasks.filter((t: any) => {
-            if (t.status === 'deleted' || t.status === 'logged') return false;
-            const noteTag = tags.find((tg: any) => ['note', 'journal', '知識庫', '知識筆記'].some(n => tg.name.trim().toLowerCase() === n));
-            return noteTag && t.tags.includes(noteTag.id);
-        }).length
-    };
+                // Exclude if task has dates
+                if (t.start_date || t.due_date) return false;
+
+                // Check if any parent has dates
+                let curr = t;
+                const visited = new Set<string>();
+                while (curr.parent_id) {
+                    if (visited.has(curr.id)) break;
+                    visited.add(curr.id);
+                    const parent = tasks.find((p: any) => p.id === curr.parent_id);
+                    if (!parent) break;
+                    if (parent.start_date || parent.due_date) return false;
+                    curr = parent;
+                }
+
+                return true;
+            }).length,
+            todayOverdue: (() => {
+                return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && isOverdue(t.start_date || t.due_date) && (!scheduleTagId || !t.tags.includes(scheduleTagId))).length;
+            })(),
+            todayScheduled: (() => {
+                return tasks.filter((t: any) => t.status !== 'completed' && t.status !== 'deleted' && t.status !== 'logged' && !isOverdue(t.start_date || t.due_date) && isToday(t.start_date || t.due_date) && (!scheduleTagId || !t.tags.includes(scheduleTagId))).length;
+            })(),
+            prompt: tasks.filter((t: any) => {
+                return t.status !== 'deleted' && t.status !== 'logged' && promptTagId && t.tags.includes(promptTagId) && !t.reviewed_at;
+            }).length,
+            logbook: tasks.filter((t: any) => t.status === 'logged' && !t.reviewed_at).length,
+            waiting: tasks.filter((t: any) => {
+                if (t.status === 'deleted' || t.status === 'logged') return false;
+                return (t.status === 'waiting' || (inspirationTagId && t.tags.includes(inspirationTagId))) && !t.reviewed_at;
+            }).length,
+            trash: tasks.filter((t: any) => t.status === 'deleted').length,
+            note: tasks.filter((t: any) => {
+                if (t.status === 'deleted' || t.status === 'logged') return false;
+                return noteTagId && t.tags.includes(noteTagId);
+            }).length
+        };
+    }, [tasks, tags]);
 
     const sidebarTextClass = { small: 'text-xs', normal: 'text-sm', large: 'text-base' }[themeSettings.fontSize as 'small' | 'normal' | 'large'] || 'text-sm';
     // Tag text now uses same size as sidebar text (previously was too small)
@@ -750,7 +872,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const activateTag = (id: string) => {
         if (editingTagId) return;
         setTagFilter(id);
-        setView('all');
+        setView('inbox');
         setAdvancedFilters({ additionalTags: [], startDate: null, dueDate: null, color: null });
         setFocusedTaskId(null);
     };
@@ -873,7 +995,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         </div>
                     ) : (
                         <>
-                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.5 } : undefined}>{tag.name}</span>}
+                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.5 } : undefined}>{tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}</span>}
                             {!sidebarCollapsed && (
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
@@ -1007,6 +1129,9 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         const { include = [], exclude = [] } = Array.isArray(filter) ? { include: filter, exclude: [] } : filter;
         const hasActiveFilters = include.length > 0 || exclude.length > 0;
 
+        // Disable filter editing for specific views
+        const disableFilterEditing = ['logbook', 'recent', 'trash', 'worklog'].includes(props.id);
+
         return (
             <SidebarNavItem
                 {...props}
@@ -1022,6 +1147,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                 sidebarFontClass={sidebarFontClass}
                 setView={setView}
                 setTagFilter={setTagFilter}
+                onEditFilter={!disableFilterEditing ? (viewId: string) => setEditingFilterView(viewId) : undefined}
             />
         );
     };
@@ -1056,7 +1182,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             <nav className="flex-1 overflow-y-auto no-scrollbar py-2">
                 {/* Inbox - Separated */}
                 <div className="mb-6">
-                    <NavItem id="all" label={t('inbox')} normalCount={counts.all} active={view === 'all' && !tagFilter} icon={Inbox} color="#1badf8" />
+                    <NavItem id="inbox" label={t('inbox')} normalCount={counts.inbox} active={view === 'inbox' && !tagFilter} icon={Inbox} color="#1badf8" />
                 </div>
 
                 {/* Today & All Views */}
@@ -1324,7 +1450,11 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 <button onClick={handleClearSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-red-600">
                                     <Trash2 size={12} /> {language === 'zh' ? '刪除已匯入行事曆' : 'Clear Imported Calendar'}
                                 </button>
+                                <button onClick={() => icsInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Calendar size={12} /> {language === 'zh' ? '匯入 ICS 行事曆' : 'Import ICS Calendar'}
+                                </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
+                                <input type="file" ref={icsInputRef} className="hidden" accept=".ics" onChange={handleICSUpload} />
                             </div>
                         </div>
                     </div>
@@ -1374,8 +1504,7 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                                 {isExcluded && <XCircle size={16} className="text-red-500" />}
                                                 {!isIncluded && !isExcluded && <div className="w-4 h-4 rounded-full border border-gray-300"></div>}
                                             </div>
-                                            <span style={{ color: tagsWithResolvedColors[tag.id] }}>#</span>
-                                            <span>{tag.name}</span>
+                                            <span style={{ color: tagsWithResolvedColors[tag.id] }}>{tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}</span>
                                         </div>
                                     );
                                 })}

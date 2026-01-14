@@ -2,6 +2,7 @@ import { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, AppContext } from './context/AppContext';
 import { RecordingProvider } from './context/RecordingContext';
+import { ReminderProvider } from './context/ReminderContext';
 import { MainLayout } from './components/MainLayout';
 import { Login } from './components/Login';
 import { GlobalRecordingCapsule } from './components/GlobalRecordingCapsule';
@@ -20,21 +21,8 @@ const AppRoutes = () => {
     );
   }
 
-  // Check if user is authenticated (and not using the default placeholder UUID if we want to enforce real auth)
-  // The current AppContext sets a default UUID if none exists.
-  // For the Login feature to be meaningful, we should check if it's a real session user or at least allow logout.
-  // But AppContext logic:
-  // if (!userId) userId = '0000...'; setUser(session?.user || { id: userId });
-  // So user is always defined.
-
-  // We need to know if it's an authenticated session.
-  // We can check user.aud === 'authenticated'.
-
   const isAuthenticated = user && user.aud === 'authenticated';
 
-  // For dev/demo purpose, if we want to allow the "default" user to access without login, we can skip this check.
-  // But the requirement is "User Authentication System".
-  // Enforce login for all users - no demo bypass
   return (
     <Routes>
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
@@ -48,11 +36,12 @@ export default function App() {
     <BrowserRouter>
       <AppProvider>
         <RecordingProvider>
-          <AppRoutes />
-          <GlobalRecordingCapsule />
+          <ReminderProvider>
+            <AppRoutes />
+            <GlobalRecordingCapsule />
+          </ReminderProvider>
         </RecordingProvider>
-
       </AppProvider>
-    </BrowserRouter >
+    </BrowserRouter>
   );
 }

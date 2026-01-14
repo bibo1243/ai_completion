@@ -66,6 +66,19 @@ export interface TaskData {
   reviewed_at: string | null;
   repeat_rule?: RepeatRule | null;  // For recurring tasks
   dependencies?: string[]; // IDs of tasks that must be completed before this one
+  reminder_minutes?: number | null; // Minutes before start_date/due_date to remind (null = no reminder)
+}
+
+// Reminder/Notification for in-app alerts
+export interface Reminder {
+  id: string;
+  task_id: string;
+  task_title: string;
+  task_color: TaskColor;
+  triggered_at: string; // When this reminder was triggered
+  due_time: string; // The original task start_date or due_date
+  seen: boolean; // Whether user marked as seen
+  snoozed_until?: string | null; // If snoozed, when to remind again
 }
 
 export interface AIHistoryEntry {
@@ -144,6 +157,7 @@ export interface NavRecord {
   view: string;
   focusedId: string | null;
   editingId?: string | null;
+  searchOpen?: boolean;
 }
 
 export interface JournalEntry {

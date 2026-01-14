@@ -15,6 +15,8 @@ import { MobileTaskEditor } from './MobileTaskEditor';
 import { MatrixView } from './MatrixView';
 import { WorkLogView } from './WorkLogView';
 import { DragGhost } from './DragGhost';
+import { MoveTaskModal } from './MoveTaskModal';
+import { ReminderPanel } from './ReminderPanel';
 // import GTDGuide from './GTDGuide'; // Temporarily disabled
 
 export const MainLayout = () => {
@@ -23,6 +25,7 @@ export const MainLayout = () => {
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMission72, setShowMission72] = useState(false);
+  const [showMoveTaskModal, setShowMoveTaskModal] = useState(false);
   // const [showGTDGuide, setShowGTDGuide] = useState(false); // Temporarily disabled
 
   // Detect mobile
@@ -86,14 +89,24 @@ export const MainLayout = () => {
         // 優先關閉編輯模態框
         if (editingTaskId) {
           setEditingTaskId(null);
+        } else if (showMoveTaskModal) {
+          setShowMoveTaskModal(false);
         } else {
           setLocalQuickAdd(false);
+        }
+      }
+
+      // Move Task Shortcut (Cmd+Shift+M)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyM') {
+        if (selectedTaskIds.length > 0) {
+          e.preventDefault();
+          setShowMoveTaskModal(true);
         }
       }
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [editingTaskId, setEditingTaskId]);
+  }, [editingTaskId, setEditingTaskId, selectedTaskIds, showMoveTaskModal]);
 
 
 
@@ -184,6 +197,8 @@ export const MainLayout = () => {
               <div className="w-px h-4 bg-theme-hover mx-1"></div>
               <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-theme-hover ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
               <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-theme-hover ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
+              <div className="w-px h-4 bg-theme-hover mx-1"></div>
+              <ReminderPanel />
             </div>
 
             {/* User Info */}
@@ -295,6 +310,9 @@ export const MainLayout = () => {
             taskId={editingTaskId}
             onClose={() => setEditingTaskId(null)}
           />
+        )}
+        {showMoveTaskModal && (
+          <MoveTaskModal onClose={() => setShowMoveTaskModal(false)} />
         )}
       </main>
     </div>

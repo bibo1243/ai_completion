@@ -163,6 +163,26 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
       const count = dayTasks.length;
       let dotColor = 'bg-transparent';
       if (count >= 1 && count <= 3) dotColor = 'bg-green-400'; else if (count >= 4 && count <= 10) dotColor = 'bg-yellow-400'; else if (count > 10) dotColor = 'bg-red-500';
+      const isTodayDate = isToday(date.toISOString());
+
+      let dayClassName = `h-8 w-8 rounded-full flex items-center justify-center text-xs relative transition-all `;
+
+      if (isHighlighted) {
+        dayClassName += `bg-indigo-600/80 text-white font-bold shadow-md`;
+      } else if (isSaved) {
+        dayClassName += 'bg-indigo-500 text-white font-bold';
+      } else {
+        dayClassName += 'hover:bg-theme-hover text-theme-primary';
+        if (isTodayDate) dayClassName += ' text-red-500 font-bold';
+      }
+
+      // Add red ring for today
+      if (isTodayDate) {
+        dayClassName += ' border-2 border-red-400';
+      } else {
+        dayClassName += ' border-2 border-transparent';
+      }
+
       days.push(
         <button
           key={d}
@@ -170,7 +190,7 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => handleDateClick(d)}
           onMouseEnter={() => setHoveredDate(date)}
-          className={`h-8 w-8 rounded-full flex items-center justify-center text-xs relative transition-all ${isHighlighted ? `bg-indigo-600/80 text-white font-bold shadow-md` : isSaved ? 'bg-indigo-500 text-white font-bold' : 'hover:bg-theme-hover text-theme-primary'} ${isToday(date.toISOString()) && !isSaved && !isHighlighted ? 'text-indigo-400 font-bold' : ''}`}
+          className={dayClassName}
         >
           {d}
           {!isSaved && !isHighlighted && count > 0 && <div className={`absolute bottom-1 w-1 h-1 rounded-full ${dotColor}`}></div>}
@@ -226,7 +246,19 @@ export const SmartDateInput = ({ label, value, onChange, theme, tasks, innerRef,
           </div>
           <div className="flex justify-between items-center mb-2 text-theme-primary">
             <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-1 hover:bg-theme-hover rounded"><ChevronLeft size={16} /></button>
-            <span className="font-bold text-sm">{currentDate.toLocaleString(language === 'zh' ? 'zh-TW' : 'en-US', { month: 'long', year: 'numeric' })}</span>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm cursor-pointer hover:text-indigo-500 transition-colors" title={t('backToToday')} onClick={() => setCurrentDate(new Date())}>
+                {currentDate.toLocaleString(language === 'zh' ? 'zh-TW' : 'en-US', { month: 'long', year: 'numeric' })}
+              </span>
+              <button
+                type="button"
+                onMouseDown={e => e.preventDefault()}
+                onClick={() => setCurrentDate(new Date())}
+                className="text-[10px] px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 font-bold"
+              >
+                今日
+              </button>
+            </div>
             <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-1 hover:bg-theme-hover rounded"><ChevronRight size={16} /></button>
           </div>
           <div className="grid grid-cols-7 gap-1 mb-2 text-center text-xs font-bold text-theme-tertiary">

@@ -150,11 +150,34 @@ const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, bgColor, border
 };
 
 export const MatrixView = () => {
-    const { tasks, updateTask, addTask, setEditingTaskId, endDrag } = useContext(AppContext);
+    const { tasks, tags, viewTagFilters, updateTask, addTask, setEditingTaskId, endDrag } = useContext(AppContext);
 
     const filteredTasks = useMemo(() => {
-        return tasks.filter(t => t.status !== 'deleted' && t.status !== 'logged' && t.status !== 'completed' && !t.parent_id);
-    }, [tasks]);
+        // Find schedule tag ID
+        const scheduleTagId = tags.find(t => ['schedule', '行程'].includes(t.name.trim().toLowerCase()))?.id;
+
+        // Get view filters for 'matrix'
+        const filter = viewTagFilters['matrix'] || { include: [] as string[], exclude: [] as string[] };
+        const { include, exclude } = Array.isArray(filter) ? { include: filter, exclude: [] as string[] } : filter;
+
+        return tasks.filter(t => {
+            if (t.status === 'deleted' || t.status === 'logged' || t.status === 'completed' || t.parent_id) return false;
+
+            // Exclude schedule tasks
+            if (scheduleTagId && t.tags.includes(scheduleTagId)) return false;
+            const hasScheduleTagByName = t.tags.some(id => {
+                const tag = tags.find(tg => tg.id === id);
+                return tag && ['schedule', '行程'].includes(tag.name.trim().toLowerCase());
+            });
+            if (hasScheduleTagByName) return false;
+
+            // Apply view filters
+            if (include.length > 0 && !t.tags.some(id => include.includes(id))) return false;
+            if (exclude.length > 0 && t.tags.some(id => exclude.includes(id))) return false;
+
+            return true;
+        });
+    }, [tasks, tags, viewTagFilters]);
 
     const quadrants = {
         urgent: filteredTasks.filter(t => t.importance === 'urgent'),
