@@ -572,28 +572,31 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         };
 
         const onTouchEnd = () => {
-            const finalState = dragStateRef.current;
-            if (finalState && finalState.taskId === task.id) {
-                const { currentStartMin, currentDuration } = finalState;
-                const start_time = minutesToTime(currentStartMin);
-                const end_time = minutesToTime(currentStartMin + currentDuration);
+            try {
+                const finalState = dragStateRef.current;
+                if (finalState && finalState.taskId === task.id) {
+                    const { currentStartMin, currentDuration } = finalState;
+                    const start_time = minutesToTime(currentStartMin);
+                    const end_time = minutesToTime(currentStartMin + currentDuration);
 
-                const d = new Date(currentDate);
-                d.setHours(Math.floor(currentStartMin / 60));
-                d.setMinutes(currentStartMin % 60);
+                    const d = new Date(currentDate);
+                    d.setHours(Math.floor(currentStartMin / 60));
+                    d.setMinutes(currentStartMin % 60);
 
-                const updates = { start_time, duration: currentDuration, end_time, start_date: d.toISOString() };
-                updateTask(task.id, updates);
+                    const updates = { start_time, duration: currentDuration, end_time, start_date: d.toISOString() };
+                    updateTask(task.id, updates);
 
-                if (isSnapshotMode) {
-                    setUrlTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+                    if (isSnapshotMode) {
+                        setUrlTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+                    }
                 }
+            } finally {
+                // ALWAYS cleanup, even if there's an error above
+                setDragState(null);
+                window.removeEventListener('touchmove', onTouchMove);
+                window.removeEventListener('touchend', onTouchEnd);
+                window.removeEventListener('touchcancel', onTouchEnd);
             }
-            setDragState(null);
-
-            window.removeEventListener('touchmove', onTouchMove);
-            window.removeEventListener('touchend', onTouchEnd);
-            window.removeEventListener('touchcancel', onTouchEnd);
         };
 
         window.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -745,8 +748,13 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const currentDragDuration = useRef(60);
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        // Ignore if touching a task (event bubbles up but we can check target if needed, 
-        // but tasks have stopPropagation on their handlers so it should be fine)
+        // SAFETY: Clear any leftover state from interrupted gestures
+        // This prevents the "freeze" issue when tapping empty area after touching a task
+        if (dragState) {
+            setDragState(null);
+        }
+        setSelectedTaskId(null); // Clear selection when tapping empty area
+
         const touch = e.touches[0];
         touchStartPos.current = { x: touch.clientX, y: touch.clientY };
 
