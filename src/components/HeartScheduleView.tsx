@@ -40,30 +40,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Helper: Determine default tag based on mode
     const getDefaultTag = () => {
-        console.log('[HeartScheduleView] getDefaultTag called');
-        console.log('[HeartScheduleView] isSnapshotMode:', isSnapshotMode);
-        console.log('[HeartScheduleView] Available tags:', displayTags.map(t => ({ id: t.id, name: t.name })));
-
         if (isSnapshotMode) {
             // Guest Mode: Always -Wei行程
-            const tag = displayTags.find(t => t.name.includes('-Wei行程'));
-            console.log('[HeartScheduleView] Guest mode - found tag:', tag?.name);
-            return tag;
+            return displayTags.find(t => t.name.includes('-Wei行程'));
         } else {
             // Owner Mode: Robustly find 'Google:冠葦行程'
-            const exactMatch = displayTags.find(t => t.name === 'Google:冠葦行程');
-            const substringMatch = displayTags.find(t => t.name.includes('Google:冠葦行程'));
-            const keywordMatch = displayTags.find(t => t.name.includes('冠葦行程') && t.name.toLowerCase().includes('google'));
-            const fallback = displayTags.find(t => t.name.includes('冠葦行程'));
-
-            console.log('[HeartScheduleView] Owner mode - exact match:', exactMatch?.name);
-            console.log('[HeartScheduleView] Owner mode - substring match:', substringMatch?.name);
-            console.log('[HeartScheduleView] Owner mode - keyword match:', keywordMatch?.name);
-            console.log('[HeartScheduleView] Owner mode - fallback:', fallback?.name);
-
-            const result = exactMatch || substringMatch || keywordMatch || fallback;
-            console.log('[HeartScheduleView] Owner mode - final result:', result?.name);
-            return result;
+            return displayTags.find(t => t.name === 'Google:冠葦行程') || // Exact match
+                displayTags.find(t => t.name.includes('Google:冠葦行程')) || // Substring match
+                displayTags.find(t => t.name.includes('冠葦行程') && t.name.toLowerCase().includes('google')) || // Keyword match
+                displayTags.find(t => t.name.includes('冠葦行程')); // Fallback
         }
     };
 
