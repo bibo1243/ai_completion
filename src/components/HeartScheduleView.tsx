@@ -288,7 +288,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             tags: finalTags
                         };
                         console.log('[Guest] Inserting task for owner:', ownerId, newTaskPayload);
-                        const { error } = await supabase.from('tasks').insert([newTaskPayload]);
+                        const { error } = await supabase.from('tasks').insert([newTaskPayload]).select();
                         if (error) throw error;
 
                         setToast?.({ msg: '已新增並同步', type: 'info' });
@@ -525,13 +525,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
         e.stopPropagation();
-        // Prevent default only if necessary, but here we want to prevent scrolling while dragging
-        // However, we should be careful not to block normal taps.
-        // Touch start doesn't confirm drag yet, but we set state.
-        // Actually, we should preventDefault or else scroll happens.
-        // Chrome treats touchmove as scroll if not prevented.
-        // Since we are dragging a specific element, let's try to capture it.
-        // But simply setting state and using global listener with preventDefault is safer.
+        // Prevent default to avoid browser interpretation as scroll (avoids touchcancel)
+        if (e.cancelable) e.preventDefault();
 
         const startMin = timeToMinutes(task.start_time);
         const touch = e.touches[0];
@@ -666,17 +661,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             handleMove(e.touches[0].clientY);
         };
         const onTouchEnd = () => handleUp();
+        const onTouchCancel = () => handleUp();
 
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
         window.addEventListener('touchmove', onTouchMove, { passive: false });
         window.addEventListener('touchend', onTouchEnd);
+        window.addEventListener('touchcancel', onTouchCancel);
 
         return () => {
             window.removeEventListener('mousemove', onMouseMove);
             window.removeEventListener('mouseup', onMouseUp);
             window.removeEventListener('touchmove', onTouchMove);
             window.removeEventListener('touchend', onTouchEnd);
+            window.removeEventListener('touchcancel', onTouchCancel);
         };
     }, [dragState, creationDrag, currentDate, updateTask, isSnapshotMode, tags]);
 
