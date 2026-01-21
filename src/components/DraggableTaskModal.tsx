@@ -54,7 +54,7 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
     if (isMobile) {
         return (
             <MobileTaskEditor
-                taskId={initialData?.id} // If it has ID, it's editing
+                taskId={initialData?.id === 'new' ? undefined : initialData?.id} // Fix: 'new' ID causes MobileTaskEditor to return null
                 initialData={initialData} // Pass draft data for new tasks
                 onClose={onClose}
             />

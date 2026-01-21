@@ -789,61 +789,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         if (dragState) setDragState(null);
         setSelectedTaskId(null);
 
-        // Mobile Direct Creation: Open modal on tap (not drag)
+        // Mobile creation disabled on background touch to prevent conflicts.
+        /*
         const touch = e.touches[0];
-        const startY = touch.clientY;
-        const startX = touch.clientX;
+        touchStartPos.current = { x: touch.clientX, y: touch.clientY };
 
-        // Calculate time from touch position
-        if (!scrollRef.current) return;
-        const rect = scrollRef.current.getBoundingClientRect();
-        const scrollTop = scrollRef.current.scrollTop;
-        const offsetY = touch.clientY - rect.top + scrollTop;
-        const clickMin = Math.floor(((offsetY / HOUR_HEIGHT) * 60) / 15) * 15; // Snap 15m
-
-        let tapped = true;
-
-        const onMove = (evt: TouchEvent) => {
-            const moveY = Math.abs(evt.touches[0].clientY - startY);
-            const moveX = Math.abs(evt.touches[0].clientX - startX);
-            if (moveY > 10 || moveX > 10) {
-                tapped = false; // User is scrolling, cancel tap
-            }
-        };
-
-        const onEnd = () => {
-            window.removeEventListener('touchmove', onMove as any);
-            window.removeEventListener('touchend', onEnd as any);
-
-            if (tapped) {
-                // It was a tap! Open modal
-                const d = new Date(currentDate);
-                d.setHours(Math.floor(clickMin / 60));
-                d.setMinutes(clickMin % 60);
-
-                // Auto-Tag Logic
-                const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
-                    displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
-                const defaultTags = targetTag ? [targetTag.id] : [];
-
-                const draft = {
-                    id: 'new',
-                    title: '',
-                    start_time: minutesToTime(clickMin),
-                    duration: 60,
-                    end_time: minutesToTime(clickMin + 60),
-                    start_date: d.toISOString(),
-                    is_all_day: false,
-                    tags: defaultTags
-                };
-
-                setDraftTaskForModal(draft);
-                setEditingTaskId('new');
-            }
-        };
-
-        window.addEventListener('touchmove', onMove as any);
-        window.addEventListener('touchend', onEnd as any);
+        longPressTimer.current = setTimeout(() => {
+            handleLongPress(touch.clientX, touch.clientY);
+        }, 500); // 500ms threshold
+        */
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
