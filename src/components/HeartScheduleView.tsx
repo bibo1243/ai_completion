@@ -523,6 +523,30 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         currentDuration: number;
     } | null>(null);
 
+    const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
+        e.stopPropagation();
+        // Prevent default only if necessary, but here we want to prevent scrolling while dragging
+        // However, we should be careful not to block normal taps.
+        // Touch start doesn't confirm drag yet, but we set state.
+        // Actually, we should preventDefault or else scroll happens.
+        // Chrome treats touchmove as scroll if not prevented.
+        // Since we are dragging a specific element, let's try to capture it.
+        // But simply setting state and using global listener with preventDefault is safer.
+
+        const startMin = timeToMinutes(task.start_time);
+        const touch = e.touches[0];
+
+        setDragState({
+            taskId: task.id,
+            initialY: touch.clientY,
+            originalStartMin: startMin,
+            originalDuration: task.duration || 60,
+            type,
+            currentStartMin: startMin,
+            currentDuration: task.duration || 60
+        });
+    };
+
     const handleTaskMouseDown = (e: React.MouseEvent, task: any, type: 'move' | 'resize') => {
         // Guests CAN edit now!
         e.stopPropagation();
@@ -560,9 +584,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     useEffect(() => {
         if (!dragState && !creationDrag) return;
 
-        const handleMouseMove = (e: MouseEvent) => {
+        const handleMove = (clientY: number) => {
             if (dragState) {
-                const deltaY = e.clientY - dragState.initialY;
+                const deltaY = clientY - dragState.initialY;
                 const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
 
                 if (dragState.type === 'move') {
@@ -575,7 +599,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     setDragState(prev => prev ? { ...prev, currentDuration: newDuration } : null);
                 }
             } else if (creationDrag) {
-                const deltaY = e.clientY - creationDrag.startY;
+                const deltaY = clientY - creationDrag.startY;
                 const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
                 let newDuration = 60 + deltaMin;
                 if (newDuration < 15) newDuration = 15;
@@ -583,7 +607,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             }
         };
 
-        const handleMouseUp = () => {
+        const handleUp = () => {
             if (dragState) {
                 const { taskId, currentStartMin, currentDuration } = dragState;
                 const start_time = minutesToTime(currentStartMin);
@@ -602,25 +626,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 updateTask(taskId, updates);
 
-                // Optimistic Update for URL Tasks (Guest View)
                 if (isSnapshotMode) {
                     setUrlTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
                 }
 
                 setDragState(null);
             } else if (creationDrag) {
-                // Create Draft Task
                 const d = new Date(currentDate);
                 d.setHours(Math.floor(creationDrag.startMin / 60));
                 d.setMinutes(creationDrag.startMin % 60);
 
-                // Default Tag Logic
-                const targetName = isSnapshotMode ? 'Wei' : '冠葦';
-                let defaultTag = displayTags.find(t => {
-                    const name = t.name.toLowerCase();
-                    if (isSnapshotMode) return name.includes('wei');
-                    return name.includes('google') && name.includes('冠葦');
-                });
+                // Auto-Tag: Default to -Wei行程, strictly avoiding Google tags
+                const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                    displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+                const defaultTags = targetTag ? [targetTag.id] : [];
 
                 const draft = {
                     id: 'new',
@@ -630,20 +649,34 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     end_time: minutesToTime(creationDrag.startMin + creationDrag.currentDuration),
                     start_date: d.toISOString(),
                     is_all_day: false,
-                    tags: defaultTag ? [defaultTag.id] : []
+                    tags: defaultTags
                 };
 
                 setDraftTaskForModal(draft);
-                setEditingTaskId('new'); // Trigger modal
+                setEditingTaskId('new');
                 setCreationDrag(null);
             }
         };
 
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
+        const onMouseMove = (e: MouseEvent) => handleMove(e.clientY);
+        const onMouseUp = () => handleUp();
+
+        const onTouchMove = (e: TouchEvent) => {
+            if (e.cancelable) e.preventDefault(); // Prevent scrolling
+            handleMove(e.touches[0].clientY);
+        };
+        const onTouchEnd = () => handleUp();
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
+
         return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+            window.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('touchend', onTouchEnd);
         };
     }, [dragState, creationDrag, currentDate, updateTask, isSnapshotMode, tags]);
 
@@ -1019,6 +1052,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                         }
                                     }}
                                     onMouseDown={(e) => handleTaskMouseDown(e, task, 'move')}
+                                    onTouchStart={(e) => handleTaskTouchStart(e, task, 'move')}
                                 >
                                     {/* Mobile Delete Button */}
                                     {selectedTaskId === task.id && (
@@ -1055,6 +1089,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                     <div
                                         className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/5"
                                         onMouseDown={(e) => handleTaskMouseDown(e, task, 'resize')}
+                                        onTouchStart={(e) => handleTaskTouchStart(e, task, 'resize')}
                                     >
                                         <GripHorizontal size={12} className="text-gray-400" />
                                     </div>

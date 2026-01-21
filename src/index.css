@@ -522,3 +522,14 @@ body {
     background-color: rgba(129, 140, 248, 0.25);
     color: #a5b4fc;
 }
+
+/* User Selection Control for Mobile Interaction */
+body {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+input, textarea, [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
+}

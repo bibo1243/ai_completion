@@ -1,6 +1,6 @@
 import React, { useState, useContext, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, Check, Trash2, Repeat, Paperclip, Mic, Image as ImageIcon, Download, AlertCircle, Play, Pause, AtSign, Search, Bell, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Calendar, Check, Trash2, Repeat, Paperclip, Mic, Image as ImageIcon, Download, AlertCircle, Play, Pause, AtSign, Search, Bell, Clock, ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { RecordingContext } from '../context/RecordingContext';
 import { supabase } from '../supabaseClient';
@@ -193,6 +193,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                 attachments,
                 is_all_day: isAllDay,
                 start_time: isAllDay ? null : startTime,
+                end_time: isAllDay ? null : endTime,
                 reminder_minutes: reminderMinutes
             };
 
@@ -642,7 +643,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                         type="time"
                                         value={startTime}
                                         onChange={(e) => setStartTime(e.target.value)}
-                                        className="flex-1 p-3 bg-white rounded-xl border border-gray-200"
+                                        className="flex-1 p-3 bg-white rounded-xl border border-gray-200 text-center"
+                                    />
+                                    <ArrowRight size={16} className="text-gray-400" />
+                                    <input
+                                        type="time"
+                                        value={endTime}
+                                        onChange={(e) => setEndTime(e.target.value)}
+                                        className="flex-1 p-3 bg-white rounded-xl border border-gray-200 text-center"
                                     />
                                 </div>
                             )}
