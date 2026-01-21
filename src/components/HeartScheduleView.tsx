@@ -526,24 +526,30 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const dragStateRef = useRef(dragState);
     useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
+    // Safety Ref to track and kill zombie listeners
+    const activeTouchListeners = useRef<{ move: EventListener; end: EventListener } | null>(null);
+
+    // Helper to force cleanup listeners
+    const cleanupTouchListeners = () => {
+        if (activeTouchListeners.current) {
+            window.removeEventListener('touchmove', activeTouchListeners.current.move);
+            window.removeEventListener('touchend', activeTouchListeners.current.end);
+            window.removeEventListener('touchcancel', activeTouchListeners.current.end);
+            activeTouchListeners.current = null;
+        }
+    };
+
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
         e.stopPropagation();
-        // NOTE: We do NOT determine drag immediacy here to allow Click (Tap) to pass through.
-        // We only attach listeners and decide later or update state immediately if we want instant feedback?
-        // User requirements: "Adjust via drag". Instant feedback is expected.
-        // But if we preventDefault, we kill Scrolling.
-        // And we kill Click.
-        // Compromise: We preventDefault inside the *Listeners* if we detect movement?
-        // Actually, for "Grip", we always Drag. For "Body", we might want to Scroll?
-        // Assuming "Touch and Hold" or just "Touch" = Drag.
-        // Let's implement immediate drag but handle logic carefully.
+
+        // Ensure we start clean
+        cleanupTouchListeners();
 
         const touch = e.touches[0];
         const initialY = touch.clientY;
         const startMin = timeToMinutes(task.start_time);
         const duration = task.duration || 60;
 
-        // Update Visuals
         setDragState({
             taskId: task.id,
             initialY: initialY,
@@ -555,9 +561,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             isTouch: true
         });
 
-        const onTouchMove = (evt: TouchEvent) => {
+        const onTouchMove = (evt: any) => {
             if (evt.cancelable) evt.preventDefault(); // Lock scroll
-            const deltaY = evt.touches[0].clientY - initialY;
+            // Note: evt is global TouchEvent
+            const clientY = evt.touches ? evt.touches[0].clientY : 0;
+            const deltaY = clientY - initialY;
             const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
 
             if (type === 'move') {
@@ -591,13 +599,13 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     }
                 }
             } finally {
-                // ALWAYS cleanup, even if there's an error above
                 setDragState(null);
-                window.removeEventListener('touchmove', onTouchMove);
-                window.removeEventListener('touchend', onTouchEnd);
-                window.removeEventListener('touchcancel', onTouchEnd);
+                cleanupTouchListeners();
             }
         };
+
+        // Store for external cleanup
+        activeTouchListeners.current = { move: onTouchMove as EventListener, end: onTouchEnd as EventListener };
 
         window.addEventListener('touchmove', onTouchMove, { passive: false });
         window.addEventListener('touchend', onTouchEnd);
@@ -748,12 +756,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const currentDragDuration = useRef(60);
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        // SAFETY: Clear any leftover state from interrupted gestures
-        // This prevents the "freeze" issue when tapping empty area after touching a task
-        if (dragState) {
-            setDragState(null);
-        }
-        setSelectedTaskId(null); // Clear selection when tapping empty area
+        // SAFETY: Force cleanup of any zombie listeners + state
+        cleanupTouchListeners();
+        if (dragState) setDragState(null);
+        setSelectedTaskId(null);
 
         // Mobile creation disabled on background touch to prevent conflicts.
         /*
