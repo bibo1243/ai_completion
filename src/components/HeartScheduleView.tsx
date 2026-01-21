@@ -755,12 +755,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         }
         setSelectedTaskId(null); // Clear selection when tapping empty area
 
+        // Mobile creation disabled on background touch to prevent conflicts.
+        /*
         const touch = e.touches[0];
         touchStartPos.current = { x: touch.clientX, y: touch.clientY };
 
         longPressTimer.current = setTimeout(() => {
             handleLongPress(touch.clientX, touch.clientY);
         }, 500); // 500ms threshold
+        */
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
