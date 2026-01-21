@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { TaskInput } from './TaskInput';
 import { X, GripHorizontal } from 'lucide-react';
 
+import { MobileTaskEditor } from './MobileTaskEditor';
+
 interface DraggableTaskModalProps {
     onClose: () => void;
     initialData?: any; // TaskData type would be better if imported, but any works for now to match TaskInput
@@ -10,36 +12,54 @@ interface DraggableTaskModalProps {
 
 export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose, initialData }) => {
     const isEditMode = !!initialData;
+    const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
 
     const [viewportStyle, setViewportStyle] = React.useState<React.CSSProperties>({});
 
     React.useEffect(() => {
-        if (!window.visualViewport) return;
-
         const handleResize = () => {
-            if (!window.visualViewport) return;
-            // Only apply on mobile where keyboard might interfere
-            if (window.innerWidth < 768) {
-                setViewportStyle({
-                    height: `${window.visualViewport.height}px`,
-                    top: `${window.visualViewport.offsetTop}px`,
-                    position: 'fixed',
-                    bottom: 'auto'
-                });
-            } else {
-                setViewportStyle({});
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+
+            if (window.visualViewport) {
+                if (mobile) {
+                    setViewportStyle({
+                        height: `${window.visualViewport.height}px`,
+                        top: `${window.visualViewport.offsetTop}px`,
+                        position: 'fixed',
+                        bottom: 'auto'
+                    });
+                } else {
+                    setViewportStyle({});
+                }
             }
         };
 
-        window.visualViewport.addEventListener('resize', handleResize);
-        window.visualViewport.addEventListener('scroll', handleResize);
+        window.addEventListener('resize', handleResize);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', handleResize);
+            window.visualViewport.addEventListener('scroll', handleResize);
+        }
         handleResize(); // Initial call
 
         return () => {
-            window.visualViewport?.removeEventListener('resize', handleResize);
-            window.visualViewport?.removeEventListener('scroll', handleResize);
+            window.removeEventListener('resize', handleResize);
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', handleResize);
+                window.visualViewport.removeEventListener('scroll', handleResize);
+            }
         };
     }, []);
+
+    if (isMobile) {
+        return (
+            <MobileTaskEditor
+                taskId={initialData?.id} // If it has ID, it's editing
+                initialData={initialData} // Pass draft data for new tasks
+                onClose={onClose}
+            />
+        );
+    }
 
     return (
         <div
@@ -59,7 +79,7 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 className="bg-theme-card backdrop-blur-xl rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-[600px] overflow-visible border border-theme ring-1 ring-black/5 flex flex-col max-h-[90vh] md:max-h-none"
             >
-                {/* Mobile bottom sheet handle */}
+                {/* Mobile bottom sheet handle (only visible if we fallback here for some reason) */}
                 <div className="md:hidden flex justify-center pt-2 pb-1">
                     <div className="w-10 h-1 bg-gray-300 rounded-full" />
                 </div>

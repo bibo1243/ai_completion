@@ -12,33 +12,46 @@ import NoteEditor from './NoteEditor';
 
 interface MobileTaskEditorProps {
     taskId?: string;
+    initialData?: any; // Allow passing draft/initial data
     onClose: () => void;
 }
 
-export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onClose }) => {
+export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, initialData, onClose }) => {
     const { tasks, tags, updateTask, addTask, addTag, deleteTask, toggleExpansion, setToast, user } = useContext(AppContext);
     const { isRecording, startRecording, stopRecording, recordingTaskId } = useContext(RecordingContext);
 
-    const task = tasks.find((t: any) => t.id === taskId);
-    const [title, setTitle] = useState(task?.title || '');
-    const [description, setDescription] = useState(task?.description || '');
-    const [startDate, setStartDate] = useState<string>(task?.start_date || '');
-    const [dueDate, setDueDate] = useState<string>(task?.due_date || '');
-    const [selectedTags, setSelectedTags] = useState<string[]>(task?.tags || []);
-    const [parentId, setParentId] = useState<string | null>(task?.parent_id || null);
-    const [color, setColor] = useState<TaskColor>(task?.color || 'blue');
-    const [importance, setImportance] = useState<ImportanceLevel>(task?.importance || 'unplanned');
-    const [repeatRule, setRepeatRule] = useState<RepeatRule | null>(task?.repeat_rule || null);
-    const [images, setImages] = useState<string[]>(task?.images || []);
-    const [attachments, setAttachments] = useState<any[]>(task?.attachments || []);
-    const [isAllDay, setIsAllDay] = useState(task?.is_all_day !== false);
+    const task = taskId ? tasks.find((t: any) => t.id === taskId) : null;
+    const src = task || initialData || {};
+
+    const [title, setTitle] = useState(src.title || '');
+    const [description, setDescription] = useState(src.description || '');
+    const [startDate, setStartDate] = useState<string>(src.start_date || '');
+    const [dueDate, setDueDate] = useState<string>(src.due_date || '');
+    const [selectedTags, setSelectedTags] = useState<string[]>(src.tags || []);
+    const [parentId, setParentId] = useState<string | null>(src.parent_id || null);
+    const [color, setColor] = useState<TaskColor>(src.color || 'blue');
+    const [importance, setImportance] = useState<ImportanceLevel>(src.importance || 'unplanned');
+    const [repeatRule, setRepeatRule] = useState<RepeatRule | null>(src.repeat_rule || null);
+    const [images, setImages] = useState<string[]>(src.images || []);
+    const [attachments, setAttachments] = useState<any[]>(src.attachments || []);
+    const [isAllDay, setIsAllDay] = useState(src.is_all_day !== false); // Default true unless false? Logic check below
     const [startTime, setStartTime] = useState(() => {
-        if (task?.start_time) return task.start_time;
-        if (task?.start_date && !task?.is_all_day) {
-            const d = new Date(task.start_date);
+        if (src.start_time) return src.start_time;
+        if (src.start_date && !src.is_all_day) {
+            const d = new Date(src.start_date);
             return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
         }
-        return '09:00';
+        return '';
+    });
+    const [endTime, setEndTime] = useState(() => {
+        if (src.end_time) return src.end_time;
+        if (src.start_date && !src.is_all_day && src.duration) {
+            // Calculate end time from duration if needed?
+            // But existing code seems to want simple string.
+            // If duration exists, maybe logic needed, but keeping simple for now.
+            return '';
+        }
+        return '';
     });
     const [reminderMinutes, setReminderMinutes] = useState<number | null>(() => {
         if (taskId) {
