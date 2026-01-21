@@ -639,6 +639,34 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const relativeY = e.clientY - rect.top;
         const clickMin = Math.floor(((relativeY / HOUR_HEIGHT) * 60) / 15) * 15; // Snap 15m
 
+        // Mobile Enhancement: Direct creation on tap (User Request)
+        // This avoids the 'drag state' freeze issue entirely on mobile touch-emulated clicks
+        if (window.innerWidth < 768) {
+            const d = new Date(currentDate);
+            d.setHours(Math.floor(clickMin / 60));
+            d.setMinutes(clickMin % 60);
+
+            // Auto-Tag Logic
+            const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+            const defaultTags = targetTag ? [targetTag.id] : [];
+
+            const draft = {
+                id: 'new',
+                title: '',
+                start_time: minutesToTime(clickMin),
+                duration: 60,
+                end_time: minutesToTime(clickMin + 60),
+                start_date: d.toISOString(),
+                is_all_day: false,
+                tags: defaultTags
+            };
+
+            setDraftTaskForModal(draft);
+            setEditingTaskId('new');
+            return;
+        }
+
         setCreationDrag({
             startY: e.clientY,
             startMin: clickMin,
