@@ -1,6 +1,7 @@
 import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
+import { MobileTaskEditor } from './MobileTaskEditor';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus } from 'lucide-react';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
@@ -40,6 +41,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Timeline Scroll Ref
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Responsive Check
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Initial Scroll
     useEffect(() => {
@@ -1259,17 +1268,32 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     // Wrap in Intercepted Context for Guest Editing!
                     <AppContext.Provider value={interceptedContext}>
                         <div className="absolute inset-0 z-[1200]">
-                            <DraggableTaskModal
-                                initialData={
-                                    editingTaskId === 'new'
-                                        ? draftTaskForModal
-                                        : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
-                                }
-                                onClose={() => {
-                                    setEditingTaskId(null);
-                                    setDraftTaskForModal(null);
-                                }}
-                            />
+                            {isMobile ? (
+                                <MobileTaskEditor
+                                    taskId={editingTaskId === 'new' ? undefined : editingTaskId}
+                                    initialData={
+                                        editingTaskId === 'new'
+                                            ? draftTaskForModal
+                                            : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
+                                    }
+                                    onClose={() => {
+                                        setEditingTaskId(null);
+                                        setDraftTaskForModal(null);
+                                    }}
+                                />
+                            ) : (
+                                <DraggableTaskModal
+                                    initialData={
+                                        editingTaskId === 'new'
+                                            ? draftTaskForModal
+                                            : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
+                                    }
+                                    onClose={() => {
+                                        setEditingTaskId(null);
+                                        setDraftTaskForModal(null);
+                                    }}
+                                />
+                            )}
                         </div>
                     </AppContext.Provider>
                 )
