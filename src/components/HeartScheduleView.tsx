@@ -6,6 +6,7 @@ import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Sett
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
+import { getSolarTerm } from '../utils/calendar';
 
 interface HeartScheduleViewProps {
     onClose?: () => void;
@@ -1026,6 +1027,17 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 <div className="text-center cursor-pointer" onClick={() => setCurrentDate(new Date())}>
                     <div className="text-xl font-bold text-gray-800">{format(currentDate, 'M月 d日', { locale: zhTW })}</div>
                     <div className="text-xs text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
+                    {(() => {
+                        const solarTerm = getSolarTerm(currentDate);
+                        if (solarTerm) {
+                            return (
+                                <div className="text-xs text-amber-600 font-bold mt-0.5 tracking-wide">
+                                    🌾 {solarTerm}
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
                 </div>
                 <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronRight /></button>
             </div>
