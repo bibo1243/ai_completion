@@ -1,7 +1,6 @@
 import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
-import { MobileTaskEditor } from './MobileTaskEditor';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus } from 'lucide-react';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
@@ -41,14 +40,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Timeline Scroll Ref
     const scrollRef = useRef<HTMLDivElement>(null);
-
-    // Responsive Check
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     // Initial Scroll
     useEffect(() => {
@@ -798,15 +789,61 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         if (dragState) setDragState(null);
         setSelectedTaskId(null);
 
-        // Mobile creation disabled on background touch to prevent conflicts.
-        /*
+        // Mobile Direct Creation: Open modal on tap (not drag)
         const touch = e.touches[0];
-        touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+        const startY = touch.clientY;
+        const startX = touch.clientX;
 
-        longPressTimer.current = setTimeout(() => {
-            handleLongPress(touch.clientX, touch.clientY);
-        }, 500); // 500ms threshold
-        */
+        // Calculate time from touch position
+        if (!scrollRef.current) return;
+        const rect = scrollRef.current.getBoundingClientRect();
+        const scrollTop = scrollRef.current.scrollTop;
+        const offsetY = touch.clientY - rect.top + scrollTop;
+        const clickMin = Math.floor(((offsetY / HOUR_HEIGHT) * 60) / 15) * 15; // Snap 15m
+
+        let tapped = true;
+
+        const onMove = (evt: TouchEvent) => {
+            const moveY = Math.abs(evt.touches[0].clientY - startY);
+            const moveX = Math.abs(evt.touches[0].clientX - startX);
+            if (moveY > 10 || moveX > 10) {
+                tapped = false; // User is scrolling, cancel tap
+            }
+        };
+
+        const onEnd = () => {
+            window.removeEventListener('touchmove', onMove as any);
+            window.removeEventListener('touchend', onEnd as any);
+
+            if (tapped) {
+                // It was a tap! Open modal
+                const d = new Date(currentDate);
+                d.setHours(Math.floor(clickMin / 60));
+                d.setMinutes(clickMin % 60);
+
+                // Auto-Tag Logic
+                const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                    displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+                const defaultTags = targetTag ? [targetTag.id] : [];
+
+                const draft = {
+                    id: 'new',
+                    title: '',
+                    start_time: minutesToTime(clickMin),
+                    duration: 60,
+                    end_time: minutesToTime(clickMin + 60),
+                    start_date: d.toISOString(),
+                    is_all_day: false,
+                    tags: defaultTags
+                };
+
+                setDraftTaskForModal(draft);
+                setEditingTaskId('new');
+            }
+        };
+
+        window.addEventListener('touchmove', onMove as any);
+        window.addEventListener('touchend', onEnd as any);
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
@@ -1050,7 +1087,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             </AnimatePresence>
 
             {/* Timeline View */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth overscroll-none">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth">
                 {/* Background Container for Click-and-Drag Creation */}
                 <div
                     className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
@@ -1268,32 +1305,17 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     // Wrap in Intercepted Context for Guest Editing!
                     <AppContext.Provider value={interceptedContext}>
                         <div className="absolute inset-0 z-[1200]">
-                            {isMobile ? (
-                                <MobileTaskEditor
-                                    taskId={editingTaskId === 'new' ? undefined : editingTaskId}
-                                    initialData={
-                                        editingTaskId === 'new'
-                                            ? draftTaskForModal
-                                            : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
-                                    }
-                                    onClose={() => {
-                                        setEditingTaskId(null);
-                                        setDraftTaskForModal(null);
-                                    }}
-                                />
-                            ) : (
-                                <DraggableTaskModal
-                                    initialData={
-                                        editingTaskId === 'new'
-                                            ? draftTaskForModal
-                                            : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
-                                    }
-                                    onClose={() => {
-                                        setEditingTaskId(null);
-                                        setDraftTaskForModal(null);
-                                    }}
-                                />
-                            )}
+                            <DraggableTaskModal
+                                initialData={
+                                    editingTaskId === 'new'
+                                        ? draftTaskForModal
+                                        : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
+                                }
+                                onClose={() => {
+                                    setEditingTaskId(null);
+                                    setDraftTaskForModal(null);
+                                }}
+                            />
                         </div>
                     </AppContext.Provider>
                 )
