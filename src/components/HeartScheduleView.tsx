@@ -264,23 +264,22 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         // Auto-assign tags if none provided to ensure visibility
                         let finalTags = enriched.tags || [];
                         if (finalTags.length === 0) {
-                            if (selectedTagIds.length > 0) {
+                            // Intelligent Auto-Tagging per User Request ("-Wei行程")
+                            // Strictly prioritize detecting "-Wei行程" or similar tags
+                            const targetTag = displayTags.find(t =>
+                                t.name.toLowerCase().includes('wei') && t.name.includes('行程')
+                            ) || displayTags.find(t =>
+                                t.name.toLowerCase().includes('wei')
+                            ) || displayTags.find(t =>
+                                t.name.includes('行程')
+                            );
+
+                            if (targetTag) {
+                                finalTags = [targetTag.id];
+                            } else if (selectedTagIds.length > 0) {
                                 finalTags = selectedTagIds;
                             } else if (displayTags.length > 0) {
-                                // Intelligent Auto-Tagging:
-                                // Priority 1: Tag name contains "Wei" (case insensitive) -> for specific user request
-                                // Priority 2: Tag name contains "行程" -> generic schedule tag
-                                // Priority 3: First available tag
-                                const weiTag = displayTags.find(t => t.name.toLowerCase().includes('wei'));
-                                const scheduleTag = displayTags.find(t => t.name.includes('行程'));
-
-                                if (weiTag) {
-                                    finalTags = [weiTag.id];
-                                } else if (scheduleTag) {
-                                    finalTags = [scheduleTag.id];
-                                } else {
-                                    finalTags = [displayTags[0].id];
-                                }
+                                finalTags = [displayTags[0].id];
                             }
                         }
 
