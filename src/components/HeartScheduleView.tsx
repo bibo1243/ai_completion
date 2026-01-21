@@ -40,34 +40,30 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Helper: Determine default tag based on mode
     const getDefaultTag = () => {
+        console.log('[HeartScheduleView] getDefaultTag called');
+        console.log('[HeartScheduleView] isSnapshotMode:', isSnapshotMode);
+        console.log('[HeartScheduleView] Available tags:', displayTags.map(t => ({ id: t.id, name: t.name })));
+
         if (isSnapshotMode) {
             // Guest Mode: Always -Wei行程
-            return displayTags.find(t => t.name.includes('-Wei行程'));
+            const tag = displayTags.find(t => t.name.includes('-Wei行程'));
+            console.log('[HeartScheduleView] Guest mode - found tag:', tag?.name);
+            return tag;
         } else {
-            // Owner Mode: Robust Search
-            // Debug: Log available tags to help diagnose
-            console.log('[HeartSchedule] Available Tags:', displayTags.map(t => t.name));
+            // Owner Mode: Robustly find 'Google:冠葦行程'
+            const exactMatch = displayTags.find(t => t.name === 'Google:冠葦行程');
+            const substringMatch = displayTags.find(t => t.name.includes('Google:冠葦行程'));
+            const keywordMatch = displayTags.find(t => t.name.includes('冠葦行程') && t.name.toLowerCase().includes('google'));
+            const fallback = displayTags.find(t => t.name.includes('冠葦行程'));
 
-            // 1. Strict-ish match (handle fullwidth colon)
-            let target = displayTags.find(t => {
-                const n = t.name.toLowerCase().replace(/：/g, ':').replace(/\s/g, '');
-                return n.includes('google:冠葦行程');
-            });
-            if (target) return target;
+            console.log('[HeartScheduleView] Owner mode - exact match:', exactMatch?.name);
+            console.log('[HeartScheduleView] Owner mode - substring match:', substringMatch?.name);
+            console.log('[HeartScheduleView] Owner mode - keyword match:', keywordMatch?.name);
+            console.log('[HeartScheduleView] Owner mode - fallback:', fallback?.name);
 
-            // 2. Loose match "冠葦行程"
-            target = displayTags.find(t => t.name.includes('冠葦行程'));
-            if (target) return target;
-
-            // 3. Keyword match "Google" AND "冠葦"
-            target = displayTags.find(t => {
-                const n = t.name.toLowerCase();
-                return n.includes('google') && n.includes('冠葦');
-            });
-            if (target) return target;
-
-            // 4. Fallback: Any "冠葦"
-            return displayTags.find(t => t.name.includes('冠葦'));
+            const result = exactMatch || substringMatch || keywordMatch || fallback;
+            console.log('[HeartScheduleView] Owner mode - final result:', result?.name);
+            return result;
         }
     };
 
