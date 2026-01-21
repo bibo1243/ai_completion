@@ -17,7 +17,7 @@ const HOUR_HEIGHT = 64;
 export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, isStandalone = false }) => {
     // Get original context
     const context = useContext(AppContext);
-    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId } = context;
+    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast } = context;
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
@@ -214,12 +214,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 // 1. Call Update
                 if (isSnapshotMode && ownerId && supabase) {
-                    // Direct Supabase Update for Guest
+                    console.log('[Guest] Updating task:', id, enriched);
                     const { error } = await supabase.from('tasks').update(enriched).eq('id', id);
                     if (error) {
                         alert(`同步更新失敗: ${error.message}\n請檢查網路或權限設置`);
                         console.error('Guest Update Error:', error);
-                        return; // Stop optimistic update if failed? Maybe keep it for better UX but warn.
+                        return;
+                    } else {
+                        // Success toast if available (optional, to avoid spam)
+                        // setToast?.({ msg: '已同步更新', type: 'info' });
                     }
                 } else {
                     // Owner Mode
@@ -253,6 +256,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 try {
                     if (isSnapshotMode && ownerId && supabase) {
+                        if (!ownerId) {
+                            alert(`錯誤：無法識別擁有者 ID (URL ID: ${ownerId})，無法同步。`);
+                            return '';
+                        }
                         // Direct Supabase Insert for Guest
                         const newTaskPayload = {
                             ...enriched,
@@ -261,8 +268,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             created_at: new Date().toISOString(),
                             status: 'todo', // Default
                         };
+                        console.log('[Guest] Inserting task for owner:', ownerId, newTaskPayload);
                         const { error } = await supabase.from('tasks').insert([newTaskPayload]);
                         if (error) throw error;
+
+                        setToast?.({ msg: '已新增並同步', type: 'info' });
                     } else {
                         // Owner Mode
                         newId = await addTask(enriched, childIds);
@@ -285,10 +295,13 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             deleteTask: async (id: string) => {
                 if (isSnapshotMode && ownerId && supabase) {
                     // Direct Supabase Delete for Guest
+                    console.log('[Guest] Deleting task:', id);
                     const { error } = await supabase.from('tasks').delete().eq('id', id);
                     if (error) {
                         alert(`同步刪除失敗: ${error.message}`);
                         console.error('Guest Delete Error:', error);
+                    } else {
+                        setToast?.({ msg: '已刪除並同步', type: 'info' });
                     }
                 } else {
                     // Owner Mode - Call original
@@ -303,7 +316,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
             }
         };
-    }, [context, isSnapshotMode, displayTags, ownerId, selectedTaskId]);
+    }, [context, isSnapshotMode, displayTags, ownerId, selectedTaskId, setToast]);
 
     const toggleTagSelection = (tagId: string) => {
         setSelectedTagIds(prev => {
