@@ -410,7 +410,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             if (!taskDate) return false;
             if (!isSameDay(taskDate, currentDate)) return false;
 
-            if (isGuest) return true;
+            // Apply tag filtering for both owner and guest modes
             if (selectedTagIds.length === 0) return true;
             if (!task.tags || task.tags.length === 0) return false;
             return task.tags.some((tid: string) => selectedTagIds.includes(tid));
