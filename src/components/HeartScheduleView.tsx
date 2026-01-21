@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2 } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus } from 'lucide-react';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
@@ -365,7 +365,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Filter Tasks
     const dailyTasks = useMemo(() => {
-        if (isSnapshotMode) return urlTasks;
+        if (isSnapshotMode) return urlTasks.filter(t => t.status !== 'deleted');
 
         const hasLiveData = tasks.some(t => {
             const tDate = t.start_date ? parseISO(t.start_date) : (t.due_date ? parseISO(t.due_date) : null);
@@ -922,6 +922,27 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Mobile Add Button - FAB */}
+            <div className="md:hidden fixed bottom-6 right-6 z-[900]">
+                <button
+                    onClick={() => {
+                        const startStr = "08:00";
+                        const endStr = "09:00";
+                        setDraftTaskForModal({
+                            title: '',
+                            start_time: startStr,
+                            end_time: endStr,
+                            start_date: format(currentDate, 'yyyy-MM-dd'),
+                            duration: 60,
+                        });
+                        setEditingTaskId('new');
+                    }}
+                    className="w-14 h-14 bg-pink-500 rounded-full shadow-lg flex items-center justify-center text-white active:scale-95 transition-transform"
+                >
+                    <Plus size={28} />
+                </button>
             </div>
 
             {/* Modals */}

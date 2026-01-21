@@ -364,7 +364,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, onCl
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 onMouseDown={(e) => e.stopPropagation()}
                 onTouchStart={(e) => e.stopPropagation()}
-                className="relative w-full bg-white rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+                className="relative w-full bg-white rounded-t-3xl max-h-[80dvh] flex flex-col overflow-hidden shadow-2xl"
             >
                 {/* Handle bar */}
                 <div className="flex justify-center pt-3 pb-2 flex-shrink-0">
