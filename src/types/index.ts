@@ -21,6 +21,7 @@ export interface RepeatRule {
   endCount?: number;          // optional: stop after N occurrences
   triggerMode?: RepeatTriggerMode; // when to generate next task (default: on_complete)
   originalText?: string;      // original text from Things 3 for reference
+  copyDescription?: boolean;  // whether to include description in the next occurrence
 }
 
 export interface TagData {
@@ -67,6 +68,10 @@ export interface TaskData {
   repeat_rule?: RepeatRule | null;  // For recurring tasks
   dependencies?: string[]; // IDs of tasks that must be completed before this one
   reminder_minutes?: number | null; // Minutes before start_date/due_date to remind (null = no reminder)
+  is_locked?: boolean; // Whether the task is locked (requires password to view/edit)
+  lock_password?: string; // Password hash for locked tasks (cascades to children)
+  google_event_id?: string; // ID of the event in Google Calendar
+  google_calendar_id?: string; // ID of the calendar in Google Calendar
 }
 
 // Reminder/Notification for in-app alerts
@@ -83,7 +88,7 @@ export interface Reminder {
 
 export interface AIHistoryEntry {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
   model?: string;
@@ -140,6 +145,7 @@ export interface ThemeSettings {
   showLunar?: boolean;
   showTaiwanHolidays?: boolean;
   showRelationshipLines?: boolean;  // Show/hide task relationship lines in Today view
+  showImportedGoogleEvents?: boolean;
   language?: 'zh' | 'en';
   themeMode?: 'light' | 'dark' | 'programmer';
 }

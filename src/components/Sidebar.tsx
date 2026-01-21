@@ -1,14 +1,14 @@
 import { useState, useRef, useContext, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
-import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText, Calendar } from 'lucide-react';
+import { Layout, Info, Settings, ChevronRight, ChevronDown, Trash2, Check, X, Edit2, Download, Upload, PanelLeftClose, PanelLeftOpen, Inbox, Target, Clock, Book, Archive, Plus, MoreHorizontal, CheckCircle2, XCircle, Star, Layers, Search, FolderKanban, Crosshair, Lightbulb, History, FileText, Calendar, RefreshCw, Lock, Unlock } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { APP_VERSION } from '../constants/index';
 import { useClickOutside } from '../hooks/useClickOutside';
 import { isOverdue, isToday } from '../utils';
 import { SearchModal } from './SearchModal';
-import { GOALS_2026_DATA } from '../data/goals2026';
-import { INBOX_DUMP_DATA } from '../data/inbox_dump';
+import { loadGoogleScript, fetchGoogleEvents, fetchCalendarList, GoogleCalendar } from '../utils/googleCalendar';
+
 
 const ImportProgressModal = ({ current, total }: { current: number, total: number }) => {
     const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
@@ -194,7 +194,7 @@ const SidebarNavItem = ({
 
 export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
     const [importProgress, setImportProgress] = useState<{ current: number, total: number, importing: boolean } | null>(null);
-    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, setToast, deleteTask, batchDeleteTasks, batchImportTasks, user, searchOpen, setSearchOpen }: any = useContext(AppContext);
+    const { tasks, tags, themeSettings, setThemeSettings, deleteTag, updateTag, addTag, clearAllTasks, exportData, importData, syncGoogleToApp, expandedTags, setExpandedTags, sidebarCollapsed, toggleSidebar, tagsWithResolvedColors, t, language, setLanguage, setAdvancedFilters, viewTagFilters, updateViewTagFilter, visibleTasks, setFocusedTaskId, moveTaskToView, selectedTaskIds, dragState, updateGhostPosition, endDrag, addTask, batchAddTasks, updateTask, batchUpdateTasks, setToast, deleteTask, batchDeleteTasks, batchImportTasks, user, searchOpen, setSearchOpen, lockedGoogleTagIds, toggleGoogleTagLock }: any = useContext(AppContext);
     const [showSettings, setShowSettings] = useState(false);
     const [editingFilterView, setEditingFilterView] = useState<string | null>(null);
     const [editingViewId, setEditingViewId] = useState<string | null>(null);
@@ -230,8 +230,19 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         return saved !== null ? saved === 'true' : true;
     });
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const icsInputRef = useRef<HTMLInputElement>(null);
 
+
+    const tokenClientRef = useRef<any>(null);
+    const [showGoogleImportModal, setShowGoogleImportModal] = useState(false);
+    const [googleClientId, setGoogleClientId] = useState(localStorage.getItem('google_client_id') || '');
+    const [googleDateRange, setGoogleDateRange] = useState({
+        start: new Date().toISOString().split('T')[0],
+        end: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]
+    });
+    const [importStep, setImportStep] = useState<'date' | 'select' | 'importing'>('date');
+    const [calendars, setCalendars] = useState<GoogleCalendar[]>([]);
+    const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(new Set());
+    const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
     const settingsRef = useRef<HTMLDivElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
     const lastEditedTagIdRef = useRef<string | null>(null);
@@ -257,100 +268,41 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         }
     }, [editingFilterView, viewNames]);
 
-    const handleImportGaaSchedule = async () => {
-        const input = prompt(
-            language === 'zh'
-                ? '請輸入要匯入的年份 (例如 2026)，或輸入 "all" 匯入全部：'
-                : 'Enter year to import (e.g. 2026), or "all" for everything:',
-            'all'
-        );
 
-        if (input === null) return; // Cancelled
-
-        try {
-            const res = await fetch('/gaa_imported_schedule.json');
-            if (!res.ok) throw new Error('File not found');
-            const data = await res.json();
-            const sourceTasks = data.tasks as any[];
-
-            const filterYear = input.trim().toLowerCase();
-            let targetTasks = sourceTasks;
-
-            if (filterYear !== 'all') {
-                targetTasks = sourceTasks.filter(t => t.start_date && t.start_date.startsWith(filterYear));
-                if (targetTasks.length === 0) {
-                    alert(language === 'zh' ? `找不到 ${filterYear} 年的資料` : `No tasks found for year ${filterYear}`);
-                    return;
-                }
-            }
-
-            if (!confirm(language === 'zh'
-                ? `確定要匯入 ${filterYear === 'all' ? '所有' : filterYear + ' 年'} 共 ${targetTasks.length} 筆資料嗎？`
-                : `Confirm import of ${targetTasks.length} tasks for ${filterYear === 'all' ? 'all time' : filterYear}?`)) return;
-
-            // Find or Create Tag
-            let scheduleTagId = tags.find((t: any) => t.name.toLowerCase() === 'schedule')?.id;
-            if (!scheduleTagId) {
-                scheduleTagId = await addTag('Schedule') || undefined;
-            }
-            if (!scheduleTagId) {
-                alert('Failed to create Schedule tag');
-                return;
-            }
-
-            const newTasks = targetTasks.map(t => ({
-                title: t.title,
-                description: t.description,
-                status: 'todo',
-                tags: [scheduleTagId],
-                color: 'orange',
-                start_date: t.start_date,
-                start_time: t.start_time,
-                end_time: t.end_time,
-                is_all_day: t.is_all_day,
-                priority: t.priority
-            }));
-
-            if (batchAddTasks) {
-                setImportProgress({ current: 0, total: newTasks.length, importing: true });
-                await batchAddTasks(newTasks, null, (current, total) => {
-                    setImportProgress({ current, total, importing: true });
-                });
-                if (setToast) setToast({ msg: `Imported ${newTasks.length} tasks`, type: 'info' });
-            } else {
-                alert("batchAddTasks not available");
-            }
-            setImportProgress(null);
-            setShowSettings(false);
-        } catch (e: any) {
-            console.error(e);
-            alert('Import failed: ' + e.message);
-            setImportProgress(null);
-        }
-    };
 
     const handleClearSchedule = async () => {
-        const scheduleTag = tags.find((t: any) => t.name.toLowerCase() === 'schedule');
-        if (!scheduleTag) {
-            alert(language === 'zh' ? '找不到「Schedule」標籤' : 'Schedule tag not found');
+        // Find tasks with any Google: tag
+        const googleTasks = tasks.filter((t: any) => {
+            return t.tags.some((tid: string) => {
+                const tag = tags.find((x: any) => x.id === tid);
+                return tag && tag.name.startsWith('Google:');
+            });
+        });
+
+        if (googleTasks.length === 0) {
+            alert(language === 'zh' ? '沒有找到可刪除的 Google 行事曆任務' : 'No Google Calendar tasks found to delete');
             return;
         }
 
-        const tasksToDelete = tasks.filter((t: any) => t.tags.includes(scheduleTag.id));
-        if (tasksToDelete.length === 0) {
-            alert(language === 'zh' ? '沒有找到可刪除的行事曆任務' : 'No schedule tasks found to delete');
-            return;
-        }
+        if (!confirm(language === 'zh' ? `確定要刪除 ${googleTasks.length} 個來自 Google 的本地任務嗎？\n(這只會刪除 App 內的任務，不會影響 Google 線上行事曆)` : `Delete ${googleTasks.length} Google Calendar tasks?\n(This will only delete local tasks, NOT Google Calendar events)`)) return;
 
-        if (!confirm(language === 'zh' ? `確定要刪除 ${tasksToDelete.length} 個行事曆任務嗎？此動作無法復原！` : `Delete ${tasksToDelete.length} schedule tasks? This cannot be undone!`)) return;
+        // 1. Remove from task_google_map to prevent sync deletion
+        const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
+        const idsToDelete = googleTasks.map((t: any) => t.id);
 
-        if (confirm(language === 'zh' ? '再次確認：這將會永久刪除這些任務！' : 'Double check: This will permanently delete these tasks!')) {
-            const ids = tasksToDelete.map((t: any) => t.id);
-            await batchDeleteTasks(ids, true);
-            // batchDeleteTasks handles the toast
-            setShowSettings(false);
-            setShowSettings(false);
-        }
+        idsToDelete.forEach((id: string) => {
+            delete googleMap[id];
+        });
+        localStorage.setItem('task_google_map', JSON.stringify(googleMap));
+
+        // 2. Clear sync tokens to force fresh start next time
+        localStorage.removeItem('google_sync_tokens');
+
+        // 3. Delete tasks locally
+        await batchDeleteTasks(idsToDelete, true);
+
+        setToast({ msg: `已清除 ${googleTasks.length} 個 Google 行事曆任務`, type: 'success' });
+        setShowSettings(false);
     };
 
     // Keyboard shortcut for search (Cmd+K) and ESC to close popover
@@ -389,225 +341,233 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
         }
     }, [isAddingTag, editingTagId]);
 
-    const handleImport2026Goals = async () => {
-        if (!confirm('匯入 2026 年度目標 (九宮格版)？')) return;
-        try {
-            // 1. Get/Create Tags
-            const projectTag = tags.find((t: any) => t.name.toLowerCase() === 'project' || t.name === '專案');
 
-            // Helper to get or create tag
-            const getOrCreateTag = async (name: string) => {
-                let tag = tags.find((t: any) => t.name === name);
-                if (!tag) {
-                    const id = await addTag(name, null);
-                    return id;
-                }
-                return tag.id;
-            }
-
-            let projectTagId = projectTag?.id;
-            if (!projectTagId) projectTagId = await getOrCreateTag('Project');
-
-            const annualGoalTagId = await getOrCreateTag('2026年度目標');
-
-            // Define Categories Map matching AnnualPlanView GRID_CELLS
-            const CATEGORY_MAP: Record<string, string> = {
-                learning: '學習、成長',
-                experience: '體驗、挑戰',
-                leisure: '休閒、放鬆',
-                work: '工作、事業',
-                core: '核心詞',
-                family: '家庭、生活',
-                social: '人際、社群',
-                finance: '財務、理財',
-                health: '健康、身體',
-            };
-
-            // 2. Iterate Projects
-            const goalsData = GOALS_2026_DATA as any;
-
-            const promises = (goalsData.projects || []).map(async (proj: any) => {
-                const categoryTagName = CATEGORY_MAP[proj.category];
-                let categoryTagId = null;
-                if (categoryTagName) {
-                    categoryTagId = await getOrCreateTag(categoryTagName);
-                }
-
-                const taskTags = [projectTagId, annualGoalTagId];
-                if (categoryTagId) taskTags.push(categoryTagId);
-
-                const taskId = await addTask({
-                    title: proj.title,
-                    description: proj.description,
-                    tags: taskTags,
-                    status: 'active',
-                    color: proj.color
-                });
-
-                if (taskId && proj.subtasks) {
-                    await batchAddTasks(proj.subtasks.map((s: any) => ({
-                        title: s.title,
-                        parent_id: taskId,
-                        status: 'active'
-                    })));
-                }
-            });
-
-            await Promise.all(promises);
-            setToast({ msg: "匯入成功！已建立九宮格目標。", type: 'info' });
-
-        } catch (e) {
-            console.error(e);
-            setToast({ msg: "匯入失敗", type: 'error' });
+    const handleGoogleLoginAndImport = async () => {
+        if (!googleClientId.trim()) {
+            alert(language === 'zh' ? '請先至 Settings 設定 Google Client ID' : 'Please set Google Client ID in settings');
+            setShowSettings(true);
+            return;
         }
-    };
+        localStorage.setItem('google_client_id', googleClientId.trim());
 
-    const handleImportInboxDump = async () => {
-        if (!confirm('匯入收件匣雜事清單 (共' + INBOX_DUMP_DATA.length + '項)？')) return;
         try {
-            // Helper to get or create tag
-            const getOrCreateTag = async (name: string) => {
-                name = name.trim();
-                if (!name) return null;
-                // If tag starts with @ remove it for search but maybe keep format?
-                // The provided data uses tags like "@組織發展會議". Let's simply process them.
-                if (name.startsWith('@')) name = name.substring(1);
-
-                let tag = tags.find((t: any) => t.name === name || t.name === '@' + name);
-                if (!tag) {
-                    const id = await addTag(name, null);
-                    return id;
-                }
-                return tag.id;
-            }
-
-            const promises = INBOX_DUMP_DATA.map(async (item: any) => {
-                // Process Tags
-                const taskTags = [];
-                for (const tagName of item.tags) {
-                    const tagId = await getOrCreateTag(tagName);
-                    if (tagId) taskTags.push(tagId);
-                }
-
-                await addTask({
-                    title: item.title,
-                    description: item.description,
-                    tags: taskTags,
-                    status: 'active', // All to Inbox (active with no project parent)
-                    start_date: item.date || undefined
-                });
-            });
-
-            await Promise.all(promises);
-            setToast({ msg: `成功匯入 ${INBOX_DUMP_DATA.length} 項目任務`, type: 'info' });
-
-        } catch (e) {
-            console.error(e);
-            setToast({ msg: "匯入失敗", type: 'error' });
-        }
-    };
-
-
-
-    const handleICSUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const rawContent = event.target?.result as string;
-            if (!rawContent) return;
-
-            // 1. Unfold
-            const content = rawContent.replace(/\r\n /g, '').replace(/\n /g, '');
-
-            // 2. Parse Events
-            const events = [];
-            const lines = content.split(/\r?\n/);
-            let currentEvent: any = null;
-
-            for (const line of lines) {
-                if (line.startsWith('BEGIN:VEVENT')) {
-                    currentEvent = {};
-                } else if (line.startsWith('END:VEVENT')) {
-                    if (currentEvent && currentEvent.SUMMARY) {
-                        events.push(currentEvent);
-                    }
-                    currentEvent = null;
-                } else if (currentEvent) {
-                    const parts = line.split(':');
-                    const keyPart = parts[0];
-                    const value = parts.slice(1).join(':');
-
-                    const [keyName, ...paramsArr] = keyPart.split(';');
-                    const params = paramsArr.join(';');
-
-                    if (keyName === 'SUMMARY') currentEvent.SUMMARY = value;
-                    if (keyName === 'DTSTART') currentEvent.DTSTART = { value, params };
-                    if (keyName === 'DESCRIPTION') currentEvent.DESCRIPTION = value;
-                    if (keyName === 'UID') currentEvent.UID = value;
-                }
-            }
-
-            if (confirm(`Found ${events.length} events. Import now?`)) {
-                // Resolve '行程' tag
-                const tagName = '行程';
-                let scheduleTagId = tags.find((t: any) => t.name === tagName || t.name === 'schedule')?.id;
-
-                if (!scheduleTagId && user) {
-                    scheduleTagId = await addTag(tagName, null);
-                }
-
-                // Prepare Tasks
-                const validEvents: any[] = [];
-                for (const evt of events) {
-                    if (!evt.DTSTART) continue;
-
-                    let dateStr = evt.DTSTART.value;
-                    let isAllDay = evt.DTSTART.params?.includes('VALUE=DATE') || (dateStr.length === 8 && !dateStr.includes('T'));
-
-                    let startDate = null;
-                    try {
-                        if (dateStr.length === 8 && !dateStr.includes('T')) {
-                            const y = dateStr.substring(0, 4);
-                            const m = dateStr.substring(4, 6);
-                            const d = dateStr.substring(6, 8);
-                            startDate = `${y}-${m}-${d}`;
-                        } else if (dateStr.includes('T')) {
-                            const y = dateStr.substring(0, 4);
-                            const m = dateStr.substring(4, 6);
-                            const d = dateStr.substring(6, 8);
-                            const timePart = dateStr.split('T')[1];
-                            const h = timePart.substring(0, 2);
-                            const min = timePart.substring(2, 4);
-                            const s = timePart.substring(4, 6);
-                            startDate = `${y}-${m}-${d}T${h}:${min}:${s}`;
-                            if (dateStr.endsWith('Z')) startDate += 'Z';
+            await loadGoogleScript();
+            if (!tokenClientRef.current) {
+                tokenClientRef.current = (window as any).google.accounts.oauth2.initTokenClient({
+                    client_id: googleClientId,
+                    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+                    callback: async (resp: any) => {
+                        if (resp.error) {
+                            console.error(resp);
+                            return;
                         }
-                    } catch (e) { console.warn(e); }
+                        await handleTokenSuccess(resp.access_token);
+                    },
+                });
+            }
+            setImportStep('date');
+            setShowGoogleImportModal(true);
+        } catch (e) {
+            alert('Failed to load Google Sign-In script');
+        }
+    };
 
-                    if (startDate) {
-                        validEvents.push({
-                            title: evt.SUMMARY,
-                            description: evt.DESCRIPTION || '',
-                            status: 'active',
-                            start_date: startDate,
-                            is_all_day: isAllDay,
-                            things_id: evt.UID,
-                            tags: scheduleTagId ? [scheduleTagId] : []
-                        });
-                    }
+    const handleDateConfirm = () => {
+        if (tokenClientRef.current) {
+            tokenClientRef.current.requestAccessToken({ prompt: '' });
+        }
+    };
+
+    const handleTokenSuccess = async (token: string) => {
+        setGoogleAccessToken(token);
+        localStorage.setItem('google_access_token', token);
+        try {
+            const list = await fetchCalendarList(token);
+            setCalendars(list);
+            const primary = list.find((c: any) => c.primary);
+            if (primary) setSelectedCalendarIds(new Set([primary.id]));
+            setImportStep('select');
+        } catch (e) {
+            alert('Failed to fetch calendars: ' + e);
+            setShowGoogleImportModal(false);
+        }
+    };
+
+    const handleFinalImport = async () => {
+        if (!googleAccessToken) return;
+        setShowGoogleImportModal(false);
+
+        try {
+            setImportProgress({ current: 0, total: 0, importing: true });
+            let tasksToAdd: any[] = [];
+            let tasksToUpdate: any[] = [];
+
+            const tagName = language === 'zh' ? '行程' : 'Schedule';
+            let scheduleTagId = tags.find((t: any) => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
+            if (!scheduleTagId) {
+                scheduleTagId = await addTag(tagName, null);
+            }
+
+            for (const calendarId of Array.from(selectedCalendarIds)) {
+                const cal = calendars.find(c => c.id === calendarId);
+                const calNameTag = `Google:${cal?.summary || 'Calendar'}`;
+
+                let calTagId = tags.find((t: any) => t.name === calNameTag)?.id;
+                if (!calTagId) {
+                    calTagId = await addTag(calNameTag, null);
                 }
 
-                if (validEvents.length > 0) {
-                    await batchImportTasks(validEvents);
+                const events = await fetchGoogleEvents(googleAccessToken, calendarId, googleDateRange.start, googleDateRange.end);
+
+                const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
+
+                events.forEach((evt: any) => {
+                    const isAllDay = !evt.start.dateTime;
+                    let startDate = evt.start.date;
+                    let startTime = null;
+                    let endTime = null;
+
+                    if (!isAllDay && evt.start.dateTime) {
+                        const startObj = new Date(evt.start.dateTime);
+                        const year = startObj.getFullYear();
+                        const month = String(startObj.getMonth() + 1).padStart(2, '0');
+                        const day = String(startObj.getDate()).padStart(2, '0');
+                        startDate = `${year}-${month}-${day}`;
+
+                        const hours = String(startObj.getHours()).padStart(2, '0');
+                        const minutes = String(startObj.getMinutes()).padStart(2, '0');
+                        startTime = `${hours}:${minutes}`;
+
+                        if (evt.end.dateTime) {
+                            const endObj = new Date(evt.end.dateTime);
+                            const endH = String(endObj.getHours()).padStart(2, '0');
+                            const endM = String(endObj.getMinutes()).padStart(2, '0');
+                            endTime = `${endH}:${endM}`;
+                        }
+                    } else {
+                        startDate = evt.start.date;
+                    }
+
+                    const taskData = {
+                        title: evt.summary || '(No Title)',
+                        description: evt.description || '',
+                        status: 'active',
+                        tags: [scheduleTagId, calTagId].filter(Boolean),
+                        start_date: startDate,
+                        start_time: startTime,
+                        end_time: endTime,
+                        is_all_day: isAllDay,
+                        color: 'blue',
+                        google_event_id: evt.id,
+                        google_calendar_id: calendarId
+                    };
+
+                    const existingId = Object.keys(googleMap).find(key => googleMap[key].evtId === evt.id);
+                    let existing = existingId ? tasks.find((t: any) => t.id === existingId) : null;
+
+                    // Fuzzy match (Title + Date) for unlinked existing tasks
+                    if (!existing) {
+                        existing = tasks.find((t: any) =>
+                            t.title === (evt.summary || '(No Title)') &&
+                            t.start_date === startDate &&
+                            !Object.keys(googleMap).includes(t.id)
+                        );
+                    }
+
+                    if (existing) {
+                        tasksToUpdate.push({ id: existing.id, data: taskData });
+                    } else {
+                        tasksToAdd.push(taskData);
+                    }
+                });
+            }
+
+            const total = tasksToAdd.length + tasksToUpdate.length;
+            if (batchAddTasks && tasksToAdd.length > 0) {
+                await batchAddTasks(tasksToAdd, null, (c: number, t: number) => setImportProgress({ current: c, total: total, importing: true }));
+            }
+            if (batchUpdateTasks && tasksToUpdate.length > 0) {
+                await batchUpdateTasks(tasksToUpdate);
+            }
+
+            // Automatically clean up tags (and stop sync) for unselected calendars
+            const unselectedCalendars = calendars.filter(c => !selectedCalendarIds.has(c.id));
+            let removedCalCount = 0;
+            for (const cal of unselectedCalendars) {
+                const tagName = `Google:${cal.summary}`;
+                // Check exact match (case sensitive usually, but user might have issues if case differs? AppContext uses exact match)
+                const tag = tags.find((t: any) => t.name === tagName);
+                if (tag) {
+                    await deleteTag(tag.id);
+                    removedCalCount++;
+                    console.log(`[Import] Removed tag for unselected calendar: ${tagName}`);
                 }
             }
 
-            if (icsInputRef.current) icsInputRef.current.value = '';
-        };
-        reader.readAsText(file);
+            if (setToast) {
+                let msg = `Synced ${total} events (Added: ${tasksToAdd.length}, Updated: ${tasksToUpdate.length})`;
+                if (removedCalCount > 0) {
+                    msg += `. Stopped sync for ${removedCalCount} unselected calendars.`;
+                }
+                setToast({ msg, type: 'info' });
+            }
+            if (total === 0) alert('No events found');
+
+        } catch (e: any) {
+            console.error(e);
+            alert('Import Error: ' + e.message);
+        } finally {
+            setImportProgress(null);
+        }
     };
+
+
+
+    /* const fetchAndImportGoogleEvents = async (token: string) => {
+        try {
+            setImportProgress({ current: 0, total: 0, importing: true });
+            const events = await fetchGoogleEvents(token, googleDateRange.start, googleDateRange.end);
+
+            if (!events || events.length === 0) {
+                alert('No events found');
+                setImportProgress(null);
+                return;
+            }
+
+            const tagName = language === 'zh' ? '行程' : 'Schedule';
+            const existingTag = tags.find((t: any) => t.name.toLowerCase() === 'schedule' || t.name === '行程');
+            let tagId = existingTag?.id;
+
+            if (!tagId) {
+                tagId = await addTag(tagName, null);
+            }
+
+            const tasksToImport = events.map((evt: any) => ({
+                title: evt.summary || '(No Title)',
+                description: evt.description || '',
+                status: 'active',
+                tags: tagId ? [tagId] : [],
+                start_date: evt.start.dateTime || evt.start.date,
+                is_all_day: !evt.start.dateTime,
+                color: 'orange'
+            }));
+
+            if (batchAddTasks) {
+                await batchAddTasks(tasksToImport, null, (c: number, t: number) => setImportProgress({ current: c, total: t, importing: true }));
+                if (setToast) setToast({ msg: `Imported ${tasksToImport.length} events`, type: 'info' });
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert('Import Error: ' + e.message);
+        } finally {
+            setImportProgress(null);
+        }
+    }; */
+
+
+
+
+
 
     const handleAddTagAction = async (e?: React.FormEvent, parentId: string | null = null) => {
         e?.preventDefault();
@@ -1042,7 +1002,14 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                         </div>
                     ) : (
                         <>
-                            {!sidebarCollapsed && <span className="truncate flex-1 text-left" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.5 } : undefined}>{tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}</span>}
+                            {!sidebarCollapsed && (
+                                <span className="truncate flex-1 text-left flex items-center gap-1" style={tagsWithResolvedColors[tag.id] ? { color: tagsWithResolvedColors[tag.id], opacity: 0.5 } : undefined}>
+                                    {tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}
+                                    {tag.name.startsWith('Google:') && lockedGoogleTagIds.includes(tag.id) && (
+                                        <Lock size={9} className="text-amber-500 flex-shrink-0" />
+                                    )}
+                                </span>
+                            )}
                             {!sidebarCollapsed && (
                                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
@@ -1119,6 +1086,23 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                         <button onClick={() => startEditing(tag)} className="w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] text-theme-secondary font-medium">
                                             <Edit2 size={11} /> {t('rename')}
                                         </button>
+                                        {/* Lock/Unlock button for Google: tags */}
+                                        {tag.name.startsWith('Google:') && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleGoogleTagLock(tag.id);
+                                                    setPopoverId(null);
+                                                }}
+                                                className={`w-full flex items-center gap-2 px-2 py-1 hover:bg-theme-hover rounded text-[11px] font-medium ${lockedGoogleTagIds.includes(tag.id) ? 'text-amber-600' : 'text-theme-secondary'}`}
+                                            >
+                                                {lockedGoogleTagIds.includes(tag.id) ? (
+                                                    <><Unlock size={11} /> 解除鎖定</>
+                                                ) : (
+                                                    <><Lock size={11} /> 鎖定編輯</>
+                                                )}
+                                            </button>
+                                        )}
                                         <button onClick={(e) => {
                                             e.stopPropagation();
                                             const tagId = tag.id;
@@ -1405,6 +1389,27 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                     />
                                     <span className="text-xs font-medium text-gray-600">顯示任務關連線</span>
                                 </label>
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={themeSettings.showImportedGoogleEvents !== false}
+                                        onChange={(e) => setThemeSettings({ ...themeSettings, showImportedGoogleEvents: e.target.checked })}
+                                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                                    />
+                                    <span className="text-xs font-medium text-gray-600">{language === 'zh' ? '顯示 Google 匯入事件' : 'Show Google Events'}</span>
+                                </label>
+                            </div>
+
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">Google Calendar</h3>
+                            <div className="mb-4">
+                                <label className="block text-[10px] text-gray-600 mb-1">Client ID</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                                    placeholder="your-client-id.apps.googleusercontent.com"
+                                    value={googleClientId}
+                                    onChange={(e) => setGoogleClientId(e.target.value)}
+                                />
                             </div>
 
                             <h3 className="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wider border-t border-gray-100 pt-3">{t('aiSettings')}</h3>
@@ -1485,23 +1490,54 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
                                 <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
                                     <Upload size={12} /> {language === 'zh' ? '導匯入資料' : 'Import Data'}
                                 </button>
-                                <button onClick={handleImport2026Goals} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                    <Target size={12} /> {language === 'zh' ? '匯入 2026 年度目標' : 'Import 2026 Goals'}
+                                <button onClick={handleGoogleLoginAndImport} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <Calendar size={12} /> {language === 'zh' ? '匯入 Google 行事曆' : 'Import Google Calendar'}
                                 </button>
-                                <button onClick={handleImportInboxDump} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                    <Inbox size={12} /> {language === 'zh' ? '匯入收件匣整理清單' : 'Import Inbox Dump'}
+                                <button onClick={() => syncGoogleToApp && syncGoogleToApp()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
+                                    <RefreshCw size={12} /> {language === 'zh' ? '同步 Google 行事曆' : 'Sync Google Calendar'}
                                 </button>
-                                <button onClick={handleImportGaaSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                    <Clock size={12} /> {language === 'zh' ? '匯入 GAA 行事曆' : 'Import GAA Calendar'}
+                                <button onClick={() => {
+                                    // Clear sync tokens to force full sync
+                                    localStorage.removeItem('google_sync_tokens');
+                                    setToast({ msg: 'Sync tokens 已清除，正在進行完整同步...', type: 'info' });
+                                    syncGoogleToApp && syncGoogleToApp();
+                                }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-amber-50 rounded text-xs text-amber-600">
+                                    <RefreshCw size={12} /> {language === 'zh' ? '強制完整同步' : 'Force Full Sync'}
                                 </button>
                                 <button onClick={handleClearSchedule} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-red-600">
                                     <Trash2 size={12} /> {language === 'zh' ? '刪除已匯入行事曆' : 'Clear Imported Calendar'}
                                 </button>
-                                <button onClick={() => icsInputRef.current?.click()} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-gray-600">
-                                    <Calendar size={12} /> {language === 'zh' ? '匯入 ICS 行事曆' : 'Import ICS Calendar'}
+                                <button onClick={async () => {
+                                    if (!confirm('確定要刪除「Google:慈馨」的本地任務嗎？(不會刪除 Google 行事曆上的活動)')) return;
+
+                                    const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
+                                    const tasksToDelete = tasks.filter((t: any) => {
+                                        return t.tags.some((tid: string) => {
+                                            const tag = tags.find((x: any) => x.id === tid);
+                                            return tag && (tag.name.includes('慈馨') && tag.name.toLowerCase().includes('google'));
+                                        });
+                                    });
+
+                                    let count = 0;
+                                    // Remove from map FIRST to prevent sync delete
+                                    tasksToDelete.forEach((t: any) => {
+                                        if (googleMap[t.id]) delete googleMap[t.id];
+                                    });
+                                    // Save map immediately
+                                    localStorage.setItem('task_google_map', JSON.stringify(googleMap));
+
+                                    // Now delete tasks
+                                    for (const task of tasksToDelete) {
+                                        await deleteTask(task.id);
+                                        count++;
+                                    }
+
+                                    setToast({ msg: `已單向刪除 ${count} 個慈馨任務`, type: 'success' });
+                                }} className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-gray-100 rounded text-xs text-orange-600">
+                                    <Trash2 size={12} /> {language === 'zh' ? '清除慈馨任務 (僅本地)' : 'Clean CiXing Tasks (Local)'}
                                 </button>
                                 <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileUpload} />
-                                <input type="file" ref={icsInputRef} className="hidden" accept=".ics" onChange={handleICSUpload} />
+
                             </div>
                         </div>
                     </div>
@@ -1509,91 +1545,158 @@ export const Sidebar = ({ view, setView, tagFilter, setTagFilter }: any) => {
             </div>
 
             {/* Filter Configuration Modal */}
-            {editingFilterView && createPortal(
-                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999] flex items-center justify-center" onClick={() => setEditingFilterView(null)}>
-                    <div className="bg-white rounded-xl shadow-2xl w-80 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 border-b border-gray-100 bg-gray-50">
-                            <div className="flex items-center justify-between mb-3">
-                                <h3 className="font-bold text-gray-700 text-sm">視圖設定</h3>
-                                <button onClick={() => setEditingFilterView(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500">名稱：</span>
-                                <input
-                                    type="text"
-                                    value={editingViewNameTemp}
-                                    onChange={(e) => setEditingViewNameTemp(e.target.value)}
-                                    onBlur={() => {
-                                        // Save on blur - empty string means use default
-                                        const newNames = { ...viewNames };
-                                        if (editingViewNameTemp.trim()) {
-                                            newNames[editingFilterView] = editingViewNameTemp;
-                                        } else {
-                                            delete newNames[editingFilterView]; // Remove to use default
-                                        }
-                                        setViewNames(newNames);
-                                        localStorage.setItem('custom_view_names', JSON.stringify(newNames));
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            (e.target as HTMLInputElement).blur();
-                                        }
-                                    }}
-                                    className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                    placeholder={t(editingFilterView) || editingFilterView}
-                                />
-                            </div>
-                        </div>
-                        <div className="p-2 overflow-y-auto flex-1 text-sm">
-                            <p className="px-2 py-2 text-xs text-gray-500 mb-2 bg-yellow-50 rounded border border-yellow-100">
-                                點擊切換：包含 (綠色) / 排除 (紅色) / 無。
-                            </p>
-                            <div className="space-y-1">
-                                {tags.map((tag: any) => {
-                                    const current = viewTagFilters[editingFilterView] || { include: [] as string[], exclude: [] as string[] };
-                                    const { include, exclude } = Array.isArray(current) ? { include: current, exclude: [] as string[] } : current;
-
-                                    const isIncluded = include.includes(tag.id);
-                                    const isExcluded = exclude.includes(tag.id);
-
-                                    return (
-                                        <div key={tag.id} className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded cursor-pointer select-none" onClick={() => {
-                                            let nextInclude = [...include];
-                                            let nextExclude = [...exclude];
-
-                                            if (isIncluded) {
-                                                // Included -> Excluded
-                                                nextInclude = nextInclude.filter(id => id !== tag.id);
-                                                nextExclude.push(tag.id);
-                                            } else if (isExcluded) {
-                                                // Excluded -> None
-                                                nextExclude = nextExclude.filter(id => id !== tag.id);
+            {
+                editingFilterView && createPortal(
+                    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999] flex items-center justify-center" onClick={() => setEditingFilterView(null)}>
+                        <div className="bg-white rounded-xl shadow-2xl w-80 max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 border-b border-gray-100 bg-gray-50">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-bold text-gray-700 text-sm">視圖設定</h3>
+                                    <button onClick={() => setEditingFilterView(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-500">名稱：</span>
+                                    <input
+                                        type="text"
+                                        value={editingViewNameTemp}
+                                        onChange={(e) => setEditingViewNameTemp(e.target.value)}
+                                        onBlur={() => {
+                                            // Save on blur - empty string means use default
+                                            const newNames = { ...viewNames };
+                                            if (editingViewNameTemp.trim()) {
+                                                newNames[editingFilterView] = editingViewNameTemp;
                                             } else {
-                                                // None -> Included
-                                                nextInclude.push(tag.id);
+                                                delete newNames[editingFilterView]; // Remove to use default
                                             }
-                                            updateViewTagFilter(editingFilterView, { include: nextInclude, exclude: nextExclude });
-                                        }}>
-                                            <div className="w-5 h-5 flex items-center justify-center">
-                                                {isIncluded && <CheckCircle2 size={16} className="text-green-500" />}
-                                                {isExcluded && <XCircle size={16} className="text-red-500" />}
-                                                {!isIncluded && !isExcluded && <div className="w-4 h-4 rounded-full border border-gray-300"></div>}
+                                            setViewNames(newNames);
+                                            localStorage.setItem('custom_view_names', JSON.stringify(newNames));
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                (e.target as HTMLInputElement).blur();
+                                            }
+                                        }}
+                                        className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        placeholder={t(editingFilterView) || editingFilterView}
+                                    />
+                                </div>
+                            </div>
+                            <div className="p-2 overflow-y-auto flex-1 text-sm">
+                                <p className="px-2 py-2 text-xs text-gray-500 mb-2 bg-yellow-50 rounded border border-yellow-100">
+                                    點擊切換：包含 (綠色) / 排除 (紅色) / 無。
+                                </p>
+                                <div className="space-y-1">
+                                    {tags.map((tag: any) => {
+                                        const current = viewTagFilters[editingFilterView] || { include: [] as string[], exclude: [] as string[] };
+                                        const { include, exclude } = Array.isArray(current) ? { include: current, exclude: [] as string[] } : current;
+
+                                        const isIncluded = include.includes(tag.id);
+                                        const isExcluded = exclude.includes(tag.id);
+
+                                        return (
+                                            <div key={tag.id} className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 rounded cursor-pointer select-none" onClick={() => {
+                                                let nextInclude = [...include];
+                                                let nextExclude = [...exclude];
+
+                                                if (isIncluded) {
+                                                    // Included -> Excluded
+                                                    nextInclude = nextInclude.filter(id => id !== tag.id);
+                                                    nextExclude.push(tag.id);
+                                                } else if (isExcluded) {
+                                                    // Excluded -> None
+                                                    nextExclude = nextExclude.filter(id => id !== tag.id);
+                                                } else {
+                                                    // None -> Included
+                                                    nextInclude.push(tag.id);
+                                                }
+                                                updateViewTagFilter(editingFilterView, { include: nextInclude, exclude: nextExclude });
+                                            }}>
+                                                <div className="w-5 h-5 flex items-center justify-center">
+                                                    {isIncluded && <CheckCircle2 size={16} className="text-green-500" />}
+                                                    {isExcluded && <XCircle size={16} className="text-red-500" />}
+                                                    {!isIncluded && !isExcluded && <div className="w-4 h-4 rounded-full border border-gray-300"></div>}
+                                                </div>
+                                                <span style={{ color: tagsWithResolvedColors[tag.id] }}>{tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}</span>
                                             </div>
-                                            <span style={{ color: tagsWithResolvedColors[tag.id] }}>{tag.name.startsWith('#') ? tag.name.slice(1) : tag.name}</span>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="p-3 border-t border-gray-100 flex justify-end">
+                                <button onClick={() => setEditingFilterView(null)} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">完成</button>
                             </div>
                         </div>
-                        <div className="p-3 border-t border-gray-100 flex justify-end">
-                            <button onClick={() => setEditingFilterView(null)} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">完成</button>
+                    </div>,
+                    document.body
+                )
+            }
+            {
+                showGoogleImportModal && createPortal(
+                    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[9999] flex items-center justify-center" onClick={() => setShowGoogleImportModal(false)}>
+                        <div className="bg-white rounded-xl shadow-2xl w-96 p-4 max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                            <h3 className="font-bold text-gray-700 text-sm mb-4">
+                                {importStep === 'date' ? (language === 'zh' ? '選擇匯入範圍' : 'Select Date Range') : (language === 'zh' ? '選擇行事曆' : 'Select Calendars')}
+                            </h3>
+
+                            {importStep === 'date' ? (
+                                <div className="space-y-3 mb-4">
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                                        <input
+                                            type="date"
+                                            className="w-full border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                                            value={googleDateRange.start}
+                                            onChange={e => setGoogleDateRange(p => ({ ...p, start: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                                        <input
+                                            type="date"
+                                            className="w-full border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-indigo-500"
+                                            value={googleDateRange.end}
+                                            onChange={e => setGoogleDateRange(p => ({ ...p, end: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="flex justify-end gap-2 mt-4">
+                                        <button onClick={() => setShowGoogleImportModal(false)} className="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded text-xs">Cancel</button>
+                                        <button onClick={handleDateConfirm} className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700">Next</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="mb-4 flex flex-col flex-1 overflow-hidden">
+                                    <div className="flex-1 overflow-y-auto space-y-2 mb-4 border border-gray-100 rounded p-2">
+                                        {calendars.map(cal => (
+                                            <label key={cal.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedCalendarIds.has(cal.id)}
+                                                    onChange={e => {
+                                                        const newSet = new Set(selectedCalendarIds);
+                                                        if (e.target.checked) newSet.add(cal.id);
+                                                        else newSet.delete(cal.id);
+                                                        setSelectedCalendarIds(newSet);
+                                                    }}
+                                                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: cal.backgroundColor || '#ccc' }}></span>
+                                                <span className="truncate">{cal.summary}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-end gap-2 mt-auto">
+                                        <button onClick={() => setImportStep('date')} className="px-3 py-1.5 text-gray-500 hover:bg-gray-100 rounded text-xs">Back</button>
+                                        <button onClick={handleFinalImport} disabled={selectedCalendarIds.size === 0} className="px-3 py-1.5 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700 disabled:opacity-50">Import</button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                </div>,
-                document.body
-            )}
+                    </div>,
+                    document.body
+                )
+            }
             {importProgress && <ImportProgressModal current={importProgress.current} total={importProgress.total} />}
             <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
-        </aside>
+        </aside >
     );
 };

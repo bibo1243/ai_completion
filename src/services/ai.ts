@@ -654,8 +654,106 @@ ${keywordList}
     }
 
     return null;
+
+
   } catch (error) {
     console.error("Find Best Parent Keyword Error:", error);
     return null;
   }
 };
+
+// Define the response structure
+export interface GTDResponse {
+  reply: string; // The message to the user
+  current_stage: 'capture' | 'clarify' | 'organize' | 'engage'; // Current GTD stage
+  actions?: Array<
+    | { type: 'update_task'; params: { title?: string; description?: string; due_date?: string; start_date?: string; start_time?: string; reminder_minutes?: number; tags?: string[] } } // tags are names
+    | { type: 'add_subtasks'; params: { tasks: Array<{ title: string; start_date?: string; start_time?: string; reminder_minutes?: number; due_date?: string }> } }
+  >;
+}
+
+export const chatWithGTDCoach = async (
+  taskContext: {
+    title: string;
+    description: string;
+    status: string;
+    created_at: string;
+    due_date?: string | null;
+    start_date?: string | null;
+    tags: string[];
+    project_title?: string;
+  },
+  scheduleContext: string[], // List of plain text strings describing upcoming schedule
+  userMessage: string,
+  history: { role: 'user' | 'assistant'; content: string }[] = []
+): Promise<GTDResponse> => {
+  const gtdPrompt = `
+角色設定：你是一位高效率的 GTD (Getting Things Done) 教練。你的目標是**引導**使用者完成 GTD 流程，而非急著把事情做完。
+請判斷使用者目前處於哪個階段，並一步步帶領。
+
+目前聚焦的任務：
+- 標題：${taskContext.title}
+- 備註：${taskContext.description || '(無)'}
+- 狀態：${taskContext.status}
+- 建立時間：${taskContext.created_at}
+- 到期日：${taskContext.due_date || '未設定'}
+- 開始日(執行日)：${taskContext.start_date || '未設定'}
+- 標籤：${taskContext.tags.join(', ') || '無'}
+- 所屬專案：${taskContext.project_title || '無 (可能在收件匣)'}
+
+行程概覽 (作為參考，避免時間衝突)：
+${scheduleContext.length > 0 ? scheduleContext.join('\n') : '(目前無其他緊迫行程)'}
+
+對話歷史：
+${history.map(m => `${m.role === 'user' ? '使用者' : 'GTD秘書'}: ${m.content}`).join('\n')}
+
+使用者目前輸入：
+"${userMessage}"
+
+GTD 階段定義 (current_stage)：
+1. capture (收集): 任務剛產生，資訊模糊，還在收件匣。
+2. clarify (釐清): 正在詢問這是否可行動？下一步是什麼？
+3. organize (組織): 正在設定屬性。**注意：時間設定請優先使用「開始日 (start_date)」，這是使用者「打算開始做」的時間。若有具體時刻請設 start_time (HH:MM)。僅在有硬性死線時設定「到期日 (due_date)」。**
+4. engage (執行): 任務屬性已完善，準備開始執行或拆解細項。
+
+回應原則：
+1. **不要急著執行**：請先與使用者透過對話擬定計畫。在初期階段，請用文字描述建議的步驟，**不要**生成 \`actions\` JSON。
+2. **流程引導**：告訴使用者目前在什麼階段，下一步該做什麼。
+3. **時間優先**：規劃時間時，預設設定 \`start_date\`。
+4. **生成動作機制**：請等到**所有計畫細節**（步驟、日期、時間、提醒）都在對話中確認完畢，且使用者明確表示「好，執行」、「建立任務」或「這樣可以」時，才**一次性**生成包含所有子任務的 \`actions\` JSON。這能讓使用者一次確認完整清單。若有提醒需求，請設定 reminder_minutes。
+
+回應格式 (JSON Only)：
+{
+  "reply": "給使用者的回應...",
+  "current_stage": "capture" | "clarify" | "organize" | "engage",
+  "actions": [
+    { "type": "update_task", "params": { "start_date": "YYYY-MM-DD", "start_time": "09:00", "reminder_minutes": 0 } },
+    { "type": "add_subtasks", "params": { "tasks": [{ "title": "...", "start_date": "...", "reminder_minutes": 10 }] } }
+  ]
+}
+* \`actions\` 若無則為空陣列。
+
+請直接輸出 JSON：
+`;
+
+  try {
+    const rawResult = await executeSimpleAIRequest(gtdPrompt);
+
+    // Parse JSON
+    let jsonStr = rawResult;
+    const jsonMatch = rawResult.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
+    jsonStr = jsonStr.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    return JSON.parse(jsonStr) as GTDResponse;
+  } catch (error) {
+    console.error("GTD Coach Error:", error);
+    // Fallback to text response if JSON parsing fails
+    return {
+      reply: "不好意思，我處理資料時發生了一點錯誤，請再試一次。",
+      current_stage: 'capture',
+      actions: []
+    };
+  }
+};
+

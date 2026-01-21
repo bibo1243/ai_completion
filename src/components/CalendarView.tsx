@@ -1,4 +1,5 @@
 import React, { useState, useContext, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { AppContext } from '../context/AppContext';
@@ -11,7 +12,38 @@ const HOUR_HEIGHT = 60;
 type ViewMode = 'month' | 'week' | 'custom';
 
 export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode?: ViewMode, forcedNumDays?: number }) => {
-  const { user, tasks, updateTask, addTask, setEditingTaskId, themeSettings, selectedTaskIds, setSelectedTaskIds, handleSelection, calendarDate, setCalendarDate, dragState, deleteTask, editingTaskId } = useContext(AppContext);
+  const { user, tasks, tags, tagsWithResolvedColors, updateTask, addTask, setEditingTaskId, themeSettings, selectedTaskIds, setSelectedTaskIds, handleSelection, calendarDate, setCalendarDate, dragState, deleteTask, editingTaskId } = useContext(AppContext);
+
+  const getTaskColor = (task: TaskData) => {
+
+
+    if (task.tags && task.tags.length > 0) {
+      // 1. Priority: Tag with 'google' (case insensitive)
+      const googleTagId = task.tags.find(tagId => {
+        const t = tags.find((x: any) => x.id === tagId);
+        return t && t.name.toLowerCase().includes('google');
+      });
+
+      if (googleTagId) {
+        if (tagsWithResolvedColors && tagsWithResolvedColors[googleTagId]) {
+          return tagsWithResolvedColors[googleTagId];
+        }
+        const t = tags.find((x: any) => x.id === googleTagId);
+        if (t?.color) return t.color;
+      }
+
+      // 2. Fallback: Find ANY tag that has a resolved color
+      for (const tid of task.tags) {
+        if (tagsWithResolvedColors && tagsWithResolvedColors[tid]) return tagsWithResolvedColors[tid];
+        const t = tags.find((x: any) => x.id === tid);
+        if (t?.color) return t.color;
+      }
+    }
+
+    // 3. Fallback: Legacy Task Color
+    const legacyKey = (task.color || 'blue') as keyof typeof COLOR_THEMES;
+    return COLOR_THEMES[legacyKey]?.color || COLOR_THEMES.blue.color;
+  };
 
   // Global key handler for Delete in Calendar View
   useEffect(() => {
@@ -47,6 +79,15 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
   });
   const [allDayHeight, setAllDayHeight] = useState(() => parseInt(localStorage.getItem('calendar_allday_height') || '80'));
   const [isResizingAllDay, setIsResizingAllDay] = useState(false);
+  // Hover tooltip state - includes position for Portal rendering
+  const [hoverTooltip, setHoverTooltip] = useState<{ taskId: string; title: string; x: number; y: number } | null>(null);
+  const taskTitleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const taskBubbleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // Clear hovered task when editing modal opens or view mode changes
+  useEffect(() => {
+    setHoverTooltip(null);
+  }, [editingTaskId, viewMode, calendarDate]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -431,8 +472,21 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
 
   const renderTaskItem = (task: TaskData) => {
-    const theme = COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES];
+    const taskColor = getTaskColor(task);
     const isSelected = selectedTaskIds.includes(task.id);
+
+    // Check if text is truncated
+    const checkTruncation = (el: HTMLDivElement | null) => {
+      if (el) {
+        taskTitleRefs.current.set(task.id, el);
+      }
+    };
+    const bubbleRefCallback = (el: HTMLDivElement | null) => {
+      if (el) {
+        taskBubbleRefs.current.set(task.id, el);
+      }
+    };
+
     return (
       <motion.div
         layoutId={`task-${task.id}`}
@@ -441,21 +495,36 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
         transition={{ type: "spring", stiffness: 400, damping: 20 }}
         key={task.id}
         draggable
+        ref={bubbleRefCallback}
         onDragStart={(e) => {
-          // Framer Motion onDragStart types conflict with React's DragEvent. Cast to any to access dataTransfer for HTML5 drag.
           (e as any).dataTransfer.setData('text/plain', task.id);
+          setHoverTooltip(null);
         }}
         onClick={(e) => { e.stopPropagation(); handleSelection(e, task.id); }}
-        className={`text-[10px] px-1.5 py-1 rounded border cursor-grab active:cursor-grabbing truncate shadow-sm hover:shadow-md transition-shadow mb-1 ${isSelected ? 'ring-2 ring-offset-1' : ''}`}
-        title={task.title}
+        onMouseEnter={() => {
+          // Only show tooltip if text is truncated
+          const titleEl = taskTitleRefs.current.get(task.id);
+          const bubbleEl = taskBubbleRefs.current.get(task.id);
+          if (titleEl && bubbleEl && titleEl.scrollWidth > titleEl.clientWidth) {
+            const rect = bubbleEl.getBoundingClientRect();
+            setHoverTooltip({
+              taskId: task.id,
+              title: task.title,
+              x: rect.left + (rect.width / 2),
+              y: rect.top - 8
+            });
+          }
+        }}
+        onMouseLeave={() => setHoverTooltip(null)}
+        className={`relative overflow-visible text-[10px] px-1.5 py-1 rounded border cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-shadow mb-1 ${isSelected ? 'ring-2 ring-offset-1' : ''}`}
         style={{
           opacity: isSelected ? 1 : 0.9,
-          backgroundColor: isSelected ? theme.color + '33' : theme.color + '15',
-          borderColor: theme.color + '50',
-          color: theme.color
+          backgroundColor: isSelected ? taskColor + '4D' : taskColor + '1A',
+          borderColor: taskColor + '50',
+          color: taskColor
         }}
       >
-        {task.title}
+        <div ref={checkTruncation} className="truncate">{task.title}</div>
       </motion.div>
     );
   };
@@ -632,9 +701,48 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                   }}
                 >
                   <div className="flex flex-col gap-1 h-full">
-                    {allDayTasks.map(task => (
-                      <div key={task.id} className={`text-[10px] px-2 py-0.5 rounded-sm border leading-tight ${COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES].badge} truncate shadow-sm hover:brightness-95 transition-all w-full font-bold`}>{task.title}</div>
-                    ))}
+                    {allDayTasks.map(task => {
+                      const taskColor = getTaskColor(task);
+
+                      const titleRefCallback = (el: HTMLDivElement | null) => {
+                        if (el) {
+                          taskTitleRefs.current.set(task.id, el);
+                        }
+                      };
+                      const bubbleRefCallback = (el: HTMLDivElement | null) => {
+                        if (el) {
+                          taskBubbleRefs.current.set(task.id, el);
+                        }
+                      };
+
+                      return (
+                        <div key={task.id}
+                          ref={bubbleRefCallback}
+                          className="relative text-[10px] px-2 py-0.5 rounded-sm border leading-tight shadow-sm hover:brightness-95 transition-all w-full font-bold overflow-visible"
+                          style={{
+                            backgroundColor: taskColor + '1A',
+                            borderColor: taskColor + '4D',
+                            color: taskColor
+                          }}
+                          onMouseEnter={() => {
+                            const titleEl = taskTitleRefs.current.get(task.id);
+                            const bubbleEl = taskBubbleRefs.current.get(task.id);
+                            if (titleEl && bubbleEl && titleEl.scrollWidth > titleEl.clientWidth) {
+                              const rect = bubbleEl.getBoundingClientRect();
+                              setHoverTooltip({
+                                taskId: task.id,
+                                title: task.title,
+                                x: rect.left + (rect.width / 2),
+                                y: rect.top - 8
+                              });
+                            }
+                          }}
+                          onMouseLeave={() => setHoverTooltip(null)}
+                        >
+                          <div ref={titleRefCallback} className="truncate">{task.title}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -709,29 +817,63 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
                       return lanes.map((lane, laneIdx) => lane.map(task => {
                         const startMin = timeToMinutes(task.start_time);
                         const dur = task.duration || 60;
-                        const theme = COLOR_THEMES[(task.color || 'blue') as keyof typeof COLOR_THEMES];
+                        const taskColor = getTaskColor(task);
                         const breadcrumbs = getTaskBreadcrumbs(task);
                         const width = 100 / lanes.length;
                         const left = laneIdx * width;
                         const isInteracting = interaction?.taskId === task.id;
                         const isSelected = selectedTaskIds.includes(task.id);
+
+                        // Register ref for truncation detection
+                        const titleRefCallback = (el: HTMLDivElement | null) => {
+                          if (el) {
+                            taskTitleRefs.current.set(task.id, el);
+                          }
+                        };
+                        const bubbleRefCallback = (el: HTMLDivElement | null) => {
+                          if (el) {
+                            taskBubbleRefs.current.set(task.id, el);
+                          }
+                        };
+
                         return (
                           <React.Fragment key={task.id}>
                             {isInteracting && <div className="absolute rounded-lg border-2 border-dashed border-gray-300 z-0 pointer-events-none opacity-40" style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%` }} />}
-                            <div onMouseDown={(e) => handleInteractionStart(e, task, 'move', date, startDate, numDays, dayIndex)} onClick={(e) => { e.stopPropagation(); if (!hasMoved.current) handleSelection(e, task.id); }} onDoubleClick={(e) => {
-                              e.stopPropagation();
-                              isDoubleClick.current = true;
-                              if (doubleClickTimer.current) {
-                                clearTimeout(doubleClickTimer.current);
-                                doubleClickTimer.current = null;
-                              }
-                              // Removed: setEditingTaskId(task.id) - editing disabled in calendar view
-                            }} className={`task-bubble absolute rounded-lg border-l-4 shadow-sm p-1.5 transition-all overflow-hidden group/box ${isInteracting ? 'z-50 opacity-70 shadow-xl scale-[1.02] cursor-move' : 'z-10 hover:shadow-md cursor-pointer'}`} style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%`, backgroundColor: isSelected ? theme.color + '4D' : theme.color + '1A', borderColor: theme.color, userSelect: 'none' }}>
+                            <div
+                              ref={bubbleRefCallback}
+                              onMouseDown={(e) => handleInteractionStart(e, task, 'move', date, startDate, numDays, dayIndex)}
+                              onClick={(e) => { e.stopPropagation(); if (!hasMoved.current) handleSelection(e, task.id); }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                isDoubleClick.current = true;
+                                if (doubleClickTimer.current) {
+                                  clearTimeout(doubleClickTimer.current);
+                                  doubleClickTimer.current = null;
+                                }
+                              }}
+                              onMouseEnter={() => {
+                                const titleEl = taskTitleRefs.current.get(task.id);
+                                const bubbleEl = taskBubbleRefs.current.get(task.id);
+                                if (titleEl && bubbleEl && titleEl.scrollWidth > titleEl.clientWidth) {
+                                  const rect = bubbleEl.getBoundingClientRect();
+                                  setHoverTooltip({
+                                    taskId: task.id,
+                                    title: task.title,
+                                    x: rect.left + (rect.width / 2),
+                                    y: rect.top - 8
+                                  });
+                                }
+                              }}
+                              onMouseLeave={() => setHoverTooltip(null)}
+                              className={`task-bubble absolute rounded-lg border-l-4 shadow-sm p-1.5 transition-all overflow-visible group/box ${isInteracting ? 'z-50 opacity-70 shadow-xl scale-[1.02] cursor-move' : 'z-10 hover:shadow-md cursor-pointer'}`}
+                              style={{ top: (startMin / 60) * HOUR_HEIGHT, height: (dur / 60) * HOUR_HEIGHT, left: `${left}%`, width: `${width}%`, backgroundColor: isSelected ? taskColor + '4D' : taskColor + '1A', borderColor: taskColor, userSelect: 'none' }}
+                            >
                               {isInteracting && <div className="task-tooltip absolute left-1/2 -translate-x-1/2 -top-8 bg-slate-800 text-white text-[10px] font-bold px-2 py-1 rounded shadow-2xl z-[100] whitespace-nowrap border border-slate-700">{formatTimeRange(startMin, dur)}</div>}
-                              <div className="flex flex-col h-full pointer-events-none">
-                                {breadcrumbs && <div className="text-[9px] font-medium opacity-60 truncate leading-tight mb-0.5" style={{ color: theme.color }}>{breadcrumbs}</div>}
-                                <div className="text-[11px] font-bold leading-tight" style={{ color: theme.color }}>{task.title}</div>
-                                <div className="task-time-label mt-auto text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: theme.color }}>{`${minutesToTime(startMin)} - ${minutesToTime(startMin + dur)}`}</div>
+
+                              <div className="flex flex-col h-full pointer-events-none overflow-hidden">
+                                {breadcrumbs && <div className="text-[9px] font-medium opacity-60 truncate leading-tight mb-0.5" style={{ color: taskColor }}>{breadcrumbs}</div>}
+                                <div ref={titleRefCallback} className="text-[11px] font-bold leading-tight truncate" style={{ color: taskColor }}>{task.title}</div>
+                                <div className="task-time-label mt-auto text-[9px] font-bold opacity-40 uppercase tracking-tighter" style={{ color: taskColor }}>{`${minutesToTime(startMin)} - ${minutesToTime(startMin + dur)}`}</div>
                               </div>
                               <div className="absolute top-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-black/10 transition-colors z-20" onMouseDown={(e) => handleInteractionStart(e, task, 'resize-top', date, startDate, numDays, dayIndex)} />
                               <div className="absolute bottom-0 left-0 right-0 h-1.5 cursor-ns-resize hover:bg-black/10 transition-colors z-20" onMouseDown={(e) => handleInteractionStart(e, task, 'resize-bottom', date, startDate, numDays, dayIndex)} />
@@ -849,6 +991,22 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
         </div>
       </div>
       {viewMode === 'month' ? renderMonthView() : renderColumnsView(viewMode === 'week' ? 7 : customDays)}
+
+      {/* Hover Tooltip (Portal) - escapes overflow hidden containers */}
+      {hoverTooltip && createPortal(
+        <div
+          className="fixed z-[9999] w-max max-w-[300px] bg-white/95 backdrop-blur-xl text-slate-800 text-base px-4 py-2.5 rounded-xl shadow-2xl break-words whitespace-normal leading-relaxed font-medium tracking-normal animate-in fade-in zoom-in-95 duration-150 pointer-events-none border border-slate-200/80 ring-1 ring-black/5"
+          style={{
+            left: hoverTooltip.x,
+            top: hoverTooltip.y,
+            transform: 'translateY(-100%)'
+          }}
+        >
+          {hoverTooltip.title}
+          <div className="absolute left-4 top-full w-0 h-0 border-[6px] border-transparent border-t-white/95" />
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

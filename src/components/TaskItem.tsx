@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useContext, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Repeat2, Paperclip } from 'lucide-react';
+import { RecordingContext } from '../context/RecordingContext';
+import { ChevronRight, ChevronDown, Trash2, Calendar, Tag, FileText, Repeat2, Paperclip, Lock, Unlock } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { FlatTask, TaskData, TaskColor } from '../types';
 import { INDENT_SIZE, COLOR_THEMES } from '../constants';
@@ -55,8 +56,9 @@ export const InlineTaskTitleEditor = ({ initialTitle, onSave, onCancel, onSwitch
     );
 };
 
-export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void, onSelect?: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void }) => {
-    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, selectedTaskIds, handleSelection, themeSettings, pendingFocusTaskId, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
+export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect, backgroundColor }: { flatTask: FlatTask, isFocused: boolean, onEdit: (nextId?: string | null) => void, onSelect?: (e: React.MouseEvent | React.KeyboardEvent, id: string) => void, backgroundColor?: string }) => {
+    const { updateTask, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, addTask, toggleExpansion, startDrag, keyboardMove, tasks, tags, dragState, navigateBack, view, canNavigateBack, smartReschedule, lockTask, unlockTask, verifyTaskPassword, temporarilyUnlockTask, selectedTaskIds, handleSelection, themeSettings, pendingFocusTaskId, setPendingFocusTaskId, setSelectedTaskIds, visibleTasks, t, language, batchDeleteTasks, batchUpdateTasks, setToast, tagFilter } = useContext(AppContext);
+    const { recordingTaskId } = useContext(RecordingContext);
     const task = flatTask.data;
     const itemRef = useRef<HTMLDivElement>(null);
 
@@ -67,12 +69,23 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
     const [attachmentTooltip, setAttachmentTooltip] = useState<{ visible: boolean; x: number; y: number; attachments: any[] } | null>(null);
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
+    // Lock dialog state
+    const [lockDialogOpen, setLockDialogOpen] = useState(false);
+    const [lockDialogMode, setLockDialogMode] = useState<'lock' | 'unlock' | 'verify'>('lock');
+    const [lockPassword, setLockPassword] = useState('');
+    const [onVerifySuccess, setOnVerifySuccess] = useState<(() => void) | null>(null);
+
     const isExpanded = flatTask.isExpanded;
     const hasChildren = flatTask.hasChildren;
-    const isDone = !!task.completed_at && task.status === 'completed';
+    const isDone = !!task.completed_at && (task.status === 'completed' || task.status === 'logged');
     const isCanceled = task.status === 'canceled';
     const isCompletedOrCanceled = isDone || isCanceled;
     const isSelected = selectedTaskIds.includes(task.id);
+    const isLocked = !!task.is_locked;
+    // isLockRoot: this task has its own password (is the lock source)
+    // isInheritedLock: this task is locked but doesn't have its own password (inherited from parent)
+    const isLockRoot = isLocked && !!task.lock_password;
+    const isInheritedLock = isLocked && !task.lock_password;
 
     // Map importance level to checkbox color
     const getImportanceColor = (importance?: string): TaskColor | null => {
@@ -355,10 +368,22 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
         if (e.key === 'Enter') {
             e.preventDefault();
             e.stopPropagation();
-            if (e.metaKey || e.ctrlKey) {
-                onEdit();
+            if (isLocked) {
+                // Require password verification before editing locked task
+                setLockPassword('');
+                setLockDialogMode('verify');
+                if (e.metaKey || e.ctrlKey) {
+                    setOnVerifySuccess(() => () => onEdit());
+                } else {
+                    setOnVerifySuccess(() => () => setInlineEditingTaskId(task.id));
+                }
+                setLockDialogOpen(true);
             } else {
-                setInlineEditingTaskId(task.id);
+                if (e.metaKey || e.ctrlKey) {
+                    onEdit();
+                } else {
+                    setInlineEditingTaskId(task.id);
+                }
             }
         }
         if (e.key === ' ' && (view === 'inbox' || view === 'today' || view === 'schedule' || view === 'waiting' || view === 'focus')) {
@@ -580,7 +605,7 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
             draggable={!isMobile && view !== 'schedule' && view !== 'focus' && !isInReviewZone && !(view === 'allview' && task.status === 'logged')}
             onDragStart={(e: any) => { if (view === 'focus' || isInReviewZone || (view === 'allview' && task.status === 'logged')) { e.preventDefault(); return; } startDrag(e, flatTask); }}
             className={`${finalClass} ${isLongPressing ? 'scale-[1.02] shadow-lg z-50' : ''}`}
-            style={{ marginLeft: `${view === 'today' ? 0 : flatTask.depth * INDENT_SIZE}px` }}
+            style={{ marginLeft: `${view === 'today' ? 0 : flatTask.depth * INDENT_SIZE}px`, backgroundColor: backgroundColor || 'transparent' }}
             tabIndex={0}
             onKeyDown={handleKeyDown}
             onClick={(e: any) => {
@@ -588,9 +613,16 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                 e.preventDefault();
                 if (isMobile) {
                     // Mobile: single click opens edit mode (only if not already editing)
-                    // Use setTimeout to ensure click event is fully processed before modal opens
                     if (!editingTaskId) {
-                        setTimeout(() => setEditingTaskId(task.id), 50);
+                        if (isLocked) {
+                            // Need to verify password before editing
+                            setLockPassword('');
+                            setLockDialogMode('verify');
+                            setOnVerifySuccess(() => () => setTimeout(() => setEditingTaskId(task.id), 50));
+                            setLockDialogOpen(true);
+                        } else {
+                            setTimeout(() => setEditingTaskId(task.id), 50);
+                        }
                     }
                 } else {
                     // Desktop: select on click - use onSelect if provided, otherwise global handleSelection
@@ -602,7 +634,15 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                 e.stopPropagation();
                 // Desktop: edit on double-click
                 if (!isMobile) {
-                    onEdit();
+                    if (isLocked) {
+                        // Need to verify password before editing
+                        setLockPassword('');
+                        setLockDialogMode('verify');
+                        setOnVerifySuccess(() => () => onEdit());
+                        setLockDialogOpen(true);
+                    } else {
+                        onEdit();
+                    }
                 }
             }}
             onTouchStart={handleTouchStart}
@@ -658,7 +698,14 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                 {/* Importance is now shown via checkbox color */}
                             </div>
                             <div className="flex-1 min-w-0 cursor-text flex items-center overflow-hidden relative min-h-[1.5em]">
-                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink ${inlineEditingTaskId === task.id ? 'opacity-0' : ''}`}>
+                                {/* Lock indicator */}
+                                {isLocked && (
+                                    <Lock size={12} className="text-amber-500 mr-1.5 flex-shrink-0" />
+                                )}
+                                {recordingTaskId === task.id && (
+                                    <div className="mr-2 flex-shrink-0 w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.6)]" title="Recording..." />
+                                )}
+                                <span className={`${fontSizeClass} ${titleFontClass} transition-all duration-300 ${isCompletedOrCanceled ? 'opacity-30' : 'text-theme-primary'} ${isCanceled ? 'line-through decoration-gray-400' : ''} mr-2 truncate block flex-shrink ${inlineEditingTaskId === task.id ? 'opacity-0' : ''} ${isInheritedLock ? 'blur-[4px] select-none' : ''}`}>
                                     {task.title}
                                 </span>
                                 {inlineEditingTaskId === task.id && (
@@ -778,6 +825,23 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                                 <div className={`ml-auto ${isCompletedOrCanceled ? 'opacity-50' : 'opacity-100'} flex-shrink-0`}> {renderDateBadge()} </div>
                             </div>
                             <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 flex items-center gap-1 pl-2">
+                                {/* Lock/Unlock Button */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setLockPassword('');
+                                        if (isLocked) {
+                                            setLockDialogMode('unlock');
+                                        } else {
+                                            setLockDialogMode('lock');
+                                        }
+                                        setLockDialogOpen(true);
+                                    }}
+                                    className={`p-1 transition-colors ${isLocked ? 'text-amber-500 hover:text-amber-600' : 'text-slate-300 hover:text-amber-500'}`}
+                                    title={isLocked ? '解鎖任務' : '鎖定任務'}
+                                >
+                                    {isLocked ? <Unlock size={iconSize} /> : <Lock size={iconSize} />}
+                                </button>
                                 <button onClick={(e) => {
                                     e.stopPropagation();
                                     const ids = selectedTaskIds.includes(task.id) ? selectedTaskIds : [task.id];
@@ -788,6 +852,108 @@ export const TaskItem = ({ flatTask, isFocused, onEdit, onSelect }: { flatTask: 
                     )}
                 </div>
             </div>
+
+            {/* Password Dialog */}
+            {lockDialogOpen && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]"
+                    onClick={() => { setLockDialogOpen(false); setOnVerifySuccess(null); }}
+                >
+                    <div
+                        className="bg-white rounded-xl shadow-2xl p-6 w-80 max-w-[90vw]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-2 mb-4">
+                            {lockDialogMode === 'lock' ? (
+                                <Lock size={20} className="text-amber-500" />
+                            ) : (
+                                <Unlock size={20} className="text-emerald-500" />
+                            )}
+                            <h3 className="text-lg font-bold">
+                                {lockDialogMode === 'lock' ? '設定密碼' : lockDialogMode === 'verify' ? '驗證密碼' : '輸入密碼解鎖'}
+                            </h3>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-4">
+                            {lockDialogMode === 'lock'
+                                ? '設定密碼後，此任務及其所有子任務將被鎖定，需要密碼才能查看或編輯。'
+                                : lockDialogMode === 'verify'
+                                    ? '請輸入密碼以查看或編輯此任務。'
+                                    : '請輸入正確的密碼以解鎖此任務。'
+                            }
+                        </p>
+                        <input
+                            type="password"
+                            placeholder="請輸入密碼"
+                            value={lockPassword}
+                            onChange={(e) => setLockPassword(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    if (lockDialogMode === 'lock') {
+                                        if (lockPassword.length >= 1) {
+                                            lockTask(task.id, lockPassword);
+                                            setLockDialogOpen(false);
+                                        }
+                                    } else if (lockDialogMode === 'verify') {
+                                        if (verifyTaskPassword(task.id, lockPassword)) {
+                                            temporarilyUnlockTask(task.id);
+                                            setLockDialogOpen(false);
+                                            if (onVerifySuccess) onVerifySuccess();
+                                            setOnVerifySuccess(null);
+                                        } else {
+                                            setToast({ msg: '密碼錯誤', type: 'error' });
+                                        }
+                                    } else {
+                                        unlockTask(task.id, lockPassword).then(success => {
+                                            if (success) setLockDialogOpen(false);
+                                        });
+                                    }
+                                }
+                                if (e.key === 'Escape') { setLockDialogOpen(false); setOnVerifySuccess(null); }
+                            }}
+                            autoFocus
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => { setLockDialogOpen(false); setOnVerifySuccess(null); }}
+                                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (lockDialogMode === 'lock') {
+                                        if (lockPassword.length >= 1) {
+                                            lockTask(task.id, lockPassword);
+                                            setLockDialogOpen(false);
+                                        }
+                                    } else if (lockDialogMode === 'verify') {
+                                        if (verifyTaskPassword(task.id, lockPassword)) {
+                                            temporarilyUnlockTask(task.id);
+                                            setLockDialogOpen(false);
+                                            if (onVerifySuccess) onVerifySuccess();
+                                            setOnVerifySuccess(null);
+                                        } else {
+                                            setToast({ msg: '密碼錯誤', type: 'error' });
+                                        }
+                                    } else {
+                                        unlockTask(task.id, lockPassword).then(success => {
+                                            if (success) setLockDialogOpen(false);
+                                        });
+                                    }
+                                }}
+                                className={`flex-1 px-4 py-2 rounded-lg transition-colors ${lockDialogMode === 'lock'
+                                    ? 'bg-amber-500 text-white hover:bg-amber-600'
+                                    : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                    }`}
+                            >
+                                {lockDialogMode === 'lock' ? '鎖定' : lockDialogMode === 'verify' ? '確認' : '解鎖'}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </motion.div>
     );
 };

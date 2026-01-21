@@ -11,8 +11,42 @@ interface DraggableTaskModalProps {
 export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose, initialData }) => {
     const isEditMode = !!initialData;
 
+    const [viewportStyle, setViewportStyle] = React.useState<React.CSSProperties>({});
+
+    React.useEffect(() => {
+        if (!window.visualViewport) return;
+
+        const handleResize = () => {
+            if (!window.visualViewport) return;
+            // Only apply on mobile where keyboard might interfere
+            if (window.innerWidth < 768) {
+                setViewportStyle({
+                    height: `${window.visualViewport.height}px`,
+                    top: `${window.visualViewport.offsetTop}px`,
+                    position: 'fixed',
+                    bottom: 'auto'
+                });
+            } else {
+                setViewportStyle({});
+            }
+        };
+
+        window.visualViewport.addEventListener('resize', handleResize);
+        window.visualViewport.addEventListener('scroll', handleResize);
+        handleResize(); // Initial call
+
+        return () => {
+            window.visualViewport?.removeEventListener('resize', handleResize);
+            window.visualViewport?.removeEventListener('scroll', handleResize);
+        };
+    }, []);
+
     return (
-        <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center pointer-events-auto bg-black/20 md:bg-transparent" onClick={onClose}>
+        <div
+            className="fixed inset-0 z-[60] flex items-end md:items-center justify-center pointer-events-auto bg-black/20 md:bg-transparent"
+            onClick={onClose}
+            style={viewportStyle}
+        >
             {/* The modal itself should be pointer-events-auto */}
             <motion.div
                 onClick={(e) => e.stopPropagation()}
@@ -43,10 +77,10 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 md:p-1 hover:bg-gray-200/50 rounded-full text-gray-400 hover:text-gray-600 transition-colors touch-target"
+                        className="w-8 h-8 md:w-7 md:h-7 flex items-center justify-center hover:bg-gray-200/80 rounded-full text-gray-400 hover:text-gray-600 transition-colors bg-gray-100/50"
                         onPointerDown={(e) => e.stopPropagation()}
                     >
-                        <X size={18} className="md:hidden" />
+                        <X size={16} className="md:hidden" />
                         <X size={14} className="hidden md:block" />
                     </button>
                 </div>

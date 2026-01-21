@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Reminder, TaskData } from '../types';
 import { AppContext } from './AppContext';
+import { supabase } from '../supabaseClient';
 
 interface ReminderContextType {
     reminders: Reminder[];
@@ -29,99 +30,319 @@ export const ReminderContext = createContext<ReminderContextType>({
 });
 
 const REMINDER_STORAGE_KEY = 'app_reminders';
-const TRIGGERED_SIGNATURES_KEY = 'app_reminder_signatures'; // Persist triggered signatures
-const CHECK_INTERVAL_MS = 5000; // Check every 5 seconds for faster response
+const TRIGGERED_SIGNATURES_KEY = 'app_reminder_signatures';
+const CHECK_INTERVAL_MS = 10000; // Check every 10 seconds
 
 export const ReminderProvider = ({ children }: { children: React.ReactNode }) => {
-    const { tasks, setToast } = useContext(AppContext);
+    const { tasks, setToast, user } = useContext(AppContext);
+
+    // State
     const [reminders, setReminders] = useState<Reminder[]>([]);
     const [isReminderPanelOpen, setIsReminderPanelOpen] = useState(false);
-    // Map taskId -> signature (dueTime_reminderMinutes)
     const [triggeredSignatures, setTriggeredSignatures] = useState<Record<string, string>>({});
+    const [useSupabaseSync, setUseSupabaseSync] = useState(false);
+
+    // Refs for safe access in intervals and avoiding dependency cycles
     const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const initialLoadDone = useRef(false);
+    const loadedForUserId = useRef<string | null>(null);
 
-    // Load reminders and triggered signatures from localStorage on mount
+    // Refs to hold current state for interval callbacks
+    const remindersRef = useRef<Reminder[]>([]);
+    const triggeredSignaturesRef = useRef<Record<string, string>>({});
+    const tasksRef = useRef<TaskData[]>([]);
+    const useSupabaseSyncRef = useRef(false);
+
+    // Sync state to refs
+    useEffect(() => { remindersRef.current = reminders; }, [reminders]);
+    useEffect(() => { triggeredSignaturesRef.current = triggeredSignatures; }, [triggeredSignatures]);
+    useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+    useEffect(() => { useSupabaseSyncRef.current = useSupabaseSync; }, [useSupabaseSync]);
+
+    // 1. Initial Data Load
     useEffect(() => {
-        try {
-            // Load reminders
-            const savedReminders = localStorage.getItem(REMINDER_STORAGE_KEY);
-            if (savedReminders) {
-                const parsed = JSON.parse(savedReminders) as Reminder[];
-                setReminders(parsed);
+        const loadData = async () => {
+            // Check if we need to reload (user changed)
+            const currentUserId = user?.id || null;
+            if (loadedForUserId.current === currentUserId && initialLoadDone.current) return;
+
+            // If logging out, clear data
+            if (!currentUserId) {
+                setReminders([]);
+                setTriggeredSignatures({});
+                setUseSupabaseSync(false);
+                loadedForUserId.current = null;
+                initialLoadDone.current = true;
+                return;
             }
 
-            // Load triggered signatures
-            const savedSignatures = localStorage.getItem(TRIGGERED_SIGNATURES_KEY);
-            if (savedSignatures) {
-                const parsed = JSON.parse(savedSignatures) as Record<string, string>;
-                setTriggeredSignatures(parsed);
+            loadedForUserId.current = currentUserId;
+
+            // Try loading from Supabase if client exists
+            if (supabase) {
+                try {
+                    const { data: reminderData, error: reminderError } = await supabase
+                        .from('reminders')
+                        .select('*')
+                        .eq('user_id', currentUserId)
+                        .order('triggered_at', { ascending: false });
+
+                    if (!reminderError && reminderData) {
+                        setUseSupabaseSync(true);
+
+                        // Map remote data to local format
+                        const mappedReminders = reminderData.map(r => ({
+                            id: r.id,
+                            task_id: r.task_id,
+                            task_title: r.task_title,
+                            task_color: r.task_color || 'gray',
+                            triggered_at: r.triggered_at,
+                            due_time: r.due_time,
+                            seen: r.seen || false,
+                            snoozed_until: r.snoozed_until || null,
+                        }));
+
+                        setReminders(mappedReminders);
+
+                        // Load signatures
+                        const { data: sigData } = await supabase
+                            .from('reminder_signatures')
+                            .select('*')
+                            .eq('user_id', currentUserId);
+
+                        if (sigData) {
+                            const sigs: Record<string, string> = {};
+                            sigData.forEach(s => { sigs[s.task_id] = s.signature; });
+                            setTriggeredSignatures(sigs);
+                            // Important: Update ref immediately for the interval check
+                            triggeredSignaturesRef.current = sigs;
+                        }
+
+                        console.log('[Reminder] Loaded from Supabase:', mappedReminders.length);
+                        initialLoadDone.current = true;
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[Reminder] Supabase load failed, falling back to local:', e);
+                }
             }
 
+            // Fallback to localStorage
+            setUseSupabaseSync(false);
+            try {
+                const savedReminders = localStorage.getItem(REMINDER_STORAGE_KEY);
+                if (savedReminders) setReminders(JSON.parse(savedReminders));
+
+                const savedSignatures = localStorage.getItem(TRIGGERED_SIGNATURES_KEY);
+                if (savedSignatures) {
+                    const sigs = JSON.parse(savedSignatures);
+                    setTriggeredSignatures(sigs);
+                    triggeredSignaturesRef.current = sigs;
+                }
+            } catch (e) { console.error(e); }
+
             initialLoadDone.current = true;
-        } catch (e) {
-            console.error('Failed to load reminders:', e);
-            initialLoadDone.current = true;
-        }
-    }, []);
+        };
 
-    // Save reminders to localStorage whenever they change
+        loadData();
+    }, [user?.id]);
+
+    // 2. Realtime Subscription
     useEffect(() => {
-        if (!initialLoadDone.current) return;
-        try {
-            localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminders));
-        } catch (e) {
-            console.error('Failed to save reminders:', e);
+        if (!user?.id || !supabase) return;
+        if (!useSupabaseSync) {
+            console.log('[Reminder] Sync disabled, skipping subscription');
+            return;
         }
-    }, [reminders]);
 
-    // Save triggered signatures to localStorage
+        console.log('[Reminder] Subscribing to realtime channels...');
+
+        // Channel for reminders & broadcast
+        const remindersChannel = supabase
+            .channel('reminders-sync', { config: { broadcast: { self: false } } })
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'reminders',
+                filter: `user_id=eq.${user.id}`
+            }, (payload) => {
+                // Handle remote changes
+                if (payload.eventType === 'INSERT') {
+                    const r = payload.new as any;
+                    setReminders(prev => {
+                        if (prev.some(existing => existing.id === r.id)) return prev;
+                        return [{
+                            id: r.id,
+                            task_id: r.task_id,
+                            task_title: r.task_title,
+                            task_color: r.task_color || 'gray',
+                            triggered_at: r.triggered_at,
+                            due_time: r.due_time,
+                            seen: r.seen || false,
+                            snoozed_until: r.snoozed_until || null,
+                        }, ...prev];
+                    });
+                } else if (payload.eventType === 'UPDATE') {
+                    const r = payload.new as any;
+                    setReminders(prev => prev.map(existing =>
+                        existing.id === r.id ? {
+                            ...existing,
+                            seen: r.seen || false,
+                            snoozed_until: r.snoozed_until || null,
+                        } : existing
+                    ));
+                } else if (payload.eventType === 'DELETE') {
+                    const r = payload.old as any;
+                    setReminders(prev => prev.filter(existing => existing.id !== r.id));
+                }
+            })
+            .on('broadcast', { event: 'clear-action' }, (payload) => {
+                if (payload.payload.type === 'clearSeen') {
+                    setReminders(prev => prev.filter(r => !r.seen));
+                } else if (payload.payload.type === 'clearUnseen') {
+                    setReminders(prev => prev.filter(r => r.seen));
+                } else if (payload.payload.type === 'clearAll') {
+                    setReminders([]);
+                }
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') console.log('[Reminder] Reminders channel subscribed');
+            });
+
+        // Channel for signatures (to prevent re-triggers on other devices)
+        const signaturesChannel = supabase
+            .channel('signatures-sync')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'reminder_signatures',
+                filter: `user_id=eq.${user.id}`
+            }, (payload) => {
+                const s = payload.new as any;
+                setTriggeredSignatures(prev => {
+                    // Check if we already have it to avoid useless state updates
+                    if (prev[s.task_id] === s.signature) return prev;
+                    return { ...prev, [s.task_id]: s.signature };
+                });
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') console.log('[Reminder] Signatures channel subscribed');
+            });
+
+        return () => {
+            console.log('[Reminder] Unsubscribing...');
+            supabase.removeChannel(remindersChannel);
+            supabase.removeChannel(signaturesChannel);
+        };
+    }, [user?.id, useSupabaseSync]);
+
+    // 3. Local Persistence (Backup)
     useEffect(() => {
-        if (!initialLoadDone.current) return;
-        try {
-            localStorage.setItem(TRIGGERED_SIGNATURES_KEY, JSON.stringify(triggeredSignatures));
-        } catch (e) {
-            console.error('Failed to save triggered signatures:', e);
-        }
-    }, [triggeredSignatures]);
+        if (!initialLoadDone.current || useSupabaseSync) return;
+        localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(reminders));
+    }, [reminders, useSupabaseSync]);
 
-    // Calculate unseen count
-    const unseenCount = reminders.filter(r => !r.seen).length;
-
-    // Request notification permission on mount
     useEffect(() => {
-        if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
-        }
-    }, []);
+        if (!initialLoadDone.current || useSupabaseSync) return;
+        localStorage.setItem(TRIGGERED_SIGNATURES_KEY, JSON.stringify(triggeredSignatures));
+    }, [triggeredSignatures, useSupabaseSync]);
 
-    // Add a reminder for a task
-    const addReminder = useCallback((taskId: string, signature: string, showNotification = true) => {
-        const task = tasks.find(t => t.id === taskId);
+    // 4. Actions
+    const addReminder = useCallback(async (taskId: string, signature: string, showNotification = true) => {
+        const task = tasksRef.current.find(t => t.id === taskId);
         if (!task) return;
 
         const dueTime = task.start_date || task.due_date;
         if (!dueTime) return;
 
-        console.log(`[Reminder] Triggering reminder for task: ${task.title}, signature: ${signature}`);
+        // Check if we strictly need to sync (Supabase enabled)
+        if (useSupabaseSyncRef.current && supabase && user?.id) {
+            // STRATEGY: Try to acquire "lock" by inserting signature first.
+            const { error: sigError } = await supabase
+                .from('reminder_signatures')
+                .insert([{
+                    user_id: user.id,
+                    task_id: taskId,
+                    signature
+                }]);
 
-        const newReminder: Reminder = {
-            id: `${taskId}_${Date.now()}`,
-            task_id: taskId,
-            task_title: task.title,
-            task_color: task.color,
-            triggered_at: new Date().toISOString(),
-            due_time: dueTime,
-            seen: false,
-            snoozed_until: null,
-        };
+            // If signature insert failed, it might be already handled
+            if (sigError) {
+                // Check if it's the SAME signature (already triggered)
+                const { data: existing } = await supabase
+                    .from('reminder_signatures')
+                    .select('signature')
+                    .eq('user_id', user.id)
+                    .eq('task_id', taskId)
+                    .single();
 
-        setReminders(prev => [newReminder, ...prev]);
-        setTriggeredSignatures(prev => ({ ...prev, [taskId]: signature }));
+                if (existing && existing.signature === signature) {
+                    // Already handled by another device, just update local state and exit
+                    setTriggeredSignatures(prev => ({ ...prev, [taskId]: signature }));
+                    return;
+                }
 
-        // Show notifications
-        if (showNotification) {
-            // 1. App Toast
+                // If diff signature, update it and proceed (it's a new occurrence)
+                if (existing) {
+                    await supabase
+                        .from('reminder_signatures')
+                        .update({ signature })
+                        .eq('user_id', user.id)
+                        .eq('task_id', taskId);
+                }
+            }
+
+            // Proceed to add reminder
+            const newReminderId = (await import('uuid')).v4();
+
+            await supabase.from('reminders').insert([{
+                id: newReminderId,
+                user_id: user.id,
+                task_id: taskId,
+                task_title: task.title,
+                task_color: task.color,
+                triggered_at: new Date().toISOString(),
+                due_time: dueTime,
+                seen: false
+            }]);
+
+            // Ensure local state is updated
+            setTriggeredSignatures(prev => ({ ...prev, [taskId]: signature }));
+
+        } else {
+            // Local mode
+            const newReminder: Reminder = {
+                id: `${taskId}_${Date.now()}`,
+                task_id: taskId,
+                task_title: task.title,
+                task_color: task.color,
+                triggered_at: new Date().toISOString(),
+                due_time: dueTime,
+                seen: false,
+                snoozed_until: null,
+            };
+
+            setReminders(prev => [newReminder, ...prev]);
+            setTriggeredSignatures(prev => ({ ...prev, [taskId]: signature }));
+
+            if (showNotification) {
+                setToast({
+                    type: 'info',
+                    msg: `🔔 提醒: ${task.title}`,
+                    actionLabel: '查看',
+                    onClick: () => setIsReminderPanelOpen(true)
+                });
+
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('任務提醒', { body: task.title, icon: '/favicon.ico' })
+                        .onclick = () => { window.focus(); setIsReminderPanelOpen(true); };
+                }
+                setIsReminderPanelOpen(true);
+            }
+        }
+
+        // Show notification for synced mode (done separately to avoid duplicate alert if locked)
+        if (useSupabaseSyncRef.current && showNotification) {
             setToast({
                 type: 'info',
                 msg: `🔔 提醒: ${task.title}`,
@@ -129,197 +350,185 @@ export const ReminderProvider = ({ children }: { children: React.ReactNode }) =>
                 onClick: () => setIsReminderPanelOpen(true)
             });
 
-            // 2. Native System Notification
             if ('Notification' in window && Notification.permission === 'granted') {
-                try {
-                    const n = new Notification('任務提醒', {
-                        body: task.title,
-                        icon: '/favicon.ico', // Try to use favicon if available
-                        tag: taskId // Prevent duplicate notifications for same task
-                    });
-                    n.onclick = () => {
-                        window.focus();
-                        setIsReminderPanelOpen(true);
-                        n.close();
-                    };
-                } catch (e) {
-                    console.error('Failed to show system notification:', e);
-                }
+                new Notification('任務提醒', { body: task.title, icon: '/favicon.ico' })
+                    .onclick = () => { window.focus(); setIsReminderPanelOpen(true); };
             }
-
             setIsReminderPanelOpen(true);
         }
-    }, [tasks, setToast]);
+    }, [setToast, user?.id]); // Minimal deps
 
-    // Mark reminder as seen
-    const markAsSeen = useCallback((reminderId: string) => {
-        setReminders(prev =>
-            prev.map(r => r.id === reminderId ? { ...r, seen: true } : r)
-        );
+    const markAsSeen = useCallback(async (reminderId: string) => {
+        setReminders(prev => prev.map(r => r.id === reminderId ? { ...r, seen: true } : r));
+
+        if (useSupabaseSyncRef.current && supabase) {
+            await supabase.from('reminders').update({ seen: true }).eq('id', reminderId);
+        }
     }, []);
 
-    // Snooze reminder
-    const snoozeReminder = useCallback((reminderId: string, minutes: number) => {
+    const snoozeReminder = useCallback(async (reminderId: string, minutes: number) => {
         const snoozedUntil = new Date(Date.now() + minutes * 60 * 1000).toISOString();
-        setReminders(prev => {
-            const updated = prev.map(r => {
-                if (r.id === reminderId) {
-                    // Just update the snooze time, don't touch triggering logic
-                    // The snooze check loop will handle re-alerting
-                    return { ...r, snoozed_until: snoozedUntil, seen: true };
-                }
-                return r;
-            });
-            return updated;
-        });
-    }, []);
 
-    // Clear all seen reminders
-    const clearAllSeen = useCallback(() => {
+        setReminders(prev => prev.map(r =>
+            r.id === reminderId ? { ...r, snoozed_until: snoozedUntil, seen: true } : r
+        ));
+
+        setToast({ type: 'info', msg: `⏰ 將於 ${minutes} 分鐘後再次提醒` });
+
+        if (useSupabaseSyncRef.current && supabase) {
+            await supabase.from('reminders').update({
+                snoozed_until: snoozedUntil,
+                seen: true
+            }).eq('id', reminderId);
+        }
+    }, [setToast]);
+
+    const clearAllSeen = useCallback(async () => {
+        const currentReminders = remindersRef.current; // Use ref to avoid closure staleness
+        const seenIds = currentReminders.filter(r => r.seen).map(r => r.id);
+
         setReminders(prev => prev.filter(r => !r.seen));
+
+        if (useSupabaseSyncRef.current && supabase && seenIds.length > 0) {
+            // Send broadcast first for immediate effect on other clients
+            await supabase.channel('reminders-sync').send({
+                type: 'broadcast',
+                event: 'clear-action',
+                payload: { type: 'clearSeen' }
+            });
+            await supabase.from('reminders').delete().in('id', seenIds);
+        }
     }, []);
 
-    // Clear all unseen reminders
-    const clearAllUnseen = useCallback(() => {
+    const clearAllUnseen = useCallback(async () => {
+        const currentReminders = remindersRef.current;
+        const unseenIds = currentReminders.filter(r => !r.seen).map(r => r.id);
+
         setReminders(prev => prev.filter(r => r.seen));
+
+        if (useSupabaseSyncRef.current && supabase && unseenIds.length > 0) {
+            await supabase.channel('reminders-sync').send({
+                type: 'broadcast',
+                event: 'clear-action',
+                payload: { type: 'clearUnseen' }
+            });
+            await supabase.from('reminders').delete().in('id', unseenIds);
+        }
     }, []);
 
-    // Clear all reminders
-    const clearAll = useCallback(() => {
+    const clearAll = useCallback(async () => {
         setReminders([]);
-        // We do NOT clear signatures here, to prevents old completed/deleted tasks from re-triggering if they reappear
-        // But maybe user wants to reset? Let's keep signatures for safety.
-    }, []);
+        if (useSupabaseSyncRef.current && supabase && user?.id) {
+            await supabase.channel('reminders-sync').send({
+                type: 'broadcast',
+                event: 'clear-action',
+                payload: { type: 'clearAll' }
+            });
+            await supabase.from('reminders').delete().eq('user_id', user.id);
+            // Optional: Also clear signatures if we clear all reminders?
+            // Usually better to keep signatures to prevent re-triggering of past events.
+            // But if user explicitly clears all, maybe they want a reset?
+            // For now, let's keep signatures to be safe against re-triggering.
+        }
+    }, [user?.id]);
 
-    // Use refs to access latest state inside interval without resetting it
-    const tasksRef = useRef(tasks);
-    const triggeredSignaturesRef = useRef(triggeredSignatures);
-    const addReminderRef = useRef(addReminder);
-    const setToastRef = useRef(setToast);
-
-    // Update refs whenever dependencies change
-    useEffect(() => {
-        tasksRef.current = tasks;
-        triggeredSignaturesRef.current = triggeredSignatures;
-        addReminderRef.current = addReminder;
-        setToastRef.current = setToast;
-    }, [tasks, triggeredSignatures, addReminder, setToast]);
-
-    // Check for due reminders - stable function that uses refs
+    // 5. Periodic Check Logic
     const checkForDueReminders = useCallback(() => {
         if (!initialLoadDone.current) return;
 
+        const now = new Date();
         const currentTasks = tasksRef.current;
         const currentSignatures = triggeredSignaturesRef.current;
-        const now = new Date();
 
-        console.log(`[Reminder] Checking ${currentTasks.length} tasks...`);
-
-        currentTasks.forEach((task: TaskData) => {
-            if (task.status === 'completed' || task.status === 'deleted' || task.status === 'canceled') return;
+        // Check tasks
+        currentTasks.forEach(task => {
+            if (['completed', 'deleted', 'canceled'].includes(task.status)) return;
 
             const taskDate = task.start_date || task.due_date;
             if (!taskDate) return;
 
-            // Parse the task date/time
+            // Calculate due time
             let dueDateTime: Date;
             if (task.is_all_day || !task.start_time) {
                 dueDateTime = new Date(taskDate);
-                if (taskDate.includes('T')) {
-                    dueDateTime = new Date(taskDate);
-                } else {
-                    dueDateTime.setHours(0, 0, 0, 0);
-                }
+                if (!taskDate.includes('T')) dueDateTime.setHours(0, 0, 0, 0);
             } else {
-                const [hours, minutes] = (task.start_time || '00:00').split(':').map(Number);
+                const [h, m] = (task.start_time || '00:00').split(':').map(Number);
                 const datePart = taskDate.split('T')[0];
                 dueDateTime = new Date(datePart);
-                dueDateTime.setHours(hours, minutes, 0, 0);
-            }
-
-            // Get reminder_minutes from task or localStorage fallback
-            let reminderMinutes = task.reminder_minutes ?? null;
-            if (reminderMinutes === null) {
-                try {
-                    const saved = localStorage.getItem(`task_reminder_${task.id}`);
-                    if (saved !== null) {
-                        reminderMinutes = JSON.parse(saved);
-                    }
-                } catch (e) { /* ignore */ }
-            }
-
-            // Implicit reminder: If task has specific time (not all day), default to 0 min reminder if not set
-            if (reminderMinutes === null && !task.is_all_day && task.start_time) {
-                reminderMinutes = 0;
-            }
-
-            // Skip if no reminder is set
-            if (reminderMinutes === null) {
-                // console.log(`[Reminder] Skipping ${task.title} - No reminder set (Time: ${taskDate})`);
-                return;
+                dueDateTime.setHours(h, m, 0, 0);
             }
 
             // Calculate reminder time
-            const reminderTime = new Date(dueDateTime.getTime() - reminderMinutes * 60 * 1000);
-
-            // Create a unique signature for this specific reminder instance
-            // If user changes time or reminder settings, signature changes -> re-trigger
-            const signature = `${dueDateTime.getTime()}_${reminderMinutes}`;
-
-            // Check if already triggered with this signature
-            if (currentSignatures[task.id] === signature) {
-                // console.log(`[Reminder] Already triggered for ${task.title} (${signature})`);
-                return;
+            let minutes = task.reminder_minutes;
+            if (minutes === undefined) {
+                // Try legacy local override
+                try {
+                    const saved = localStorage.getItem(`task_reminder_${task.id}`);
+                    if (saved) minutes = JSON.parse(saved);
+                } catch { }
             }
+            if (minutes === undefined && !task.is_all_day && task.start_time) minutes = 0;
+            if (minutes === undefined || minutes === null) return;
 
-            // Check if it's time to remind
+            const reminderTime = new Date(dueDateTime.getTime() - minutes * 60 * 1000);
+            const signature = `${dueDateTime.getTime()}_${minutes}`;
+
+            // Check if already triggered
+            if (currentSignatures[task.id] === signature) return;
+
+            // Trigger if time matches
             if (now >= reminderTime) {
-                console.log(`[Reminder] Time condition met for ${task.title}. Now: ${now.toLocaleTimeString()}, ReminderTime: ${reminderTime.toLocaleTimeString()}`);
-                addReminderRef.current(task.id, signature, true);
-            } else {
-                // Optional: Log upcoming reminders near execution (e.g. within 1 min)
-                const diffMs = reminderTime.getTime() - now.getTime();
-                if (diffMs > 0 && diffMs < 60000) {
-                    console.log(`[Reminder] Upcoming checking: ${task.title} in ${Math.round(diffMs / 1000)}s`);
+                addReminder(task.id, signature, true);
+            }
+        });
+
+        // Check snoozed
+        remindersRef.current.forEach(async reminder => {
+            if (reminder.snoozed_until) {
+                const snoozeTime = new Date(reminder.snoozed_until);
+                if (now >= snoozeTime) {
+                    // Re-trigger snooze
+                    const task = currentTasks.find(t => t.id === reminder.task_id);
+                    if (task) {
+                        setToast({
+                            type: 'info',
+                            msg: `🔔 提醒: ${reminder.task_title}`,
+                            actionLabel: '查看',
+                            onClick: () => setIsReminderPanelOpen(true)
+                        });
+
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('延後提醒到期', { body: reminder.task_title })
+                                .onclick = () => { window.focus(); setIsReminderPanelOpen(true); };
+                        }
+                        setIsReminderPanelOpen(true);
+                    }
+
+                    // Clear snooze locally & remote
+                    setReminders(prev => prev.map(r =>
+                        r.id === reminder.id ? { ...r, snoozed_until: null, seen: false } : r
+                    ));
+
+                    if (useSupabaseSyncRef.current && supabase) {
+                        await supabase.from('reminders').update({
+                            snoozed_until: null,
+                            seen: false
+                        }).eq('id', reminder.id);
+                    }
                 }
             }
         });
 
-        // Check snoozed reminders (logic omitted for brevity as it also needs update but let's focus on main trigger first)
-        // Note: snooze update requires state update which might be tricky in ref pattern without force update
-        // user asks for main reminder, so this part is secondary for now.
-    }, []);
+    }, [addReminder, setToast]);
 
-    // Set up interval to check for reminders - run only once on mount
+    // Update Interval
     useEffect(() => {
-        console.log('[Reminder] Setting up check interval (PERMANENT)');
-
-        // Initial check
-        const initialTimeout = setTimeout(() => {
-            console.log('[Reminder] Performing initial check');
-            checkForDueReminders();
-        }, 1000);
-
-        // Set up interval
-        checkIntervalRef.current = setInterval(() => {
-            // console.log('[Reminder] Interval tick');
-            checkForDueReminders();
-        }, CHECK_INTERVAL_MS);
-
-        // Debug helper
-        (window as any).resetReminders = () => {
-            console.log('Resetting triggered signatures...');
-            setTriggeredSignatures({});
-            localStorage.removeItem(TRIGGERED_SIGNATURES_KEY);
-            alert('Reminders reset!');
-        };
-
+        const timeout = setTimeout(checkForDueReminders, 2000);
+        checkIntervalRef.current = setInterval(checkForDueReminders, CHECK_INTERVAL_MS);
         return () => {
-            console.log('[Reminder] Clearing interval (cleanup)');
-            clearTimeout(initialTimeout);
-            if (checkIntervalRef.current) {
-                clearInterval(checkIntervalRef.current);
-            }
+            clearTimeout(timeout);
+            if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
         };
     }, [checkForDueReminders]);
 
@@ -332,7 +541,7 @@ export const ReminderProvider = ({ children }: { children: React.ReactNode }) =>
             clearAllSeen,
             clearAllUnseen,
             clearAll,
-            unseenCount,
+            unseenCount: reminders.filter(r => !r.seen).length,
             isReminderPanelOpen,
             setIsReminderPanelOpen,
         }}>

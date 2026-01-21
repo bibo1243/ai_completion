@@ -6,6 +6,7 @@ import { ReminderProvider } from './context/ReminderContext';
 import { MainLayout } from './components/MainLayout';
 import { Login } from './components/Login';
 import { GlobalRecordingCapsule } from './components/GlobalRecordingCapsule';
+import { SharedHeartPage } from './components/SharedHeartPage';
 
 const AppRoutes = () => {
   const { user, loading } = useContext(AppContext);
@@ -25,6 +26,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/share/heart/:userId" element={<SharedHeartPage />} />
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
       <Route path="/*" element={isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />} />
     </Routes>

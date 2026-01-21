@@ -327,6 +327,7 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     const tagsRef = useRef(availableTags);
     const onCreateTagRef = useRef(onCreateTag);
     const isMentionOpenRef = useRef(false);
+    const onChangeRef = useRef(onChange);
 
     useEffect(() => {
         tagsRef.current = availableTags;
@@ -335,6 +336,10 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
     useEffect(() => {
         onCreateTagRef.current = onCreateTag;
     }, [onCreateTag]);
+
+    useEffect(() => {
+        onChangeRef.current = onChange;
+    }, [onChange]);
 
     // --- Attachment Link State ---
     const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
@@ -730,9 +735,17 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             attributes: {
                 // Things 3 aesthetic: borderless, transparent, matching parent typography
                 class: `prose prose-sm max-w-none focus:outline-none min-h-[100px] text-theme-secondary ${textSizeClass} ${descFontClass} leading-relaxed custom-scrollbar selection:bg-indigo-100`,
+                autocomplete: 'off',
+                autocorrect: 'off',
+                autocapitalize: 'off',
+                spellcheck: 'false',
             },
         },
         onUpdate: ({ editor }) => {
+            // Skip state updates during IME composition to prevent interrupting input
+            if ((window as any).__imeComposing) {
+                return;
+            }
             if (onChange) {
                 const html = editor.getHTML();
                 onChange(editor.isEmpty ? '' : html);
@@ -760,6 +773,9 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             }
         },
         onSelectionUpdate: ({ editor }) => {
+            // Skip during IME composition to prevent interrupting input
+            if ((window as any).__imeComposing) return;
+
             if (colorPickerTimeout.current) clearTimeout(colorPickerTimeout.current);
             const { from, to } = editor.state.selection;
             if (from !== to && editable) {
@@ -790,7 +806,8 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             // Skip if IME is composing (Chinese/Japanese input)
             if ((window as any).__imeComposing) return;
 
-            if (isRecording && recordingTimeRef.current >= 0 && transaction.docChanged) {
+            // Use ref to get the latest recording state
+            if (isRecordingRef.current && recordingTimeRef.current >= 0 && transaction.docChanged) {
                 const currentTime = recordingTimeRef.current;
                 const { selection } = editor.state;
 
@@ -833,6 +850,10 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
                 if (shouldApplyNewMark) {
                     const recId = currentRecordingIdRef.current;
                     editor.commands.setMark('timestamp', { time: currentTime, recordingId: recId });
+                } else if (existingTimestampMark) {
+                    // Even if we don't start a NEW timestamp group, we MUST ensure the current text
+                    // gets the EXISTING timestamp mark, because inclusive: false prevents auto-inheritance.
+                    editor.commands.setMark('timestamp', existingTimestampMark.attrs);
                 }
             }
         };
@@ -851,42 +872,70 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
             (window as any).__imeComposing = false;
 
             // After IME composition ends, apply timestamp mark to the composed text
-            if (isRecording && recordingTimeRef.current >= 0 && editor && compositionStartPos !== null) {
+            // Use ref to get the latest recording state
+            if (isRecordingRef.current && recordingTimeRef.current >= 0 && editor && compositionStartPos !== null) {
                 const currentTime = recordingTimeRef.current;
                 const recId = currentRecordingIdRef.current;
                 const startPos = compositionStartPos;
                 compositionStartPos = null; // Reset for next composition
 
-                // Short delay to ensure the composed text is fully inserted into the editor DOM
+                // Longer delay to ensure the composed text is fully inserted into the editor DOM
+                // Some IMEs need more time to complete the insertion
                 setTimeout(() => {
-                    if (editor && isRecordingRef.current) {
-                        const { selection } = editor.state;
-                        const endPos = selection.from; // Current cursor is at end of composed text
+                    if (!editor) return;
 
-                        // Only proceed if we have a valid range (text was actually inserted)
-                        if (endPos > startPos) {
-                            // Check if user is typing a mention
-                            const $from = selection.$from;
-                            const textBefore = $from.parent.textContent.substring(0, $from.parentOffset);
-                            const lastAtIndex = textBefore.lastIndexOf('@');
-                            if (lastAtIndex !== -1) {
-                                const textAfterAt = textBefore.substring(lastAtIndex + 1);
-                                if (!textAfterAt.includes(' ')) {
-                                    return; // Skip for mentions
+                    const { selection } = editor.state;
+                    const endPos = selection.from; // Current cursor is at end of composed text
+
+                    // Only proceed if we have a valid range (text was actually inserted)
+                    if (endPos > startPos) {
+                        // Check if user is typing a mention
+                        const $from = selection.$from;
+                        const textBefore = $from.parent.textContent.substring(0, $from.parentOffset);
+                        const lastAtIndex = textBefore.lastIndexOf('@');
+                        if (lastAtIndex !== -1) {
+                            const textAfterAt = textBefore.substring(lastAtIndex + 1);
+                            if (!textAfterAt.includes(' ')) {
+                                // Still trigger onChange for mentions
+                                if (onChangeRef.current) {
+                                    const html = editor.getHTML();
+                                    onChangeRef.current(editor.isEmpty ? '' : html);
                                 }
+                                return; // Skip timestamp for mentions
                             }
+                        }
 
-                            // Apply timestamp mark to the entire composed text range
+                        // Apply timestamp mark to the entire composed text range
+                        // Use the time captured at composition start for consistency
+                        try {
                             editor.chain()
                                 .setTextSelection({ from: startPos, to: endPos })
                                 .setMark('timestamp', { time: currentTime, recordingId: recId })
                                 .setTextSelection(endPos) // Restore cursor to end
                                 .run();
+                        } catch (e) {
+                            console.warn('Failed to apply timestamp mark:', e);
                         }
                     }
-                }, 10);
+
+                    // Trigger onChange to sync content after IME composition
+                    if (onChangeRef.current) {
+                        const html = editor.getHTML();
+                        onChangeRef.current(editor.isEmpty ? '' : html);
+                    }
+                }, 50); // Increased delay for more reliable DOM sync
             } else {
                 compositionStartPos = null; // Reset even if not recording
+
+                // Still trigger onChange for non-recording composition
+                if (editor && onChangeRef.current) {
+                    setTimeout(() => {
+                        if (editor && onChangeRef.current) {
+                            const html = editor.getHTML();
+                            onChangeRef.current(editor.isEmpty ? '' : html);
+                        }
+                    }, 50);
+                }
             }
         };
 

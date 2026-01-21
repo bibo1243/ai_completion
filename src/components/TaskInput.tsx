@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from 'react';
 import { createPortal } from 'react-dom';
-import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2, Repeat2, AlertCircle } from 'lucide-react';
+import { Tag, ChevronDown, ChevronUp, Layers, Circle, Image as ImageIcon, X, Loader2, Download, Sparkles, Check, Undo, Redo, Brain, ArrowRight, ArrowUp, Clock, Paperclip, Share, Edit3, Wand2, ChevronLeft, ChevronRight, Trash2, Mic, Volume2, Repeat2, AlertCircle, Palette } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import { AppContext } from '../context/AppContext';
 import { RecordingContext } from '../context/RecordingContext';
@@ -140,6 +140,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     });
     const [duration, setDuration] = useState<number | string>(initialData?.duration || '');
     const [repeatRule, setRepeatRule] = useState<RepeatRule | null>(initialData?.repeat_rule || null);
+    const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
 
     // Load reminder from localStorage since DB column may not exist yet
     const [reminderMinutes, setReminderMinutes] = useState<number | null>(() => {
@@ -168,6 +169,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     }, [reminderMinutes, initialData?.id]);
 
     const [showRepeatPicker, setShowRepeatPicker] = useState(false);
+    const [showColorPicker, setShowColorPicker] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -982,6 +984,12 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             }
         }
 
+        // Don't close if clicking on the main header (Undo, Redo, Tags, etc)
+        const target = event?.target as HTMLElement;
+        if (target && target.closest('[data-app-header="true"]')) {
+            return;
+        }
+
         if (initialData && onClose) {
             if (title.trim()) handleSubmit();
             else {
@@ -1103,8 +1111,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
             attachments: attachments,
             attachment_links: attachmentLinks,
             ai_history: aiHistory,
-            repeat_rule: repeatRule
-            // reminder_minutes: reminderMinutes  // TODO: Enable after running DB migration
+            repeat_rule: repeatRule,
+            reminder_minutes: reminderMinutes
         };
 
         if (onClose) {
@@ -1115,7 +1123,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         }
         else { resetForm(); }
 
-        if (initialData) { await updateTask(initialData.id, data, childIds); }
+        if (initialData && initialData.id && initialData.id !== 'new') { await updateTask(initialData.id, data, childIds); }
         else { const newId = await addTask(data, childIds); setFocusedTaskId(newId); setSelectedTaskIds([newId]); }
     };
 
@@ -1625,7 +1633,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
         }
     };
 
-    const toggleCompletion = () => { if (initialData) { updateTask(initialData.id, { completed_at: isDone ? null : new Date().toISOString() }); } };
+    const toggleCompletion = () => { if (initialData) { updateTask(initialData.id, { completed_at: isDone ? null : new Date().toISOString(), reminder_minutes: reminderMinutes }); } };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         // Prevent undo/redo from bubbling to task-level undo/redo
@@ -1697,11 +1705,14 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                     e.preventDefault();
                     setTitle(suggestions[suggestionIndex].title);
                     setShowSuggestions(false);
-                    return;
                 }
             }
             if (e.key === 'Escape') { e.preventDefault(); setShowSuggestions(false); return; }
         }
+
+        // Ignore Enter if IME is composing (e.g. Zhuyin/Pinyin selection)
+        if (e.nativeEvent.isComposing) return;
+
         // Cmd/Win + Enter to submit and exit (except in NoteEditor)
         if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !isInEditor) {
             e.preventDefault();
@@ -2123,7 +2134,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                     </div>
                 </div>
             )}
-            {initialData && (
+            {initialData && !isEmbedded && (
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -2187,19 +2198,31 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     </span>
                                 </div>
                             )}
-                            {/* Title input row with AI generate button */}
-                            <div className="flex items-center relative">
+                            <div className="flex items-center relative gap-2">
                                 <input
                                     ref={titleRef}
                                     autoFocus
                                     type="text"
                                     name="data_task_input"
-                                    autoComplete="new-password"
+                                    autoComplete="off"
                                     autoCorrect="off"
                                     spellCheck="false"
                                     value={title}
+                                    onKeyDown={(e) => {
+                                        // Debug log for mobile 'Enter' issues
+                                        if (e.key === 'Enter') {
+                                            console.log('[TaskInputDebug] Enter pressed', {
+                                                isComposing: e.nativeEvent.isComposing,
+                                                titleLen: title.length
+                                            });
+                                        }
+                                        handleKeyDown(e);
+                                    }}
+                                    onFocus={() => setShowTitleSuggestions(title.length > 0)}
+                                    onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
                                     onChange={e => {
                                         const val = e.target.value;
+                                        setShowTitleSuggestions(val.length > 0);
                                         // Check if user just typed '@ '
                                         if (val.endsWith('@ ') && !showDatePicker) {
                                             setShowDatePicker(true);
@@ -2223,6 +2246,55 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     placeholder="任務名稱..."
                                     className={`flex-1 ${textSizeClass} ${titleFontClass} transition-all duration-300 placeholder:font-light placeholder-gray-300 border-none bg-transparent focus:ring-0 outline-none p-0 leading-tight ${isDone ? 'opacity-30' : (showDatePicker ? 'text-slate-400' : 'text-slate-800')}`}
                                 />
+                                {/* Title Suggestions Dropdown */}
+                                {showTitleSuggestions && title.length > 0 && (() => {
+                                    const suggestions = tasks
+                                        .filter((t: any) =>
+                                            t.id !== initialData?.id &&
+                                            t.title &&
+                                            t.title.toLowerCase().includes(title.toLowerCase()) &&
+                                            t.title.toLowerCase() !== title.toLowerCase()
+                                        )
+                                        .map((t: any) => t.title)
+                                        .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i) // unique
+                                        .slice(0, 5);
+
+                                    if (suggestions.length === 0) return null;
+
+                                    return (
+                                        <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in slide-in-from-top-2 fade-in duration-200">
+                                            {suggestions.map((s: string, idx: number) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        setTitle(s);
+                                                        setShowTitleSuggestions(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700/50 last:border-b-0 transition-colors flex items-center gap-2 group"
+                                                >
+                                                    <span className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">↳</span>
+                                                    <span className="truncate">{s}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                                {title.trim() && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            console.log('[TaskInput] Manual Button Submit');
+                                            handleSubmit();
+                                        }}
+                                        className="p-1.5 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition-colors shadow-sm active:scale-95 flex-shrink-0 animate-in fade-in zoom-in duration-200"
+                                    >
+                                        <ArrowUp size={18} />
+                                    </button>
+                                )}
                             </div>
 
                             {/* Title Prompt Selection Modal */}
@@ -3311,6 +3383,24 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                 </div>
                                             )}
 
+                                            {/* Copy Description Option */}
+                                            {repeatRule && (
+                                                <div className="mb-3">
+                                                    <label className="flex items-center gap-2 cursor-pointer p-1.5 rounded hover:bg-gray-50">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={repeatRule.copyDescription !== false}
+                                                            onChange={(e) => setRepeatRule(prev => prev ? { ...prev, copyDescription: e.target.checked } : null)}
+                                                            className="w-3.5 h-3.5 text-purple-600 rounded border-gray-300 focus:ring-purple-500"
+                                                        />
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-medium text-gray-700">複製備註內容</span>
+                                                            <span className="text-[10px] text-gray-400">生成下次任務時保留備註</span>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            )}
+
                                             {/* End Date */}
                                             {repeatRule && (
                                                 <div className="mb-3">
@@ -3541,18 +3631,41 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                     />
                                 </div>
 
-                                {/* Color Picker (only for root tasks) */}
+                                {/* Color Picker (Dropdown) */}
                                 {!parentId && (
-                                    <div className="flex gap-0.5 p-1 bg-theme-hover rounded-lg border border-theme">
-                                        {(Object.keys(COLOR_THEMES) as TaskColor[]).map(c => (
-                                            <button
-                                                key={c}
-                                                tabIndex={-1}
-                                                type="button"
-                                                onClick={() => setColor(c)}
-                                                className={`w-3 h-3 rounded-full ${COLOR_THEMES[c].dot} ${color === c ? 'ring-2 ring-offset-1 ring-gray-400' : 'hover:scale-110 opacity-70 hover:opacity-100'} transition-all`}
-                                            />
-                                        ))}
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowColorPicker(!showColorPicker)}
+                                            className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-transparent hover:border-theme hover:bg-theme-hover transition-all group"
+                                            title="選擇顏色"
+                                        >
+                                            <div className={`w-3 h-3 rounded-full ${COLOR_THEMES[color]?.dot || 'bg-gray-400'} group-hover:scale-110 transition-transform`} />
+                                            <span className="text-xs text-theme-tertiary group-hover:text-theme-secondary">顏色</span>
+                                        </button>
+
+                                        {showColorPicker && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
+                                                <div className="absolute bottom-full left-0 mb-2 p-3 bg-white rounded-xl shadow-xl border border-gray-200 z-50 min-w-[200px] animate-in zoom-in-95 duration-100">
+                                                    <div className="text-xs font-semibold text-gray-500 mb-2 px-1 flex items-center gap-2">
+                                                        <Palette size={12} />
+                                                        選擇主題顏色
+                                                    </div>
+                                                    <div className="grid grid-cols-6 gap-2">
+                                                        {(Object.keys(COLOR_THEMES) as TaskColor[]).map(c => (
+                                                            <button
+                                                                key={c}
+                                                                type="button"
+                                                                onClick={() => { setColor(c); setShowColorPicker(false); }}
+                                                                className={`w-5 h-5 rounded-full ${COLOR_THEMES[c].dot} ${color === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : 'hover:scale-125 opacity-80 hover:opacity-100'} transition-all shadow-sm`}
+                                                                title={c}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 )}
 

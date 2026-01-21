@@ -1,4 +1,5 @@
 import { useState, useContext, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, BellOff, Check, Clock, X, ChevronDown, Trash2, Eye } from 'lucide-react';
 import { ReminderContext } from '../context/ReminderContext';
@@ -40,7 +41,45 @@ interface ReminderItemProps {
 const ReminderItem = ({ reminder, onSnooze, onMarkSeen, onSelect, onEdit }: ReminderItemProps) => {
     const [showSnoozeMenu, setShowSnoozeMenu] = useState(false);
     const [customMinutes, setCustomMinutes] = useState('');
+    const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+    const [countdown, setCountdown] = useState<string | null>(null);
     const clickTimeout = useRef<NodeJS.Timeout | null>(null);
+    const snoozeButtonRef = useRef<HTMLButtonElement>(null);
+
+    // Countdown timer for snoozed reminders
+    useEffect(() => {
+        if (!reminder.snoozed_until) {
+            setCountdown(null);
+            return;
+        }
+
+        const updateCountdown = () => {
+            const now = Date.now();
+            const target = new Date(reminder.snoozed_until!).getTime();
+            const diff = target - now;
+
+            if (diff <= 0) {
+                setCountdown(null);
+                return;
+            }
+
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+
+            if (hours > 0) {
+                setCountdown(`${hours}小時${minutes % 60}分後`);
+            } else if (minutes > 0) {
+                setCountdown(`${minutes}分${seconds % 60}秒後`);
+            } else {
+                setCountdown(`${seconds}秒後`);
+            }
+        };
+
+        updateCountdown();
+        const interval = setInterval(updateCountdown, 1000);
+        return () => clearInterval(interval);
+    }, [reminder.snoozed_until]);
 
     const handleClick = () => {
         if (clickTimeout.current) {
@@ -102,11 +141,17 @@ const ReminderItem = ({ reminder, onSnooze, onMarkSeen, onSelect, onEdit }: Remi
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-800 truncate">{reminder.task_title}</div>
-                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
                         <Clock size={10} />
                         <span>到期：{formatDueTime(reminder.due_time)}</span>
                         <span className="text-gray-300">•</span>
                         <span>{formatTime(reminder.triggered_at)}</span>
+                        {countdown && (
+                            <>
+                                <span className="text-gray-300">•</span>
+                                <span className="text-orange-500 font-medium">⏰ {countdown}</span>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -124,7 +169,17 @@ const ReminderItem = ({ reminder, onSnooze, onMarkSeen, onSelect, onEdit }: Remi
                     {/* Snooze dropdown */}
                     <div className="relative">
                         <button
-                            onClick={() => setShowSnoozeMenu(!showSnoozeMenu)}
+                            ref={snoozeButtonRef}
+                            onClick={() => {
+                                if (!showSnoozeMenu && snoozeButtonRef.current) {
+                                    const rect = snoozeButtonRef.current.getBoundingClientRect();
+                                    setMenuPosition({
+                                        top: rect.bottom + 4,
+                                        left: rect.right - 160 // 160 = menu width
+                                    });
+                                }
+                                setShowSnoozeMenu(!showSnoozeMenu);
+                            }}
                             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-orange-500 transition-colors flex items-center gap-0.5"
                             title="延後提醒"
                         >
@@ -132,8 +187,12 @@ const ReminderItem = ({ reminder, onSnooze, onMarkSeen, onSelect, onEdit }: Remi
                             <ChevronDown size={10} />
                         </button>
 
-                        {showSnoozeMenu && (
-                            <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                        {showSnoozeMenu && createPortal(
+                            <div
+                                className="fixed w-40 bg-white rounded-lg shadow-xl border border-gray-200 z-[10001] overflow-hidden"
+                                style={{ top: menuPosition.top, left: menuPosition.left }}
+                                data-snooze-menu="true"
+                            >
                                 {SNOOZE_OPTIONS.map(opt => (
                                     <button
                                         key={opt.minutes}
@@ -162,7 +221,8 @@ const ReminderItem = ({ reminder, onSnooze, onMarkSeen, onSelect, onEdit }: Remi
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </div>,
+                            document.body
                         )}
                     </div>
                 </div>
@@ -179,9 +239,17 @@ export const ReminderPanel = () => {
     // Close panel when clicking outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
-            if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-                setIsReminderPanelOpen(false);
+            const target = e.target as Node;
+            // Check if click is inside the panel
+            if (panelRef.current && panelRef.current.contains(target)) {
+                return;
             }
+            // Check if click is inside a snooze menu (rendered via portal)
+            const snoozeMenu = document.querySelector('[data-snooze-menu="true"]');
+            if (snoozeMenu && snoozeMenu.contains(target)) {
+                return;
+            }
+            setIsReminderPanelOpen(false);
         };
 
         if (isReminderPanelOpen) {
@@ -196,6 +264,14 @@ export const ReminderPanel = () => {
         setSelectedTaskIds([taskId]);
         navigateToTask(taskId, false, 'allview');
         setIsReminderPanelOpen(false);
+
+        // Scroll the task element into view after a short delay (for view transition)
+        setTimeout(() => {
+            const taskElement = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (taskElement) {
+                taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 300);
     };
 
     const handleEdit = (taskId: string) => {

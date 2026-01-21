@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Clock, Trash2, Tag, Calendar, Palette, ChevronDown, ChevronRight, Save, Check, ExternalLink } from 'lucide-react';
+import { Search, X, Clock, Trash2, Tag, Calendar, Palette, ChevronDown, ChevronRight, Save, Check, ExternalLink, Lock } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { SearchFilters, SearchHistory, TaskColor } from '../types';
 
@@ -58,7 +58,7 @@ interface SearchModalProps {
 }
 
 export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
-    const { tasks, tags, searchHistory, addSearchHistory, deleteSearchHistory, setEditingTaskId, editingTaskId, navigateToTask } = useContext(AppContext);
+    const { tasks, tags, searchHistory, addSearchHistory, deleteSearchHistory, setEditingTaskId, editingTaskId, navigateToTask, verifyTaskPassword, temporarilyUnlockTask, setToast } = useContext(AppContext);
     const [query, setQuery] = useState('');
     const [filters, setFilters] = useState<SearchFilters>({
         tags: [],
@@ -72,6 +72,12 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
     const [saveName, setSaveName] = useState('');
     const [showSaveInput, setShowSaveInput] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Lock verification state
+    const [lockDialogOpen, setLockDialogOpen] = useState(false);
+    const [lockPassword, setLockPassword] = useState('');
+    const [pendingLockedTaskId, setPendingLockedTaskId] = useState<string | null>(null);
+    const [pendingAction, setPendingAction] = useState<'edit' | 'navigate' | null>(null);
 
     useEffect(() => {
         if (isOpen && inputRef.current) {
@@ -218,432 +224,542 @@ export const SearchModal = ({ isOpen, onClose }: SearchModalProps) => {
 
     if (!isOpen) return null;
 
-    return createPortal(
-        <AnimatePresence>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-20"
-                onClick={onClose}
-                data-search-modal
-            >
+    return (<>
+        {createPortal(
+            <AnimatePresence>
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: -20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                    className="w-full max-w-2xl bg-theme-card rounded-2xl shadow-2xl overflow-hidden"
-                    onClick={e => e.stopPropagation()}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-20"
+                    onClick={onClose}
+                    data-search-modal
                 >
-                    {/* Search Header */}
-                    <div className="p-4 border-b border-theme">
-                        <div className="flex items-center gap-3 bg-theme-hover rounded-xl px-4 py-3">
-                            <Search size={20} className="text-theme-tertiary" />
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={query}
-                                onChange={e => setQuery(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
-                                placeholder="搜尋任務..."
-                                className="flex-1 bg-transparent outline-none text-theme-primary placeholder-theme-tertiary"
-                            />
-                            {query && (
-                                <button onClick={() => setQuery('')} className="text-theme-tertiary hover:text-theme-primary">
-                                    <X size={18} />
-                                </button>
-                            )}
-                        </div>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: -20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -20 }}
+                        transition={{ duration: 0.2 }}
+                        className="w-full max-w-2xl bg-theme-card rounded-2xl shadow-2xl overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Search Header */}
+                        <div className="p-4 border-b border-theme">
+                            <div className="flex items-center gap-3 bg-theme-hover rounded-xl px-4 py-3">
+                                <Search size={20} className="text-theme-tertiary" />
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={query}
+                                    onChange={e => setQuery(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+                                    placeholder="搜尋任務..."
+                                    className="flex-1 bg-transparent outline-none text-theme-primary placeholder-theme-tertiary"
+                                />
+                                {query && (
+                                    <button onClick={() => setQuery('')} className="text-theme-tertiary hover:text-theme-primary">
+                                        <X size={18} />
+                                    </button>
+                                )}
+                            </div>
 
-                        {/* Filter Toggle */}
-                        <div className="flex items-center gap-2 mt-3">
-                            <button
-                                onClick={() => setShowFilters(!showFilters)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-100 text-indigo-700' : 'bg-theme-hover text-theme-secondary hover:bg-theme-hover/80'
-                                    }`}
-                            >
-                                {showFilters ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                篩選
-                                {hasActiveFilters && (
-                                    <span className="ml-1 w-5 h-5 bg-indigo-500 text-white rounded-full flex items-center justify-center text-[10px]">
-                                        {filters.tags.length + (filters.startDate || filters.endDate ? 1 : 0) + filters.colors.length}
-                                    </span>
-                                )}
-                            </button>
-                            {/* History Button */}
-                            <button
-                                onClick={() => { setQuery(''); setFilters({ tags: [], startDate: null, endDate: null, colors: [] }); }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-theme-hover text-theme-secondary hover:bg-theme-hover/80 transition-colors"
-                            >
-                                <Clock size={14} />
-                                歷史
-                                {searchHistory.length > 0 && (
-                                    <span className="ml-1 w-5 h-5 bg-gray-500 text-white rounded-full flex items-center justify-center text-[10px]">
-                                        {searchHistory.length}
-                                    </span>
-                                )}
-                            </button>
-                            {hasActiveFilters && (
+                            {/* Filter Toggle */}
+                            <div className="flex items-center gap-2 mt-3">
                                 <button
-                                    onClick={clearFilters}
-                                    className="text-xs text-theme-tertiary hover:text-theme-primary"
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${showFilters || hasActiveFilters ? 'bg-indigo-100 text-indigo-700' : 'bg-theme-hover text-theme-secondary hover:bg-theme-hover/80'
+                                        }`}
                                 >
-                                    清除篩選
+                                    {showFilters ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                    篩選
+                                    {hasActiveFilters && (
+                                        <span className="ml-1 w-5 h-5 bg-indigo-500 text-white rounded-full flex items-center justify-center text-[10px]">
+                                            {filters.tags.length + (filters.startDate || filters.endDate ? 1 : 0) + filters.colors.length}
+                                        </span>
+                                    )}
                                 </button>
-                            )}
+                                {/* History Button */}
+                                <button
+                                    onClick={() => { setQuery(''); setFilters({ tags: [], startDate: null, endDate: null, colors: [] }); }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-theme-hover text-theme-secondary hover:bg-theme-hover/80 transition-colors"
+                                >
+                                    <Clock size={14} />
+                                    歷史
+                                    {searchHistory.length > 0 && (
+                                        <span className="ml-1 w-5 h-5 bg-gray-500 text-white rounded-full flex items-center justify-center text-[10px]">
+                                            {searchHistory.length}
+                                        </span>
+                                    )}
+                                </button>
+                                {hasActiveFilters && (
+                                    <button
+                                        onClick={clearFilters}
+                                        className="text-xs text-theme-tertiary hover:text-theme-primary"
+                                    >
+                                        清除篩選
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Filters Panel */}
+                            <AnimatePresence>
+                                {showFilters && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="mt-3 space-y-4 overflow-hidden"
+                                    >
+                                        {/* Tags */}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
+                                                    <Tag size={12} />
+                                                    標籤
+                                                    {filters.tags.length > 0 && (
+                                                        <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-[10px]">
+                                                            {filters.tags.length}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {/* AND/OR Toggle */}
+                                                {filters.tags.length > 1 && (
+                                                    <div className="flex items-center bg-theme-hover rounded-lg p-0.5">
+                                                        <button
+                                                            onClick={() => setTagMode('or')}
+                                                            className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'or' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
+                                                                }`}
+                                                        >
+                                                            或 OR
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setTagMode('and')}
+                                                            className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'and' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
+                                                                }`}
+                                                        >
+                                                            且 AND
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Tag Search */}
+                                            <div className="relative mb-2">
+                                                <input
+                                                    type="text"
+                                                    value={tagSearch}
+                                                    onChange={e => setTagSearch(e.target.value)}
+                                                    placeholder="搜尋標籤..."
+                                                    className="w-full px-3 py-1.5 bg-theme-hover rounded-lg text-xs border-0 focus:ring-2 focus:ring-indigo-500 pl-8 text-theme-primary"
+                                                />
+                                                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-theme-tertiary" />
+                                            </div>
+
+                                            {/* Selected Tags */}
+                                            {filters.tags.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-indigo-50 rounded-lg">
+                                                    {filters.tags.map(tagId => {
+                                                        const tag = tags.find(t => t.id === tagId);
+                                                        return tag ? (
+                                                            <button
+                                                                key={tag.id}
+                                                                onClick={() => toggleTag(tag.id)}
+                                                                className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500 text-white rounded-full text-xs font-medium hover:bg-indigo-600 transition-colors"
+                                                            >
+                                                                <span>{tag.name}</span>
+                                                                <X size={10} />
+                                                            </button>
+                                                        ) : null;
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {/* Available Tags Grid */}
+                                            <div className="max-h-32 overflow-y-auto">
+                                                <div className="grid grid-cols-3 gap-1">
+                                                    {tags
+                                                        .filter(tag => !filters.tags.includes(tag.id))
+                                                        .filter(tag => !tagSearch || tag.name.toLowerCase().includes(tagSearch.toLowerCase()))
+                                                        .map(tag => (
+                                                            <button
+                                                                key={tag.id}
+                                                                onClick={() => toggleTag(tag.id)}
+                                                                className="flex items-center gap-1.5 px-2 py-1.5 bg-theme-hover hover:bg-theme-hover/80 rounded-lg text-xs text-theme-secondary transition-colors text-left"
+                                                            >
+                                                                <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
+                                                                <span className="truncate">{tag.name}</span>
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                                {tags.filter(tag => !filters.tags.includes(tag.id)).filter(tag => !tagSearch || tag.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                                                    <div className="text-center text-xs text-theme-tertiary py-2">
+                                                        找不到符合的標籤
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Date Range */}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
+                                                    <Calendar size={12} />
+                                                    日期區間
+                                                    {(filters.startDate || filters.endDate) && (
+                                                        <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-[10px]">
+                                                            已設定
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {(filters.startDate || filters.endDate) && (
+                                                    <button
+                                                        onClick={() => setFilters(prev => ({ ...prev, startDate: null, endDate: null }))}
+                                                        className="text-[10px] text-red-500 hover:text-red-600 flex items-center gap-1 z-10"
+                                                    >
+                                                        <X size={10} />
+                                                        清除日期
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="date"
+                                                    value={filters.startDate || ''}
+                                                    onChange={e => setFilters(prev => ({ ...prev, startDate: e.target.value || null }))}
+                                                    className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
+                                                />
+                                                <span className="text-theme-tertiary">至</span>
+                                                <input
+                                                    type="date"
+                                                    value={filters.endDate || ''}
+                                                    onChange={e => setFilters(prev => ({ ...prev, endDate: e.target.value || null }))}
+                                                    className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
+                                                />
+                                                {(filters.startDate || filters.endDate) && (
+                                                    <button
+                                                        onClick={() => setFilters(prev => ({ ...prev, startDate: null, endDate: null }))}
+                                                        className="p-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors"
+                                                        title="清除日期"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Colors */}
+                                        <div>
+                                            <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-2">
+                                                <Palette size={12} />
+                                                顏色
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {COLORS.map(color => (
+                                                    <button
+                                                        key={color}
+                                                        onClick={() => toggleColor(color)}
+                                                        className={`w-6 h-6 rounded-full ${COLOR_CLASSES[color]} transition-transform ${filters.colors.includes(color) ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110' : 'hover:scale-110'
+                                                            }`}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
 
-                        {/* Filters Panel */}
-                        <AnimatePresence>
-                            {showFilters && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="mt-3 space-y-4 overflow-hidden"
-                                >
-                                    {/* Tags */}
-                                    <div>
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
-                                                <Tag size={12} />
-                                                標籤
-                                                {filters.tags.length > 0 && (
-                                                    <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-[10px]">
-                                                        {filters.tags.length}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {/* AND/OR Toggle */}
-                                            {filters.tags.length > 1 && (
-                                                <div className="flex items-center bg-theme-hover rounded-lg p-0.5">
-                                                    <button
-                                                        onClick={() => setTagMode('or')}
-                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'or' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
-                                                            }`}
-                                                    >
-                                                        或 OR
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setTagMode('and')}
-                                                        className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-all ${tagMode === 'and' ? 'bg-theme-card text-indigo-600 shadow-sm' : 'text-theme-tertiary'
-                                                            }`}
-                                                    >
-                                                        且 AND
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Tag Search */}
-                                        <div className="relative mb-2">
-                                            <input
-                                                type="text"
-                                                value={tagSearch}
-                                                onChange={e => setTagSearch(e.target.value)}
-                                                placeholder="搜尋標籤..."
-                                                className="w-full px-3 py-1.5 bg-theme-hover rounded-lg text-xs border-0 focus:ring-2 focus:ring-indigo-500 pl-8 text-theme-primary"
-                                            />
-                                            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-theme-tertiary" />
-                                        </div>
-
-                                        {/* Selected Tags */}
-                                        {filters.tags.length > 0 && (
-                                            <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-indigo-50 rounded-lg">
-                                                {filters.tags.map(tagId => {
-                                                    const tag = tags.find(t => t.id === tagId);
-                                                    return tag ? (
-                                                        <button
-                                                            key={tag.id}
-                                                            onClick={() => toggleTag(tag.id)}
-                                                            className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500 text-white rounded-full text-xs font-medium hover:bg-indigo-600 transition-colors"
-                                                        >
-                                                            <span>{tag.name}</span>
-                                                            <X size={10} />
-                                                        </button>
-                                                    ) : null;
-                                                })}
-                                            </div>
-                                        )}
-
-                                        {/* Available Tags Grid */}
-                                        <div className="max-h-32 overflow-y-auto">
-                                            <div className="grid grid-cols-3 gap-1">
-                                                {tags
-                                                    .filter(tag => !filters.tags.includes(tag.id))
-                                                    .filter(tag => !tagSearch || tag.name.toLowerCase().includes(tagSearch.toLowerCase()))
-                                                    .map(tag => (
-                                                        <button
-                                                            key={tag.id}
-                                                            onClick={() => toggleTag(tag.id)}
-                                                            className="flex items-center gap-1.5 px-2 py-1.5 bg-theme-hover hover:bg-theme-hover/80 rounded-lg text-xs text-theme-secondary transition-colors text-left"
-                                                        >
-                                                            <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
-                                                            <span className="truncate">{tag.name}</span>
-                                                        </button>
-                                                    ))}
-                                            </div>
-                                            {tags.filter(tag => !filters.tags.includes(tag.id)).filter(tag => !tagSearch || tag.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
-                                                <div className="text-center text-xs text-theme-tertiary py-2">
-                                                    找不到符合的標籤
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Date Range */}
-                                    <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary">
-                                                <Calendar size={12} />
-                                                日期區間
-                                                {(filters.startDate || filters.endDate) && (
-                                                    <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-[10px]">
-                                                        已設定
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {(filters.startDate || filters.endDate) && (
+                        {/* Results / History */}
+                        <div className="max-h-[60vh] overflow-y-auto">
+                            {searchResults.length > 0 ? (
+                                <div className="p-4">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-medium text-theme-secondary">
+                                            找到 {searchResults.length} 個結果
+                                        </span>
+                                        {!showSaveInput ? (
+                                            <button
+                                                onClick={() => setShowSaveInput(true)}
+                                                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
+                                            >
+                                                <Save size={12} />
+                                                儲存搜尋
+                                            </button>
+                                        ) : (
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={saveName}
+                                                    onChange={e => setSaveName(e.target.value)}
+                                                    placeholder="輸入名稱..."
+                                                    className="px-2 py-1 text-xs border rounded-lg w-32 bg-theme-hover text-theme-primary border-theme"
+                                                    autoFocus
+                                                />
                                                 <button
-                                                    onClick={() => setFilters(prev => ({ ...prev, startDate: null, endDate: null }))}
-                                                    className="text-[10px] text-red-500 hover:text-red-600 flex items-center gap-1 z-10"
+                                                    onClick={handleSaveSearch}
+                                                    className="p-1 text-green-600 hover:text-green-700"
                                                 >
-                                                    <X size={10} />
-                                                    清除日期
+                                                    <Check size={14} />
                                                 </button>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="date"
-                                                value={filters.startDate || ''}
-                                                onChange={e => setFilters(prev => ({ ...prev, startDate: e.target.value || null }))}
-                                                className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
-                                            />
-                                            <span className="text-theme-tertiary">至</span>
-                                            <input
-                                                type="date"
-                                                value={filters.endDate || ''}
-                                                onChange={e => setFilters(prev => ({ ...prev, endDate: e.target.value || null }))}
-                                                className="px-3 py-1.5 rounded-lg bg-theme-hover text-xs border-0 focus:ring-2 focus:ring-indigo-500 text-theme-primary"
-                                            />
-                                            {(filters.startDate || filters.endDate) && (
                                                 <button
-                                                    onClick={() => setFilters(prev => ({ ...prev, startDate: null, endDate: null }))}
-                                                    className="p-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors"
-                                                    title="清除日期"
+                                                    onClick={() => { setShowSaveInput(false); setSaveName(''); }}
+                                                    className="p-1 text-theme-tertiary hover:text-theme-primary"
                                                 >
                                                     <X size={14} />
                                                 </button>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
+                                    <div className="space-y-1">
+                                        {searchResults.map(task => {
+                                            const dateStr = task.start_date || task.due_date;
+                                            const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('zh-TW', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+                                            const isEditing = editingTaskId === task.id;
+                                            const isLocked = !!task.is_locked;
+                                            const isInheritedLock = isLocked && !task.lock_password;
 
-                                    {/* Colors */}
-                                    <div>
-                                        <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-2">
-                                            <Palette size={12} />
-                                            顏色
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {COLORS.map(color => (
-                                                <button
-                                                    key={color}
-                                                    onClick={() => toggleColor(color)}
-                                                    className={`w-6 h-6 rounded-full ${COLOR_CLASSES[color]} transition-transform ${filters.colors.includes(color) ? 'ring-2 ring-offset-2 ring-indigo-500 scale-110' : 'hover:scale-110'
-                                                        }`}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
+                                            const handleEditClick = (e: React.MouseEvent) => {
+                                                e.stopPropagation();
+                                                if (isLocked) {
+                                                    // Show password dialog
+                                                    setPendingLockedTaskId(task.id);
+                                                    setPendingAction('edit');
+                                                    setLockPassword('');
+                                                    setLockDialogOpen(true);
+                                                } else {
+                                                    setEditingTaskId(task.id);
+                                                }
+                                            };
 
-                    {/* Results / History */}
-                    <div className="max-h-[60vh] overflow-y-auto">
-                        {searchResults.length > 0 ? (
-                            <div className="p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-medium text-theme-secondary">
-                                        找到 {searchResults.length} 個結果
-                                    </span>
-                                    {!showSaveInput ? (
-                                        <button
-                                            onClick={() => setShowSaveInput(true)}
-                                            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700"
-                                        >
-                                            <Save size={12} />
-                                            儲存搜尋
-                                        </button>
-                                    ) : (
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                type="text"
-                                                value={saveName}
-                                                onChange={e => setSaveName(e.target.value)}
-                                                placeholder="輸入名稱..."
-                                                className="px-2 py-1 text-xs border rounded-lg w-32 bg-theme-hover text-theme-primary border-theme"
-                                                autoFocus
-                                            />
-                                            <button
-                                                onClick={handleSaveSearch}
-                                                className="p-1 text-green-600 hover:text-green-700"
-                                            >
-                                                <Check size={14} />
-                                            </button>
-                                            <button
-                                                onClick={() => { setShowSaveInput(false); setSaveName(''); }}
-                                                className="p-1 text-theme-tertiary hover:text-theme-primary"
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="space-y-1">
-                                    {searchResults.map(task => {
-                                        const dateStr = task.start_date || task.due_date;
-                                        const formattedDate = dateStr ? new Date(dateStr).toLocaleDateString('zh-TW', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
-                                        const isEditing = editingTaskId === task.id;
+                                            const goToTask = (e?: React.MouseEvent) => {
+                                                e?.stopPropagation();
+                                                if (isLocked) {
+                                                    // Show password dialog
+                                                    setPendingLockedTaskId(task.id);
+                                                    setPendingAction('navigate');
+                                                    setLockPassword('');
+                                                    setLockDialogOpen(true);
+                                                } else {
+                                                    setEditingTaskId(null);
+                                                    navigateToTask(task.id, true);
+                                                    onClose();
+                                                }
+                                            };
 
-                                        const goToTask = () => {
-                                            setEditingTaskId(null);
-                                            // navigateToTask now automatically determines the correct view
-                                            navigateToTask(task.id, true);
-                                            onClose();
-                                        };
-
-                                        return (
-                                            <div key={task.id} className="rounded-xl hover:bg-theme-hover transition-colors border border-transparent hover:border-theme">
-                                                {isEditing ? (
-                                                    <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
-                                                        <TaskInput
-                                                            initialData={task}
-                                                            onClose={() => setEditingTaskId(null)}
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className="p-3">
-                                                        <div className="flex items-start gap-3">
-                                                            <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${COLOR_CLASSES[task.color]}`} />
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="font-medium text-theme-primary">
-                                                                    <HighlightText text={task.title} query={query} />
+                                            return (
+                                                <div key={task.id} className="rounded-xl hover:bg-theme-hover transition-colors border border-transparent hover:border-theme">
+                                                    {isEditing ? (
+                                                        <div onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                                                            <TaskInput
+                                                                initialData={task}
+                                                                onClose={() => setEditingTaskId(null)}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="p-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${COLOR_CLASSES[task.color]}`} />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className={`font-medium text-theme-primary flex items-center gap-1.5 ${isInheritedLock ? 'blur-[4px] select-none' : ''}`}>
+                                                                        {isLocked && <Lock size={12} className="text-amber-500 flex-shrink-0" />}
+                                                                        <HighlightText text={task.title} query={query} />
+                                                                    </div>
+                                                                    {task.description && !isInheritedLock && (
+                                                                        <div className="text-sm text-theme-secondary mt-1 max-h-20 overflow-y-auto">
+                                                                            <HighlightText
+                                                                                text={task.description.replace(/<[^>]*>/g, '')}
+                                                                                query={query}
+                                                                            />
+                                                                        </div>
+                                                                    )}
+                                                                    {task.tags.length > 0 && !isInheritedLock && (
+                                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                                            {task.tags.map(tagId => {
+                                                                                const tag = tags.find(t => t.id === tagId);
+                                                                                return tag ? (
+                                                                                    <span key={tagId} className="px-2 py-0.5 bg-theme-hover text-theme-secondary rounded-full text-[10px]">
+                                                                                        {tag.name}
+                                                                                    </span>
+                                                                                ) : null;
+                                                                            })}
+                                                                        </div>
+                                                                    )}
                                                                 </div>
-                                                                {task.description && (
-                                                                    <div className="text-sm text-theme-secondary mt-1 max-h-20 overflow-y-auto">
-                                                                        {/* Strip HTML tags for clean display */}
-                                                                        <HighlightText
-                                                                            text={task.description.replace(/<[^>]*>/g, '')}
-                                                                            query={query}
-                                                                        />
+                                                                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                                                    {formattedDate && (
+                                                                        <span className="text-xs text-theme-tertiary">
+                                                                            {formattedDate}
+                                                                        </span>
+                                                                    )}
+                                                                    <div className="flex items-center gap-1">
+                                                                        <button
+                                                                            onClick={handleEditClick}
+                                                                            className="p-1 text-theme-tertiary hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                                            title={isLocked ? "需要密碼才能編輯" : "編輯"}
+                                                                        >
+                                                                            <Check size={14} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={goToTask}
+                                                                            className="p-1 text-theme-tertiary hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                                            title={isLocked ? "需要密碼才能前往" : "前往任務"}
+                                                                        >
+                                                                            <ExternalLink size={14} />
+                                                                        </button>
                                                                     </div>
-                                                                )}
-                                                                {task.tags.length > 0 && (
-                                                                    <div className="flex flex-wrap gap-1 mt-2">
-                                                                        {task.tags.map(tagId => {
-                                                                            const tag = tags.find(t => t.id === tagId);
-                                                                            return tag ? (
-                                                                                <span key={tagId} className="px-2 py-0.5 bg-theme-hover text-theme-secondary rounded-full text-[10px]">
-                                                                                    {tag.name}
-                                                                                </span>
-                                                                            ) : null;
-                                                                        })}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                                                                {formattedDate && (
-                                                                    <span className="text-xs text-theme-tertiary">
-                                                                        {formattedDate}
-                                                                    </span>
-                                                                )}
-                                                                <div className="flex items-center gap-1">
-                                                                    <button
-                                                                        onClick={(e) => { e.stopPropagation(); setEditingTaskId(task.id); }}
-                                                                        className="p-1 text-theme-tertiary hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                                                                        title="編輯"
-                                                                    >
-                                                                        <Check size={14} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={(e) => { e.stopPropagation(); goToTask(); }}
-                                                                        className="p-1 text-theme-tertiary hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                                                        title="前往任務"
-                                                                    >
-                                                                        <ExternalLink size={14} />
-                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ) : query || hasActiveFilters ? (
+                                <div className="p-8 text-center text-theme-tertiary">
+                                    <Search size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p>沒有找到符合的任務</p>
+                                </div>
+                            ) : searchHistory.length > 0 ? (
+                                <div className="p-4">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-3">
+                                        <Clock size={12} />
+                                        搜尋歷史
+                                    </div>
+                                    <div className="space-y-1">
+                                        {searchHistory.map(item => (
+                                            <div
+                                                key={item.id}
+                                                className="flex items-center justify-between p-2 rounded-lg hover:bg-theme-hover group"
+                                            >
+                                                <button
+                                                    onClick={() => loadHistoryItem(item)}
+                                                    className="flex-1 text-left"
+                                                >
+                                                    <div className="font-medium text-theme-primary text-sm">
+                                                        {item.name || item.query || '(無關鍵字)'}
                                                     </div>
-                                                )}
+                                                    <div className="text-xs text-theme-tertiary mt-0.5">
+                                                        {new Date(item.created_at).toLocaleDateString()}
+                                                        {item.filters.tags.length > 0 && ` · ${item.filters.tags.length} 個標籤`}
+                                                        {item.filters.colors.length > 0 && ` · ${item.filters.colors.length} 個顏色`}
+                                                    </div>
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteSearchHistory(item.id)}
+                                                    className="p-1 text-theme-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
                                             </div>
-                                        );
-                                    })}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ) : query || hasActiveFilters ? (
-                            <div className="p-8 text-center text-theme-tertiary">
-                                <Search size={32} className="mx-auto mb-2 opacity-50" />
-                                <p>沒有找到符合的任務</p>
-                            </div>
-                        ) : searchHistory.length > 0 ? (
-                            <div className="p-4">
-                                <div className="flex items-center gap-2 text-xs font-medium text-theme-secondary mb-3">
-                                    <Clock size={12} />
-                                    搜尋歷史
+                            ) : (
+                                <div className="p-8 text-center text-theme-tertiary">
+                                    <Search size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p>輸入關鍵字開始搜尋</p>
                                 </div>
-                                <div className="space-y-1">
-                                    {searchHistory.map(item => (
-                                        <div
-                                            key={item.id}
-                                            className="flex items-center justify-between p-2 rounded-lg hover:bg-theme-hover group"
-                                        >
-                                            <button
-                                                onClick={() => loadHistoryItem(item)}
-                                                className="flex-1 text-left"
-                                            >
-                                                <div className="font-medium text-theme-primary text-sm">
-                                                    {item.name || item.query || '(無關鍵字)'}
-                                                </div>
-                                                <div className="text-xs text-theme-tertiary mt-0.5">
-                                                    {new Date(item.created_at).toLocaleDateString()}
-                                                    {item.filters.tags.length > 0 && ` · ${item.filters.tags.length} 個標籤`}
-                                                    {item.filters.colors.length > 0 && ` · ${item.filters.colors.length} 個顏色`}
-                                                </div>
-                                            </button>
-                                            <button
-                                                onClick={() => deleteSearchHistory(item.id)}
-                                                className="p-1 text-theme-tertiary hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-8 text-center text-theme-tertiary">
-                                <Search size={32} className="mx-auto mb-2 opacity-50" />
-                                <p>輸入關鍵字開始搜尋</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="p-3 border-t border-theme bg-theme-hover flex justify-between items-center text-xs text-theme-tertiary">
-                        <div className="flex items-center gap-4">
-                            <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Enter</kbd> 搜尋</span>
-                            <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Esc</kbd> 關閉</span>
+                            )}
                         </div>
-                    </div>
+
+                        {/* Footer */}
+                        <div className="p-3 border-t border-theme bg-theme-hover flex justify-between items-center text-xs text-theme-tertiary">
+                            <div className="flex items-center gap-4">
+                                <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Enter</kbd> 搜尋</span>
+                                <span><kbd className="px-1.5 py-0.5 bg-theme-card border border-theme rounded text-theme-primary">Esc</kbd> 關閉</span>
+                            </div>
+                        </div>
+                    </motion.div>
                 </motion.div>
-            </motion.div>
-        </AnimatePresence>,
-        document.body
-    );
+            </AnimatePresence>,
+            document.body
+        )}
+        {/* Password verification dialog */}
+        {lockDialogOpen && createPortal(
+            <div
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]"
+                onClick={() => { setLockDialogOpen(false); setPendingLockedTaskId(null); setPendingAction(null); }}
+            >
+                <div
+                    className="bg-white rounded-xl shadow-2xl p-6 w-80 max-w-[90vw]"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center gap-2 mb-4">
+                        <Lock size={20} className="text-amber-500" />
+                        <h3 className="text-lg font-bold">驗證密碼</h3>
+                    </div>
+                    <p className="text-sm text-gray-500 mb-4">
+                        請輸入密碼以{pendingAction === 'edit' ? '編輯' : '查看'}此任務。
+                    </p>
+                    <input
+                        type="password"
+                        placeholder="請輸入密碼"
+                        value={lockPassword}
+                        onChange={(e) => setLockPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && pendingLockedTaskId) {
+                                if (verifyTaskPassword(pendingLockedTaskId, lockPassword)) {
+                                    temporarilyUnlockTask(pendingLockedTaskId);
+                                    if (pendingAction === 'edit') {
+                                        setEditingTaskId(pendingLockedTaskId);
+                                    } else {
+                                        setEditingTaskId(null);
+                                        navigateToTask(pendingLockedTaskId, true);
+                                        onClose();
+                                    }
+                                    setLockDialogOpen(false);
+                                    setPendingLockedTaskId(null);
+                                    setPendingAction(null);
+                                } else {
+                                    setToast({ msg: '密碼錯誤', type: 'error' });
+                                }
+                            }
+                            if (e.key === 'Escape') {
+                                setLockDialogOpen(false);
+                                setPendingLockedTaskId(null);
+                                setPendingAction(null);
+                            }
+                        }}
+                        autoFocus
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => { setLockDialogOpen(false); setPendingLockedTaskId(null); setPendingAction(null); }}
+                            className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                            取消
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (pendingLockedTaskId) {
+                                    if (verifyTaskPassword(pendingLockedTaskId, lockPassword)) {
+                                        temporarilyUnlockTask(pendingLockedTaskId);
+                                        if (pendingAction === 'edit') {
+                                            setEditingTaskId(pendingLockedTaskId);
+                                        } else {
+                                            setEditingTaskId(null);
+                                            navigateToTask(pendingLockedTaskId, true);
+                                            onClose();
+                                        }
+                                        setLockDialogOpen(false);
+                                        setPendingLockedTaskId(null);
+                                        setPendingAction(null);
+                                    } else {
+                                        setToast({ msg: '密碼錯誤', type: 'error' });
+                                    }
+                                }
+                            }}
+                            className="flex-1 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                        >
+                            確認
+                        </button>
+                    </div>
+                </div>
+            </div>,
+            document.body
+        )}
+    </>);
 };

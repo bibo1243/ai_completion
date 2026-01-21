@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus } from 'lucide-react';
+import { CornerUpLeft, Archive, Undo, Redo, Cloud, CloudLightning, AlertCircle, Menu, User, LogOut, Plus, Heart } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { Sidebar } from './Sidebar';
 import { TaskList } from './TaskList';
@@ -17,6 +17,8 @@ import { WorkLogView } from './WorkLogView';
 import { DragGhost } from './DragGhost';
 import { MoveTaskModal } from './MoveTaskModal';
 import { ReminderPanel } from './ReminderPanel';
+import { GTDCoachModal } from './GTDCoachModal';
+import { HeartScheduleView } from './HeartScheduleView';
 // import GTDGuide from './GTDGuide'; // Temporarily disabled
 
 export const MainLayout = () => {
@@ -25,7 +27,9 @@ export const MainLayout = () => {
   const [isResizing, setIsResizing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showMission72, setShowMission72] = useState(false);
+  const [showGTDCoach, setShowGTDCoach] = useState(false);
   const [showMoveTaskModal, setShowMoveTaskModal] = useState(false);
+  const [showHeartSchedule, setShowHeartSchedule] = useState(false);
   // const [showGTDGuide, setShowGTDGuide] = useState(false); // Temporarily disabled
 
   // Detect mobile
@@ -44,10 +48,6 @@ export const MainLayout = () => {
   });
   const [isDraggingFab, setIsDraggingFab] = useState(false);
   const fabDragOffset = useRef({ x: 0, y: 0 });
-
-
-
-
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -170,27 +170,44 @@ export const MainLayout = () => {
       )}
 
       <main className="flex-1 flex flex-col relative overflow-hidden bg-theme-main">
-        <header className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-theme z-30 sticky top-0 bg-theme-header backdrop-blur-sm">
+        <header data-app-header="true" className="h-14 flex items-center justify-between px-4 md:px-8 border-b border-theme z-30 sticky top-0 bg-theme-header backdrop-blur-sm">
           {/* Left: Menu & Title */}
           <div className="flex items-center gap-2 md:gap-4">
             <button className="md:hidden p-1 -ml-2 text-theme-secondary hover:bg-theme-hover rounded" onClick={() => setMobileMenuOpen(true)}>
               <Menu size={20} />
             </button>
-            {canNavigateBack ? (<button onClick={navigateBack} className="p-1 hover:bg-theme-hover rounded text-theme-secondary flex items-center gap-1 text-sm font-medium transition-colors" title="返回 (Alt + Left)"> <CornerUpLeft size={16} /> <span className="hidden md:inline">返回</span> </button>) : (<h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-theme-primary`}>{getHeaderTitle()}</h2>)}
+            {canNavigateBack && (
+              <button onClick={navigateBack} className="p-1 hover:bg-theme-hover rounded text-theme-secondary flex items-center gap-1 text-sm font-medium transition-colors" title="返回 (Alt + Left)">
+                <CornerUpLeft size={16} />
+                <span className="hidden md:inline">返回</span>
+              </button>
+            )}
+            {canNavigateBack && <span className="text-theme-secondary">|</span>}
+            <h2 className={`${textSizeClass} ${fontWeightClass} tracking-tight text-theme-primary`}>{getHeaderTitle()}</h2>
           </div>
 
           {/* Right: Tools, User, Sync */}
           <div className="flex items-center gap-2 md:gap-4">
             <div className="flex items-center gap-1">
               {selectedTaskIds.length === 1 && (
-                <button
-                  onClick={() => setShowMission72(true)}
-                  className="p-1.5 rounded hover:bg-indigo-500/10 text-indigo-400 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
-                  title="任務72變 (Mission 72 Transformations)"
-                >
-                  <span className="text-xl leading-none filter drop-shadow-sm">🐵</span>
-                  <span className="hidden lg:inline text-xs font-bold text-indigo-400">72變</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => setShowMission72(true)}
+                    className="p-1.5 rounded hover:bg-indigo-500/10 text-indigo-400 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
+                    title="任務72變 (Mission 72 Transformations)"
+                  >
+                    <span className="text-xl leading-none filter drop-shadow-sm">🐵</span>
+                    <span className="hidden lg:inline text-xs font-bold text-indigo-400">72變</span>
+                  </button>
+                  <button
+                    onClick={() => setShowGTDCoach(true)}
+                    className="p-1.5 rounded hover:bg-amber-500/10 text-amber-500 transition-colors animate-in zoom-in duration-200 flex items-center gap-1"
+                    title="GTD 小秘書"
+                  >
+                    <span className="text-xl leading-none filter drop-shadow-sm">🤖</span>
+                    <span className="hidden lg:inline text-xs font-bold text-amber-600">小秘書</span>
+                  </button>
+                </>
               )}
               <div className="w-px h-4 bg-theme-hover mx-1"></div>
               <button onClick={archiveCompletedTasks} className="p-1.5 rounded hover:bg-theme-hover text-theme-tertiary hover:text-emerald-500 transition-colors" title="歸檔所有已完成任務 (Archive Completed)"> <Archive size={16} /> </button>
@@ -198,6 +215,18 @@ export const MainLayout = () => {
               <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-theme-hover ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
               <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-theme-hover ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
               <div className="w-px h-4 bg-theme-hover mx-1"></div>
+              {user?.email === 'bibo1243@gmail.com' && (
+                <>
+                  <button
+                    onClick={() => setShowHeartSchedule(true)}
+                    className="p-1.5 rounded-full hover:bg-pink-50 text-pink-400 hover:text-pink-600 transition-colors"
+                    title="我們的日程 (Shared Schedule)"
+                  >
+                    <Heart size={18} className={showHeartSchedule ? 'fill-pink-500 text-pink-500' : ''} />
+                  </button>
+                  <div className="w-px h-4 bg-theme-hover mx-1"></div>
+                </>
+              )}
               <ReminderPanel />
             </div>
 
@@ -279,12 +308,23 @@ export const MainLayout = () => {
 
 
 
-        {localQuickAdd && (
+        {localQuickAdd && !isMobile && (
           <DraggableTaskModal onClose={() => setLocalQuickAdd(false)} />
+        )}
+
+        {localQuickAdd && isMobile && (
+          <MobileTaskEditor
+            taskId={undefined}
+            onClose={() => setLocalQuickAdd(false)}
+          />
         )}
 
         {showMission72 && selectedTaskIds.length === 1 && (
           <Mission72Manager taskId={selectedTaskIds[0]} onClose={() => setShowMission72(false)} />
+        )}
+
+        {showGTDCoach && selectedTaskIds.length === 1 && (
+          <GTDCoachModal taskId={selectedTaskIds[0]} onClose={() => setShowGTDCoach(false)} />
         )}
 
         {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
@@ -314,6 +354,7 @@ export const MainLayout = () => {
         {showMoveTaskModal && (
           <MoveTaskModal onClose={() => setShowMoveTaskModal(false)} />
         )}
+        {showHeartSchedule && <HeartScheduleView onClose={() => setShowHeartSchedule(false)} />}
       </main>
     </div>
   );

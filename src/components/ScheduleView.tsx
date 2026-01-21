@@ -33,8 +33,31 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
         selectedTaskIds,
         setSelectedTaskIds,
         batchDeleteTasks,
-        batchUpdateTasks
+        batchUpdateTasks,
+        tagsWithResolvedColors
     } = useContext(AppContext);
+
+    const getTaskColor = (task: TaskData, rootTask: TaskData) => {
+        if (task.tags && task.tags.length > 0) {
+            // 1. Google Tag Priority
+            const googleTagId = task.tags.find(tagId => {
+                const t = tags.find((x: any) => x.id === tagId);
+                return t && t.name.toLowerCase().includes('google');
+            });
+            if (googleTagId) {
+                if (tagsWithResolvedColors && tagsWithResolvedColors[googleTagId]) return tagsWithResolvedColors[googleTagId];
+                const t = tags.find((x: any) => x.id === googleTagId);
+                if (t?.color) return t.color;
+            }
+            // 2. First Tag Priority
+            const firstTagId = task.tags[0];
+            if (tagsWithResolvedColors && tagsWithResolvedColors[firstTagId]) return tagsWithResolvedColors[firstTagId];
+            const t = tags.find((x: any) => x.id === firstTagId);
+            if (t?.color) return t.color;
+        }
+        const legacyKey = (rootTask.color || task.color || 'blue') as keyof typeof COLOR_THEMES;
+        return COLOR_THEMES[legacyKey]?.color || COLOR_THEMES.blue.color;
+    };
 
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1057,7 +1080,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                 >
                                     {allDayTasks.map(task => {
                                         const rootTask = getRootTask(task, tasks);
-                                        const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
+                                        const taskColor = getTaskColor(task, rootTask);
                                         const isSelected = selectedTaskIds.includes(task.id);
                                         const isDragging = dragState?.task.id === task.id;
                                         const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
@@ -1073,19 +1096,19 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                                     ${isDragging ? 'opacity-30' : ''}
                                                 `}
                                                 style={{
-                                                    backgroundColor: isScheduleTask ? `${theme.color}10` : (isSelected ? theme.color + '40' : theme.color + '18'),
-                                                    backgroundImage: isScheduleTask ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)` : undefined,
-                                                    color: theme.color,
-                                                    borderColor: isSelected ? theme.color + '80' : theme.color + '60',
+                                                    backgroundColor: isScheduleTask ? `${taskColor}10` : (isSelected ? taskColor + '40' : taskColor + '18'),
+                                                    backgroundImage: isScheduleTask ? `repeating-linear-gradient(45deg, ${taskColor}20 0px, ${taskColor}20 4px, transparent 4px, transparent 8px)` : undefined,
+                                                    color: taskColor,
+                                                    borderColor: isSelected ? taskColor + '80' : taskColor + '60',
                                                     boxShadow: isSelected ? '2px 2px 4px rgba(0,0,0,0.12)' : '2px 2px 3px rgba(0,0,0,0.08)',
-                                                    '--tw-ring-color': isSelected ? theme.color + '60' : undefined,
+                                                    '--tw-ring-color': isSelected ? taskColor + '60' : undefined,
                                                     ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                                 } as React.CSSProperties}
                                             >
                                                 {/* Hover overlay */}
                                                 <div
                                                     className="absolute inset-0 opacity-0 group-hover/allday:opacity-100 transition-opacity pointer-events-none"
-                                                    style={{ backgroundColor: theme.color + '15' }}
+                                                    style={{ backgroundColor: taskColor + '15' }}
                                                 />
                                                 <div className="truncate pointer-events-none relative z-10">
                                                     {task.title || 'Untitled'}
@@ -1154,7 +1177,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                     const start = timeToMinutes(task.start_time);
                                     const dur = task.duration || 60;
                                     const rootTask = getRootTask(task, tasks);
-                                    const theme = COLOR_THEMES[rootTask.color || task.color] || COLOR_THEMES.blue;
+                                    const taskColor = getTaskColor(task, rootTask);
                                     const isSelected = selectedTaskIds.includes(task.id);
                                     const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
                                     const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
@@ -1174,16 +1197,16 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                                 left: style.left,
                                                 width: style.width,
                                                 backgroundColor: isScheduleTask
-                                                    ? `${theme.color}10` // Light base
-                                                    : (isSelected ? theme.color + '40' : theme.color + '15'),
+                                                    ? `${taskColor}10` // Light base
+                                                    : (isSelected ? taskColor + '40' : taskColor + '15'),
                                                 backgroundImage: isScheduleTask
-                                                    ? `repeating-linear-gradient(45deg, ${theme.color}20 0px, ${theme.color}20 4px, transparent 4px, transparent 8px)`
+                                                    ? `repeating-linear-gradient(45deg, ${taskColor}20 0px, ${taskColor}20 4px, transparent 4px, transparent 8px)`
                                                     : undefined,
-                                                borderColor: theme.color + '50',
-                                                color: theme.color,
+                                                borderColor: taskColor + '50',
+                                                color: taskColor,
                                                 zIndex: 10,
                                                 boxShadow: '2px 2px 3px rgba(0,0,0,0.06)',
-                                                '--tw-ring-color': isSelected ? theme.color + '60' : undefined,
+                                                '--tw-ring-color': isSelected ? taskColor + '60' : undefined,
                                                 ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                             } as React.CSSProperties}
                                         >
@@ -1229,7 +1252,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                 {/* Unified Drag Overlay */}
                 {dragState && (() => {
                     const rootTask = getRootTask(dragState.task, tasks);
-                    const theme = COLOR_THEMES[rootTask.color || dragState.task.color] || COLOR_THEMES.blue;
+                    const taskColor = getTaskColor(dragState.task, rootTask);
 
                     let leftPos = 0;
                     const targetColEl = Array.from(document.querySelectorAll('div[data-date]')).find(el => el.getAttribute('data-date') === dragState.currentDate.toISOString());
@@ -1255,9 +1278,9 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                     top: headerOffset,
                                     width: (dragState.colWidth || 200) - 8,
                                     height: allDayHeight - 4, // Match actual height
-                                    backgroundColor: theme.color + '40',
-                                    borderColor: theme.color,
-                                    color: theme.color
+                                    backgroundColor: taskColor + '40',
+                                    borderColor: taskColor,
+                                    color: taskColor
                                 }}
                             >
                                 {dragState.task.title || 'Untitled'}
@@ -1282,8 +1305,8 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                     left: leftPos + 4,
                                     width: (dragState.colWidth || 190) - 8,
                                     backgroundColor: 'var(--bg-card)',
-                                    borderColor: theme.color,
-                                    color: theme.color,
+                                    borderColor: taskColor,
+                                    color: taskColor,
                                     opacity: 0.95
                                 }}
                             >

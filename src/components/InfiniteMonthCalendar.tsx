@@ -53,7 +53,32 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
         setSelectedTaskIds,
         calendarDate,
         setCalendarDate,
+        tags,
+        tagsWithResolvedColors
     } = useContext(AppContext);
+
+    const getTaskColor = (task: any) => {
+        if (task.tags && task.tags.length > 0) {
+            // 1. Priority: Tag with 'google' (case insensitive)
+            const googleTagId = task.tags.find((tagId: string) => {
+                const t = tags.find((x: any) => x.id === tagId);
+                return t && t.name.toLowerCase().includes('google');
+            });
+            if (googleTagId) {
+                if (tagsWithResolvedColors && tagsWithResolvedColors[googleTagId]) return tagsWithResolvedColors[googleTagId];
+                const t = tags.find((x: any) => x.id === googleTagId);
+                if (t?.color) return t.color;
+            }
+            // 2. Fallback: Find ANY tag that has a resolved color
+            for (const tid of task.tags) {
+                if (tagsWithResolvedColors && tagsWithResolvedColors[tid]) return tagsWithResolvedColors[tid];
+                const t = tags.find((x: any) => x.id === tid);
+                if (t?.color) return t.color;
+            }
+        }
+        const legacyKey = (task.color || 'blue') as keyof typeof COLOR_THEMES;
+        return COLOR_THEMES[legacyKey]?.color || COLOR_THEMES.blue.color;
+    };
 
     const containerRef = useRef<HTMLDivElement>(null);
     const monthRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -307,18 +332,19 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
                     {/* 任務列表 */}
                     <div className="space-y-0.5 overflow-hidden">
                         {dayTasks.slice(0, 3).map((task: any) => {
-                            const theme = COLOR_THEMES[task.color] || COLOR_THEMES.gray;
+                            const taskColor = getTaskColor(task);
                             const isAllDay = task.is_all_day;
 
                             // Style: All-Day gets solid color (darker), Time-based gets light bg
+                            // Fixing invalid CSS: Use Hex colors instead of Tailwind classes in style prop
                             const style: React.CSSProperties = isAllDay ? {
-                                backgroundColor: theme.color,
+                                backgroundColor: taskColor,
                                 color: 'white',
                                 boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                             } : {
-                                backgroundColor: theme.bg,
-                                color: theme.text,
-                                borderLeft: `2px solid ${theme.accent}`
+                                backgroundColor: taskColor + '1A', // 10% opacity
+                                color: taskColor,
+                                borderLeft: `2px solid ${taskColor}`
                             };
 
                             const formatTime = (t: string) => t ? t.replace(':', '') : '';
@@ -410,7 +436,7 @@ export const InfiniteMonthCalendar: React.FC<InfiniteMonthCalendarProps> = ({
                 ))}
             </div>
         );
-    }, [getTasksForDate, handleDateClick, handleDateDoubleClick, placedDateFlash, selectedTaskIds, themeSettings, setEditingTaskId]);
+    }, [getTasksForDate, handleDateClick, handleDateDoubleClick, placedDateFlash, selectedTaskIds, themeSettings, setEditingTaskId, tags, tagsWithResolvedColors]);
 
     // 註冊滾動事件
     useEffect(() => {

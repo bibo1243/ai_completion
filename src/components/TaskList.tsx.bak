@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useContext, useMemo, useState, useCallback } from 'react';
-import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive, MoveRight, Undo, Calendar } from 'lucide-react';
+import { Inbox, Check, Trash2, ChevronDown, ChevronRight, Archive, MoveRight } from 'lucide-react';
 import { AppContext } from '../context/AppContext';
 import { INDENT_SIZE } from '../constants';
 import { TaskInput } from './TaskInput';
@@ -10,7 +10,7 @@ import { DateSeparator, generateDateSeparators, isDateToday, isDateTomorrow } fr
 import { TaskColor } from '../types';
 
 export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
-    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, restoreTrash, t, archivedTasks, restoreArchivedTask, deleteArchivedTask, updateArchivedTask, batchDeleteArchivedTasks, batchDeleteTasks, batchUpdateTasks, duplicateTasks, leavingTaskIds, dismissLeavingTasks, themeSettings } = useContext(AppContext);
+    const { visibleTasks, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, expandedTaskIds, endDrag, dragState, updateDropState, updateGhostPosition, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, tasks, tags, pendingFocusTaskId, setPendingFocusTaskId, view, addTask, reviewTask, emptyTrash, t, archivedTasks, restoreArchivedTask, batchDeleteTasks, batchUpdateTasks, duplicateTasks, leavingTaskIds, dismissLeavingTasks, themeSettings } = useContext(AppContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const scrollInterval = useRef<any>(null);
     const emptyDropZoneDateRef = useRef<string | null>(null); // Track if we're over an empty drop zone
@@ -37,10 +37,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     // Store the task ID that was focused BEFORE opening the new task editor
     const priorFocusIdRef = useRef<string | null>(null);
-
-    // Heatmap State
-    const [heatmapMode, setHeatmapMode] = useState<'none' | 'recent' | 'frequent'>('none');
-
 
     // If rootParentId is provided, filter to only show descendants
     // If rootParentId is provided, generate list directly from tasks (ignoring global visibility of the root)
@@ -91,50 +87,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
 
     // Use filtered or full visibleTasks
     let effectiveVisibleTasks = rootParentId ? filteredVisibleTasks : visibleTasks;
-
-    // Calculate heatmap stats
-    const heatmapStats = useMemo(() => {
-        if (heatmapMode === 'none' || effectiveVisibleTasks.length === 0) return null;
-
-        let minTime = Date.now();
-        let maxTime = 0;
-
-        effectiveVisibleTasks.forEach(t => {
-            const time = t.data.updated_at ? new Date(t.data.updated_at).getTime() : 0;
-            // Only count valid times
-            if (time > 0) {
-                if (time < minTime) minTime = time;
-                if (time > maxTime) maxTime = time;
-            }
-        });
-
-        // Avoid division by zero
-        if (maxTime === minTime) maxTime = minTime + 1;
-
-        return { minTime, maxTime };
-    }, [heatmapMode, effectiveVisibleTasks]);
-
-    const getTaskBackgroundColor = (task: any) => {
-        if (!heatmapStats || heatmapMode === 'none') return undefined;
-
-        const time = task.updated_at ? new Date(task.updated_at).getTime() : 0;
-        if (time === 0) return undefined;
-
-        const ratio = (time - heatmapStats.minTime) / (heatmapStats.maxTime - heatmapStats.minTime);
-        const safeRatio = Math.max(0, Math.min(1, ratio));
-
-        if (heatmapMode === 'recent') {
-            // Recent: Red (Pale to Dark)
-            // Light red: rgba(255, 0, 0, 0.02) -> Darker red: rgba(255, 0, 0, 0.15)
-            const alpha = 0.02 + (safeRatio * 0.18);
-            return `rgba(255, 0, 0, ${alpha})`;
-        } else {
-            // Frequent: Yellow (Pale to Dark)
-            // Use updated_at as proxy for now
-            const alpha = 0.02 + (safeRatio * 0.18);
-            return `rgba(250, 204, 21, ${alpha})`; // Amber-400
-        }
-    };
 
     // Local selection handler that uses effectiveVisibleTasks for range calculation
     // This fixes shift-selection in upcoming view where tasks are sorted differently
@@ -451,10 +403,8 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
         // Build a map of archived tasks by id
         const taskMap = new Map(archivedTasks.map(t => [t.id, t]));
 
-        // Find root tasks (no parent or parent not in archive) and sort by archived_at descending
-        const roots = archivedTasks
-            .filter(t => !t.parent_id || !taskMap.has(t.parent_id))
-            .sort((a, b) => new Date(b.archived_at || b.completed_at || 0).getTime() - new Date(a.archived_at || a.completed_at || 0).getTime());
+        // Find root tasks (no parent or parent not in archive)
+        const roots = archivedTasks.filter(t => !t.parent_id || !taskMap.has(t.parent_id));
 
         // Build flat list with depth
         const result: Array<{
@@ -484,55 +434,12 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
     }, [archivedTasks, view]);
 
     // For logbook view, show archived tasks directly
-    const [editingCompletionId, setEditingCompletionId] = useState<string | null>(null);
-    const [editingCompletionDate, setEditingCompletionDate] = useState<string>('');
-    const [selectedArchivedIds, setSelectedArchivedIds] = useState<string[]>([]);
-    const archivedSelectionAnchor = useRef<string | null>(null);
-
-    const formatCompletionDate = (dateStr: string | null | undefined): string => {
-        if (!dateStr) return '';
-        const date = new Date(dateStr);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-    };
-
-    const handleCompletionDateSave = (id: string) => {
-        if (editingCompletionDate) {
-            const newDate = new Date(editingCompletionDate);
-            if (!isNaN(newDate.getTime())) {
-                updateArchivedTask(id, { completed_at: newDate.toISOString() });
-            }
-        }
-        setEditingCompletionId(null);
-    };
-
-    const handleArchivedSelection = (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
-        if (e.shiftKey && archivedSelectionAnchor.current) {
-            // Range selection
-            const startIdx = archivedFlatTasks.findIndex(t => t.data.id === archivedSelectionAnchor.current);
-            const endIdx = archivedFlatTasks.findIndex(t => t.data.id === id);
-            if (startIdx !== -1 && endIdx !== -1) {
-                const [lower, upper] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-                const range = archivedFlatTasks.slice(lower, upper + 1).map(t => t.data.id);
-                setSelectedArchivedIds(range);
-            }
-        } else if (e.metaKey || e.ctrlKey) {
-            // Toggle selection
-            archivedSelectionAnchor.current = id;
-            setSelectedArchivedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-        } else {
-            // Single selection
-            archivedSelectionAnchor.current = id;
-            setSelectedArchivedIds([id]);
-        }
-    };
-
     if (view === 'logbook') {
         if (archivedFlatTasks.length === 0) {
             return <div className="text-center py-20 opacity-20"><Inbox size={48} className="mx-auto" /><p className="text-xs mt-2">尚無歸檔任務</p></div>;
         }
         return (
-            <div className="pb-20 relative min-h-[500px]" onClick={() => setSelectedArchivedIds([])}>
+            <div className="pb-20 relative min-h-[500px]">
                 <div className="flex items-center gap-2 mb-6 px-2">
                     <Archive size={16} className="text-gray-400" />
                     <span className="text-[13px] font-bold text-gray-500">日誌</span>
@@ -540,111 +447,18 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                         {archivedFlatTasks.length}
                     </span>
                     <div className="flex-1 h-[2px] rounded-full bg-gradient-to-r from-gray-200 to-transparent" />
-                    {/* Batch actions when items are selected */}
-                    {selectedArchivedIds.length > 0 && (
-                        <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-indigo-600 font-medium">
-                                已選 {selectedArchivedIds.length} 項
-                            </span>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (confirm(`確定要永久刪除 ${selectedArchivedIds.length} 個歸檔任務嗎？`)) {
-                                        batchDeleteArchivedTasks(selectedArchivedIds);
-                                        setSelectedArchivedIds([]);
-                                    }
-                                }}
-                                className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-medium rounded hover:bg-red-100 transition-colors flex items-center gap-1"
-                            >
-                                <Trash2 size={12} />
-                                刪除已選
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedArchivedIds([]); }}
-                                className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-medium rounded hover:bg-gray-200 transition-colors"
-                            >
-                                取消選取
-                            </button>
-                        </div>
-                    )}
                 </div>
-                {archivedFlatTasks.map((item) => {
-                    const isSelected = selectedArchivedIds.includes(item.data.id);
-                    return (
-                        <div
-                            key={item.data.id}
-                            className={`relative group mb-1 py-2 px-3 rounded-lg transition-colors cursor-pointer ${isSelected ? 'bg-indigo-50 border border-indigo-200' : 'hover:bg-theme-hover'}`}
-                            style={{ marginLeft: `${item.depth * 24}px` }}
-                            onClick={(e) => handleArchivedSelection(e, item.data.id)}
+                {archivedFlatTasks.map((item) => (
+                    <div key={item.data.id} className="relative group" style={{ marginLeft: `${item.depth * 24}px` }}>
+                        <TaskItem flatTask={item} isFocused={false} onEdit={() => { }} />
+                        <button
+                            onClick={(e) => { e.stopPropagation(); restoreArchivedTask(item.data.id); }}
+                            className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 px-3 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full shadow-lg hover:bg-emerald-700 transition-all flex items-center gap-1"
                         >
-                            <div className="flex items-center gap-3">
-                                {/* Selection checkbox / Completion indicator */}
-                                <div
-                                    className={`w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected
-                                        ? 'border-indigo-500 bg-indigo-500'
-                                        : 'border-emerald-500 bg-emerald-500'
-                                        }`}
-                                >
-                                    <Check size={12} className="text-white" />
-                                </div>
-                                {/* Title */}
-                                <span className="flex-1 text-theme-primary opacity-70 truncate">{item.data.title}</span>
-                                {/* Completion Date - double-click to edit */}
-                                <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                                    <Calendar size={12} />
-                                    {editingCompletionId === item.data.id ? (
-                                        <input
-                                            type="date"
-                                            autoFocus
-                                            value={editingCompletionDate}
-                                            onChange={(e) => setEditingCompletionDate(e.target.value)}
-                                            onBlur={() => handleCompletionDateSave(item.data.id)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') handleCompletionDateSave(item.data.id);
-                                                if (e.key === 'Escape') setEditingCompletionId(null);
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="bg-white border border-gray-300 rounded px-1 py-0.5 text-[11px] w-28"
-                                        />
-                                    ) : (
-                                        <span
-                                            className="cursor-pointer hover:text-indigo-500 transition-colors"
-                                            onDoubleClick={(e) => {
-                                                e.stopPropagation();
-                                                setEditingCompletionId(item.data.id);
-                                                setEditingCompletionDate(formatCompletionDate(item.data.completed_at));
-                                            }}
-                                            title="雙擊編輯完成日期"
-                                        >
-                                            {formatCompletionDate(item.data.completed_at) || '無日期'}
-                                        </span>
-                                    )}
-                                </div>
-                                {/* Actions */}
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); restoreArchivedTask(item.data.id); }}
-                                        className="px-2 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-medium rounded hover:bg-emerald-100 transition-colors"
-                                    >
-                                        恢復
-                                    </button>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (confirm('確定要永久刪除此歸檔任務嗎？')) {
-                                                deleteArchivedTask(item.data.id);
-                                            }
-                                        }}
-                                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                        title="刪除"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
+                            恢復
+                        </button>
+                    </div>
+                ))}
             </div>
         );
     }
@@ -888,13 +702,7 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 ? (<TaskInput key={item.data.id} initialData={item.data} onClose={handleCloseEdit} />)
                 : (
                     <div className="relative group">
-                        <TaskItem
-                            key={item.data.id}
-                            flatTask={item}
-                            isFocused={focusedTaskId === item.data.id}
-                            onEdit={() => setEditingTaskId(item.data.id)}
-                            backgroundColor={getTaskBackgroundColor(item.data)}
-                        />
+                        <TaskItem key={item.data.id} flatTask={item} isFocused={focusedTaskId === item.data.id} onEdit={() => setEditingTaskId(item.data.id)} />
                     </div>
                 )
             }
@@ -916,23 +724,6 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                 onDrop={(e) => { e.preventDefault(); handleDragEnd(); }}
                 onDragEnd={handleDragEnd}
             >
-                {/* Heatmap Controls */}
-                {(view === 'allview' || view === 'project' || view === 'inbox') && (
-                    <div className="flex justify-end px-4 py-2 border-b border-gray-100/50 mb-2 sticky top-0 bg-white/95 backdrop-blur z-20">
-                        <div className="flex items-center gap-2 bg-gray-50/80 p-1 rounded-lg border border-gray-100">
-                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider px-1">Mark:</span>
-                            <div className="flex gap-0.5">
-                                <button onClick={() => setHeatmapMode('none')} className={`px-2 py-0.5 text-[10px] rounded transition-all ${heatmapMode === 'none' ? 'bg-white shadow-sm text-gray-800 font-bold' : 'text-gray-400 hover:text-gray-600'}`}>Off</button>
-                                <button onClick={() => setHeatmapMode('recent')} className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 ${heatmapMode === 'recent' ? 'bg-red-50 text-red-600 shadow-sm font-bold ring-1 ring-red-100' : 'text-gray-400 hover:text-red-500'}`}>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500"></div>Recent
-                                </button>
-                                <button onClick={() => setHeatmapMode('frequent')} className={`px-2 py-0.5 text-[10px] rounded transition-all flex items-center gap-1 ${heatmapMode === 'frequent' ? 'bg-amber-50 text-amber-600 shadow-sm font-bold ring-1 ring-amber-100' : 'text-gray-400 hover:text-amber-500'}`}>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div>Frequent
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
                 {/* Relationship lines for Today view */}
                 {view === 'today' && themeSettings.showRelationshipLines !== false && (
                     <RelationshipLines
@@ -954,25 +745,14 @@ export const TaskList = ({ rootParentId }: { rootParentId?: string }) => {
                             <Trash2 className="text-gray-400" size={18} />
                             <span className="font-medium text-gray-500 text-sm">{t('trashEmptyTitle')}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            {effectiveVisibleTasks.length > 0 && (
-                                <button
-                                    onClick={() => { if (confirm(t('restoreTrashConfirm') || 'Are you sure?')) restoreTrash(); }}
-                                    className="px-3 py-1.5 bg-white border border-gray-200 text-indigo-500 text-xs font-medium rounded hover:bg-indigo-50 hover:border-indigo-200 transition-colors shadow-sm flex items-center gap-1"
-                                >
-                                    <Undo size={12} />
-                                    {t('restoreTrash') || 'Restore All'}
-                                </button>
-                            )}
-                            {effectiveVisibleTasks.length > 0 && (
-                                <button
-                                    onClick={() => { if (confirm(t('emptyTrashConfirm'))) emptyTrash(); }}
-                                    className="px-3 py-1.5 bg-white border border-gray-200 text-red-500 text-xs font-medium rounded hover:bg-red-50 hover:border-red-200 transition-colors shadow-sm"
-                                >
-                                    {t('emptyTrash')}
-                                </button>
-                            )}
-                        </div>
+                        {effectiveVisibleTasks.length > 0 && (
+                            <button
+                                onClick={() => { if (confirm(t('emptyTrashConfirm'))) emptyTrash(); }}
+                                className="px-3 py-1.5 bg-white border border-gray-200 text-red-500 text-xs font-medium rounded hover:bg-red-50 hover:border-red-200 transition-colors shadow-sm"
+                            >
+                                {t('emptyTrash')}
+                            </button>
+                        )}
                     </div>
                 )}
 

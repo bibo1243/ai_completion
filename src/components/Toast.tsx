@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RotateCcw, CheckCircle, AlertCircle, Info, ExternalLink } from 'lucide-react';
+import { RotateCcw, CheckCircle, AlertCircle, Info, ExternalLink, X } from 'lucide-react';
 
 interface ToastProps {
     toast: {
@@ -39,6 +39,12 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
             toast.onClick();
             onClose();
         }
+    };
+
+    const handleClose = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsVisible(false);
+        setTimeout(onClose, 300);
     };
 
     return (
@@ -85,6 +91,15 @@ export const Toast = ({ toast, onClose }: ToastProps) => {
                         Undo
                     </button>
                 )}
+
+                {/* Close Button */}
+                <button
+                    onClick={handleClose}
+                    className="p-1 -mr-1.5 rounded-full hover:bg-white/20 transition-colors"
+                    title="關閉"
+                >
+                    <X size={14} />
+                </button>
             </div>
         </div>
     );

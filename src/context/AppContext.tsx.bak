@@ -3,7 +3,6 @@ import { supabase as supabaseClient } from '../supabaseClient';
 import { TaskData, TagData, SyncStatus, DragState, HistoryRecord, ThemeSettings, NavRecord, FlatTask, BatchUpdateRecord, TaskStatus, ArchivedTaskData, SearchFilters, SearchHistory } from '../types';
 import { isSameDay, isToday, isDescendant, taskHasAnyTag } from '../utils';
 import { calculateNextOccurrence, formatRepeatRule } from '../utils/repeat';
-import { updateGoogleEvent, deleteGoogleEvent, createGoogleEvent, fetchCalendarList, fetchUpdatedGoogleEvents, GoogleEvent } from '../utils/googleCalendar';
 import { DRAG_GHOST_IMG } from '../constants';
 import { translations } from '../translations';
 
@@ -42,7 +41,6 @@ export const AppContext = createContext<{
     deleteTask: (id: string, permanent?: boolean) => Promise<void>;
     batchDeleteTasks: (ids: string[], permanent?: boolean) => Promise<void>;
     restoreTask: (id: string) => Promise<void>;
-    restoreTrash: () => Promise<void>;
     emptyTrash: () => Promise<void>;
     addTag: (name: string, parentId?: string | null) => Promise<string | null>;
     updateTag: (id: string, updates: any) => Promise<void>;
@@ -51,20 +49,12 @@ export const AppContext = createContext<{
 
     keyboardMove: (id: string, direction: 'up' | 'down' | 'left' | 'right') => void;
     smartReschedule: (id: string) => Promise<void>;
-    lockTask: (id: string, password: string) => Promise<void>;
-    unlockTask: (id: string, password: string) => Promise<boolean>;
-    verifyTaskPassword: (id: string, password: string) => boolean;
-    temporarilyUnlockTask: (taskId: string) => void;
     archiveCompletedTasks: () => void;
     archivedTasks: ArchivedTaskData[];
     restoreArchivedTask: (id: string) => Promise<void>;
-    deleteArchivedTask: (id: string) => Promise<void>;
-    updateArchivedTask: (id: string, data: any) => Promise<void>;
-    batchDeleteArchivedTasks: (ids: string[]) => Promise<void>;
     clearAllTasks: () => Promise<void>;
     exportData: () => void;
     importData: (file: File) => Promise<void>;
-    syncGoogleToApp: () => Promise<void>;
 
     undo: () => void;
     redo: () => void;
@@ -97,7 +87,6 @@ export const AppContext = createContext<{
     setInlineEditingTaskId: React.Dispatch<React.SetStateAction<string | null>>;
 
     expandedTaskIds: string[];
-    setExpandedTaskIds: React.Dispatch<React.SetStateAction<string[]>>;
     toggleExpansion: (id: string, forceState?: boolean) => void;
     sidebarWidth: number;
     setSidebarWidth: (width: number) => void;
@@ -143,11 +132,6 @@ export const AppContext = createContext<{
     addSearchHistory: (query: string, filters: SearchFilters, name?: string) => Promise<void>;
     deleteSearchHistory: (id: string) => Promise<void>;
     moveTaskToView: (taskIds: string[], targetView: string) => Promise<void>;
-
-    // Google Calendar lock feature
-    lockedGoogleTagIds: string[];
-    toggleGoogleTagLock: (tagId: string) => void;
-    isTaskGoogleLocked: (task: TaskData) => boolean;
 }>({} as any);
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
@@ -163,46 +147,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
     const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
     const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-    const [editingTaskIdRaw, setEditingTaskIdRaw] = useState<string | null>(null);
-    // Track unlocked task IDs (temporarily allowed to edit after password verification)
-    const [unlockedTaskIds, setUnlockedTaskIds] = useState<string[]>([]);
-
-    // Safe setter that blocks editing locked tasks unless they've been unlocked
-    const setEditingTaskId: React.Dispatch<React.SetStateAction<string | null>> = (value) => {
-        if (typeof value === 'function') {
-            setEditingTaskIdRaw(prev => {
-                const next = value(prev);
-                if (next === null) return null;
-                const task = tasksRef.current.find(t => t.id === next);
-                if (task?.is_locked && !unlockedTaskIds.includes(next)) {
-                    console.warn('Blocked editing locked task:', next);
-                    return prev; // Block setting
-                }
-                return next;
-            });
-        } else {
-            if (value === null) {
-                setEditingTaskIdRaw(null);
-                return;
-            }
-            const task = tasksRef.current.find(t => t.id === value);
-            if (task?.is_locked && !unlockedTaskIds.includes(value)) {
-                console.warn('Blocked editing locked task:', value);
-                return; // Block setting
-            }
-            setEditingTaskIdRaw(value);
-        }
-    };
-    const editingTaskId = editingTaskIdRaw;
-
-    // Helper to temporarily unlock a task for editing (called after password verification)
-    const temporarilyUnlockTask = (taskId: string) => {
-        setUnlockedTaskIds(prev => [...prev, taskId]);
-        // Auto-expire the unlock after 30 seconds
-        setTimeout(() => {
-            setUnlockedTaskIds(prev => prev.filter(id => id !== taskId));
-        }, 30000);
-    };
+    const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [expandedTaskIds, setExpandedTaskIds] = useState<string[]>(() => {
         const saved = localStorage.getItem(`expanded_tasks_${user?.id}`);
         return saved ? JSON.parse(saved) : [];
@@ -211,36 +156,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     const [searchHistory, setSearchHistory] = useState<SearchHistory[]>([]);
     const [searchOpen, setSearchOpen] = useState(false);
     const [constructionModeEnabled, setConstructionModeEnabled] = useState(false);
-
-    // Google Calendar lock feature - locked tag IDs stored in localStorage
-    const [lockedGoogleTagIds, setLockedGoogleTagIds] = useState<string[]>(() => {
-        const saved = localStorage.getItem('locked_google_tag_ids');
-        return saved ? JSON.parse(saved) : [];
-    });
-
-    const toggleGoogleTagLock = useCallback((tagId: string) => {
-        setLockedGoogleTagIds(prev => {
-            const isLocked = prev.includes(tagId);
-            const next = isLocked ? prev.filter(id => id !== tagId) : [...prev, tagId];
-            localStorage.setItem('locked_google_tag_ids', JSON.stringify(next));
-            return next;
-        });
-    }, []);
-
-    // Helper to check if a task is locked via any of its Google: tags
-    const isTaskGoogleLocked = useCallback((task: TaskData): boolean => {
-        if (!task.tags || task.tags.length === 0) return false;
-        // Check if any of the task's tags is a locked Google: tag
-        for (const tagId of task.tags) {
-            if (lockedGoogleTagIds.includes(tagId)) {
-                const tag = tags.find(t => t.id === tagId);
-                if (tag && tag.name.startsWith('Google:')) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }, [lockedGoogleTagIds, tags]);
 
     // Load viewTagFilters
     useEffect(() => {
@@ -795,120 +710,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setToast({ msg: `已智慧排程至 ${chosen.date.getMonth() + 1}/${chosen.date.getDate()} (當日負載: ${chosen.count})`, type: 'info' });
     };
 
-
-    // Helper: Get all descendant task IDs (including the task itself)
-    const getDescendantIds = (taskId: string): string[] => {
-        const descendants: string[] = [taskId];
-        const findChildren = (parentId: string) => {
-            const children = tasks.filter(t => t.parent_id === parentId);
-            children.forEach(child => {
-                descendants.push(child.id);
-                findChildren(child.id);
-            });
-        };
-        findChildren(taskId);
-        return descendants;
-    };
-
-    // Lock a task and all its children with a password
-    const lockTask = async (id: string, password: string) => {
-        if (!supabaseClient) return;
-
-        const descendantIds = getDescendantIds(id);
-
-        // Update local state - only root task gets the password
-        setTasks(prev => {
-            const next = prev.map(t => {
-                if (t.id === id) {
-                    // Root task gets the password
-                    return { ...t, is_locked: true, lock_password: password };
-                } else if (descendantIds.includes(t.id)) {
-                    // Children are locked but inherit (no password)
-                    return { ...t, is_locked: true, lock_password: undefined };
-                }
-                return t;
-            });
-            tasksRef.current = next;
-            return next;
-        });
-
-        // Update database - root task gets password, children get null
-        await supabaseClient.from('tasks').update({ is_locked: true, lock_password: password }).eq('id', id);
-        const childIds = descendantIds.filter(tid => tid !== id);
-        if (childIds.length > 0) {
-            for (const tid of childIds) {
-                await supabaseClient.from('tasks').update({ is_locked: true, lock_password: null }).eq('id', tid);
-            }
-        }
-
-        setToast({ msg: `已鎖定任務及其 ${descendantIds.length - 1} 個子任務`, type: 'info' });
-    };
-
-    // Unlock a task and all its children (requires correct password)
-    const unlockTask = async (id: string, password: string): Promise<boolean> => {
-        if (!supabaseClient) return false;
-
-        const task = tasks.find(t => t.id === id);
-        if (!task || !task.is_locked) return true;
-
-        // Check password - walk up to find the root locked parent with password
-        let lockRoot = task;
-        let current = task;
-        while (current.parent_id) {
-            const parent = tasks.find(t => t.id === current.parent_id);
-            if (parent && parent.is_locked && parent.lock_password) {
-                lockRoot = parent;
-            }
-            if (!parent) break;
-            current = parent;
-        }
-
-        if (lockRoot.lock_password !== password) {
-            setToast({ msg: '密碼錯誤', type: 'error' });
-            return false;
-        }
-
-        const descendantIds = getDescendantIds(id);
-
-        // Update local state
-        setTasks(prev => {
-            const next = prev.map(t =>
-                descendantIds.includes(t.id)
-                    ? { ...t, is_locked: false, lock_password: undefined }
-                    : t
-            );
-            tasksRef.current = next;
-            return next;
-        });
-
-        // Update database
-        for (const tid of descendantIds) {
-            await supabaseClient.from('tasks').update({ is_locked: false, lock_password: null }).eq('id', tid);
-        }
-
-        setToast({ msg: '已解鎖任務', type: 'info' });
-        return true;
-    };
-
-    // Verify password for a locked task
-    const verifyTaskPassword = (id: string, password: string): boolean => {
-        const task = tasks.find(t => t.id === id);
-        if (!task || !task.is_locked) return true;
-
-        // Find the root locked parent with password
-        let lockRoot = task;
-        let current = task;
-        while (current.parent_id) {
-            const parent = tasks.find(t => t.id === current.parent_id);
-            if (parent && parent.is_locked && parent.lock_password) {
-                lockRoot = parent;
-            }
-            if (!parent) break;
-            current = parent;
-        }
-
-        return lockRoot.lock_password === password;
-    };
     const archiveCompletedTasks = async () => {
         const completedTasks = tasks.filter(t => !!t.completed_at && t.status !== 'logged' && t.status !== 'deleted');
         if (completedTasks.length === 0) return;
@@ -1073,53 +874,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setToast({ msg: '已從歸檔恢復任務', type: 'info' });
     };
 
-    const deleteArchivedTask = async (id: string) => {
-        const archivedTask = archivedTasks.find(t => t.id === id);
-        if (!archivedTask) return;
-
-        setArchivedTasks(prev => prev.filter(t => t.id !== id));
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('archived_tasks')
-                .delete()
-                .eq('id', id);
-            if (error) handleError(error);
-        }
-        setToast({ msg: '已刪除歸檔任務', type: 'info' });
-    };
-
-    const updateArchivedTask = async (id: string, data: Partial<ArchivedTaskData>) => {
-        const archivedTask = archivedTasks.find(t => t.id === id);
-        if (!archivedTask) return;
-
-        const updatedTask = { ...archivedTask, ...data };
-        setArchivedTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('archived_tasks')
-                .update(data)
-                .eq('id', id);
-            if (error) handleError(error);
-        }
-    };
-
-    const batchDeleteArchivedTasks = async (ids: string[]) => {
-        if (ids.length === 0) return;
-
-        setArchivedTasks(prev => prev.filter(t => !ids.includes(t.id)));
-
-        if (supabaseClient) {
-            const { error } = await supabaseClient
-                .from('archived_tasks')
-                .delete()
-                .in('id', ids);
-            if (error) handleError(error);
-        }
-        setToast({ msg: `已刪除 ${ids.length} 個歸檔任務`, type: 'info' });
-    };
-
     const addSearchHistory = async (query: string, filters: SearchFilters, name?: string) => {
         if (!supabaseClient || !user) return;
 
@@ -1244,29 +998,10 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const action = historyStack[historyStack.length - 1];
         setHistoryStack(historyStack.slice(0, -1));
         setRedoStack(prev => [...prev, action]);
-
-        if (action.type === 'ADD') {
-            const id = action.payload.data.id;
-            markLocalUpdate(id);
-            setTasks(prev => prev.filter(t => t.id !== id));
-            if (supabaseClient) await supabaseClient.from('tasks').delete().eq('id', id);
-        }
-        else if (action.type === 'DELETE') {
-            const task = action.payload.data;
-            markLocalUpdate(task.id);
-            setTasks(prev => [...prev, task].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at)));
-            if (supabaseClient) await supabaseClient.from('tasks').insert([task]);
-        }
-        else if (action.type === 'UPDATE') {
-            const { id, before } = action.payload;
-            // Use updateTask to ensure hooks (like Google Sync) run
-            await updateTask(id, before, [], { skipHistory: true });
-        }
-        else if (action.type === 'BATCH_UPDATE') {
-            const records = action.payload as BatchUpdateRecord[];
-            const updates = records.map(r => ({ id: r.id, data: r.before }));
-            await batchUpdateTasks(updates, { skipHistory: true });
-        }
+        if (action.type === 'ADD') { const id = action.payload.data.id; markLocalUpdate(id); setTasks(prev => prev.filter(t => t.id !== id)); if (supabaseClient) await supabaseClient.from('tasks').delete().eq('id', id); }
+        else if (action.type === 'DELETE') { const task = action.payload.data; markLocalUpdate(task.id); setTasks(prev => [...prev, task].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at))); if (supabaseClient) await supabaseClient.from('tasks').insert([task]); }
+        else if (action.type === 'UPDATE') { const { id, before } = action.payload; markLocalUpdate(id); setTasks(prev => prev.map(t => t.id === id ? { ...t, ...before } : t).sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at))); if (supabaseClient) await supabaseClient.from('tasks').update(before).eq('id', id); }
+        else if (action.type === 'BATCH_UPDATE') { const records = action.payload as BatchUpdateRecord[]; const newTasks = [...tasksRef.current]; records.forEach(r => { const idx = newTasks.findIndex(t => t.id === r.id); if (idx !== -1) { newTasks[idx] = { ...newTasks[idx], ...r.before }; markLocalUpdate(r.id); } }); newTasks.sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at)); setTasks(newTasks); if (supabaseClient) { await Promise.all(records.map(r => supabaseClient!.from('tasks').update(r.before).eq('id', r.id))); } }
         else if (action.type === 'ADD_TAG') { const id = action.payload.data.id; setTags(prev => prev.filter(t => t.id !== id)); if (supabaseClient) await supabaseClient.from('tags').delete().eq('id', id); }
         else if (action.type === 'DELETE_TAG') { const tag = action.payload.data; setTags(prev => [...prev, tag].sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))); if (supabaseClient) await supabaseClient.from('tags').insert([tag]); }
         else if (action.type === 'UPDATE_TAG') { const { id, before } = action.payload; setTags(prev => prev.map(t => t.id === id ? { ...t, ...before } : t).sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))); if (supabaseClient) await supabaseClient.from('tags').update(before).eq('id', id); }
@@ -1301,15 +1036,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         setHistoryStack(prev => [...prev, action]);
         if (action.type === 'ADD') { const task = action.payload.data; markLocalUpdate(task.id); setTasks(prev => [...prev, task].sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at))); if (supabaseClient) await supabaseClient.from('tasks').insert([task]); }
         else if (action.type === 'DELETE') { const id = action.payload.data.id; markLocalUpdate(id); setTasks(prev => prev.filter(t => t.id !== id)); if (supabaseClient) await supabaseClient.from('tasks').delete().eq('id', id); }
-        else if (action.type === 'UPDATE') {
-            const { id, after } = action.payload;
-            await updateTask(id, after, [], { skipHistory: true });
-        }
-        else if (action.type === 'BATCH_UPDATE') {
-            const records = action.payload as BatchUpdateRecord[];
-            const updates = records.map(r => ({ id: r.id, data: r.after }));
-            await batchUpdateTasks(updates, { skipHistory: true });
-        }
+        else if (action.type === 'UPDATE') { const { id, after } = action.payload; markLocalUpdate(id); setTasks(prev => prev.map(t => t.id === id ? { ...t, ...after } : t).sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at))); if (supabaseClient) await supabaseClient.from('tasks').update(after).eq('id', id); }
+        else if (action.type === 'BATCH_UPDATE') { const records = action.payload as BatchUpdateRecord[]; const newTasks = [...tasksRef.current]; records.forEach(r => { const idx = newTasks.findIndex(t => t.id === r.id); if (idx !== -1) { newTasks[idx] = { ...newTasks[idx], ...r.after }; markLocalUpdate(r.id); } }); newTasks.sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at)); setTasks(newTasks); if (supabaseClient) { await Promise.all(records.map(r => supabaseClient!.from('tasks').update(r.after).eq('id', r.id))); } }
         else if (action.type === 'ADD_TAG') { const tag = action.payload.data; setTags(prev => [...prev, tag].sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))); if (supabaseClient) await supabaseClient.from('tags').insert([tag]); }
         else if (action.type === 'DELETE_TAG') { const id = action.payload.data.id; setTags(prev => prev.filter(t => t.id !== id)); if (supabaseClient) await supabaseClient.from('tags').delete().eq('id', id); }
         else if (action.type === 'UPDATE_TAG') { const { id, after } = action.payload; setTags(prev => prev.map(t => t.id === id ? { ...t, ...after } : t).sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))); if (supabaseClient) await supabaseClient.from('tags').update(after).eq('id', id); }
@@ -1473,12 +1201,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }, [tasks, tags, view, focusedTaskId, expandedTaskIds]);
 
     const calculateVisibleTasks = useCallback((currentTasks: TaskData[], currentView: string, currentFilter: string | null, currentExpanded: string[], currentAdvancedFilters: { additionalTags: string[], startDate: string | null, dueDate: string | null, color: string | null }, currentViewTagFilters: Record<string, { include: string[], exclude: string[] }>) => {
-        if (themeSettings.showImportedGoogleEvents === false) {
-            const googleTagIds = tags.filter(t => t.name.startsWith('Google:')).map(t => t.id);
-            if (googleTagIds.length > 0) {
-                currentTasks = currentTasks.filter(t => !t.tags.some(tid => googleTagIds.includes(tid)));
-            }
-        }
         const helperFindTagId = (names: string[]) => tags.find(tg => names.some(n => tg.name.trim().toLowerCase() === n.toLowerCase()))?.id;
 
         const promptTagId = helperFindTagId(['prompt', '提示詞']);
@@ -1876,7 +1598,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             return result;
         };
         return flatten(roots);
-    }, [tags, themeSettings.showImportedGoogleEvents]);
+    }, [tags]);
 
     const visibleTasks = useMemo(() => { return calculateVisibleTasks(tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters); }, [tasks, view, tagFilter, expandedTaskIds, advancedFilters, viewTagFilters, calculateVisibleTasks, tags]);
 
@@ -2273,27 +1995,19 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             } else if (isTodayView) {
                 // Today view: flat list within the same date only
                 // This ensures we only move within the current date group
-                // CRITICAL FIX: Use hybrid approach (Visible IDs + Ref Data)
-                // 1. Use visibleTasks to determine WHICH tasks are relevant (filtering out hidden/completed/search-mismatched)
-                // 2. Use currentTasks(ref) to get the LATEST data (orders, dates) for those tasks
-
                 const getEffectiveDate = (t: TaskData) => {
-                    if (t.start_date) return new Date(t.start_date).toISOString().split('T')[0];
-                    if (t.due_date) return new Date(t.due_date).toISOString().split('T')[0];
-                    return new Date().toISOString().split('T')[0];
+                    const dateStr = t.start_date || t.due_date;
+                    if (dateStr) {
+                        const d = new Date(dateStr);
+                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    }
+                    const now = new Date();
+                    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 };
                 const movingTaskDate = getEffectiveDate(movingTask);
-
-                // Get set of visible IDs to exclude hidden tasks (completed, filtered by tag, etc.)
-                const visibleIds = new Set(visibleTasks.map(vt => vt.data.id));
-                // Ensure moving task is included even if UI is stale
-                visibleIds.add(movingTask.id);
-
-                siblings = currentTasks
-                    .filter(t =>
-                        visibleIds.has(t.id) &&
-                        getEffectiveDate(t) === movingTaskDate
-                    )
+                siblings = visibleTasks
+                    .filter(vt => getEffectiveDate(vt.data) === movingTaskDate)
+                    .map(vt => vt.data)
                     .sort((a, b) => getSortValue(a) - getSortValue(b));
             } else {
                 siblings = visibleTasks
@@ -2362,39 +2076,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 const targetOrder = getSortValue(siblings[jumpTargetIdx]);
                 const aboveOrder = aboveTargetIdx >= 0 ? getSortValue(siblings[aboveTargetIdx]) : targetOrder - 20000;
 
-                const gap = targetOrder - aboveOrder;
-                if (gap < 0.1) {
-                    // Gap too small - REBALANCE ALL SIBLINGS to restore clean 10000 spacing
-                    console.log('[Task Reorder] Gap too small, rebalancing list...');
-
-                    // 1. Get stationary tasks (siblings without moving tasks)
-                    const movingIdsSet = new Set(movingTasks.map(t => t.id));
-                    const stationary = siblings.filter(s => !movingIdsSet.has(s.id));
-
-                    // 2. Find insertion point
-                    // We want to insert movingTasks BEFORE the target task (jumpTargetIdx)
-                    const targetTask = siblings[jumpTargetIdx]; // This task is stationary
-                    let insertIndex = stationary.findIndex(s => s.id === targetTask.id);
-                    if (insertIndex === -1) insertIndex = 0; // Should not happen
-
-                    // 3. Construct new list
-                    const newList = [...stationary];
-                    newList.splice(insertIndex, 0, ...movingTasks);
-
-                    // 4. Batch update everything with clean orders
-                    const updates = newList.map((t, i) => ({
-                        id: t.id,
-                        view_orders: { ...(t.view_orders || {}), [orderKey]: 10000 * (i + 1) }
-                    }));
-                    applyBatchUpdates(updates);
-                } else {
-                    const step = (targetOrder - aboveOrder) / (movingTasks.length + 1);
-                    const updates = movingTasks.map((t, i) => ({
-                        id: t.id,
-                        view_orders: { ...(t.view_orders || {}), [orderKey]: aboveOrder + step * (i + 1) }
-                    }));
-                    applyBatchUpdates(updates);
-                }
+                const step = (targetOrder - aboveOrder) / (movingTasks.length + 1);
+                const updates = movingTasks.map((t, i) => ({
+                    id: t.id,
+                    view_orders: { ...(t.view_orders || {}), [orderKey]: aboveOrder + step * (i + 1) }
+                }));
+                applyBatchUpdates(updates);
             } else {
                 if (maxIdx === siblings.length - 1) {
                     // At the end of current date section in today view - try to move to next date
@@ -2450,36 +2137,12 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 const targetOrder = getSortValue(siblings[jumpTargetIdx]);
                 const belowOrder = belowTargetIdx < siblings.length ? getSortValue(siblings[belowTargetIdx]) : targetOrder + 20000;
 
-                const gap = belowOrder - targetOrder;
-                if (gap < 0.1) {
-                    // Gap too small - REBALANCE
-                    console.log('[Task Reorder] Gap too small (down), rebalancing list...');
-
-                    const movingIdsSet = new Set(movingTasks.map(t => t.id));
-                    const stationary = siblings.filter(s => !movingIdsSet.has(s.id));
-
-                    // We want to insert movingTasks AFTER the target task (jumpTargetIdx)
-                    const targetTask = siblings[jumpTargetIdx];
-                    let insertIndex = stationary.findIndex(s => s.id === targetTask.id);
-                    if (insertIndex === -1) insertIndex = stationary.length;
-
-                    // Insert after target
-                    const newList = [...stationary];
-                    newList.splice(insertIndex + 1, 0, ...movingTasks);
-
-                    const updates = newList.map((t, i) => ({
-                        id: t.id,
-                        view_orders: { ...(t.view_orders || {}), [orderKey]: 10000 * (i + 1) }
-                    }));
-                    applyBatchUpdates(updates);
-                } else {
-                    const step = (belowOrder - targetOrder) / (movingTasks.length + 1);
-                    const updates = movingTasks.map((t, i) => ({
-                        id: t.id,
-                        view_orders: { ...(t.view_orders || {}), [orderKey]: targetOrder + step * (i + 1) }
-                    }));
-                    applyBatchUpdates(updates);
-                }
+                const step = (belowOrder - targetOrder) / (movingTasks.length + 1);
+                const updates = movingTasks.map((t, i) => ({
+                    id: t.id,
+                    view_orders: { ...(t.view_orders || {}), [orderKey]: targetOrder + step * (i + 1) }
+                }));
+                applyBatchUpdates(updates);
             }
         }
         else if (direction === 'right') {
@@ -2666,72 +2329,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             const client = supabaseClient;
             await Promise.all(updates.map(u => client.from('tasks').update(u).eq('id', u.id)));
         }
-
-        // 3. Sync to Google Calendar (if start_date or is_all_day changed)
-        const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-        const tasksToSync = updates.filter(u => googleMap[u.id] && (u.start_date !== undefined || u.is_all_day !== undefined));
-
-        if (tasksToSync.length > 0) {
-            Promise.resolve(localStorage.getItem('google_access_token')).then(async (token) => {
-                if (!token) return;
-
-                await Promise.all(tasksToSync.map(async (u) => {
-                    const gInfo = googleMap[u.id];
-                    const task = newTasks.find(t => t.id === u.id);
-                    if (!task) return;
-
-                    const payload: any = {};
-                    const isAllDay = (u.is_all_day !== undefined) ? u.is_all_day : task.is_all_day;
-                    const dateVal = u.start_date || task.start_date;
-                    if (!dateVal) return;
-
-                    const d = new Date(dateVal);
-                    if (isNaN(d.getTime())) return;
-                    const dateStr = d.toLocaleDateString('en-CA');
-
-                    if (isAllDay) {
-                        payload.start = { date: dateStr };
-                        const nextDay = new Date(d);
-                        nextDay.setDate(nextDay.getDate() + 1);
-                        payload.end = { date: nextDay.toLocaleDateString('en-CA') };
-                    } else {
-                        const formatTime = (t: string) => t.length === 5 ? t + ':00' : t;
-                        const startTime = formatTime(u.start_time || task.start_time || '09:00:00');
-                        let endTime = task.end_time ? formatTime(task.end_time) : null;
-
-                        // Fallback end time logic (1 hour duration)
-                        if (!endTime) {
-                            const [h, m] = startTime.split(':').map(Number);
-                            endTime = `${String((h + 1) % 24).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-                        }
-
-                        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                        payload.start = { dateTime: `${dateStr}T${startTime}`, timeZone };
-                        payload.end = { dateTime: `${dateStr}T${endTime}`, timeZone };
-                    }
-
-                    try {
-                        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${gInfo.calId}/events/${gInfo.evtId}`, {
-                            method: 'PATCH',
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(payload)
-                        });
-                        if (!res.ok) {
-                            const errText = await res.text();
-                            console.error('Batch Google Sync Failed', errText);
-                            if (res.status === 401) {
-                                setToast({ msg: 'Google 同步失敗：授權已過期，請重新登入 Google', type: 'error' });
-                            }
-                        }
-                    } catch (e) {
-                        console.error("Google Batch Sync Error", e);
-                    }
-                }));
-            });
-        }
     };
 
     const addTask = async (data: any, _childIds: string[] = [], specificId?: string) => {
@@ -2774,68 +2371,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             return '';
         }
 
-        // Google Calendar Sync - create event if task has Google tag and date/time
-        const googleTag = tags.find(t => (newTask.tags || []).includes(t.id) && t.name.startsWith('Google:'));
-        const hasDateTime = newTask.start_date && (newTask.start_time || newTask.is_all_day);
-
-        if (googleTag && hasDateTime) {
-            const token = localStorage.getItem('google_access_token');
-            if (token) {
-                console.log('[Google Sync] New task has Google tag, creating event...');
-
-                const targetName = googleTag.name.replace('Google:', '').trim();
-
-                fetchCalendarList(token).then(async (calendars) => {
-                    const match = calendars.find(c => c.summary === targetName);
-                    const targetCalId = match ? match.id : 'primary';
-
-                    // Build event body
-                    const eventBody: any = {
-                        summary: newTask.title,
-                        description: newTask.description || ''
-                    };
-
-                    const dateStr = new Date(newTask.start_date).toLocaleDateString('en-CA');
-                    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-                    if (newTask.is_all_day) {
-                        eventBody.start = { date: dateStr };
-                        const startDate = new Date(dateStr);
-                        const endDate = new Date(startDate);
-                        endDate.setDate(endDate.getDate() + 1);
-                        eventBody.end = { date: endDate.toLocaleDateString('en-CA') };
-                    } else if (newTask.start_time) {
-                        const timeStr = newTask.start_time.length > 5 ? newTask.start_time.substring(0, 5) : newTask.start_time;
-                        const startDateTime = `${dateStr}T${timeStr}:00`;
-                        let endTimeStr = '';
-                        if (newTask.end_time) {
-                            endTimeStr = newTask.end_time.length > 5 ? newTask.end_time.substring(0, 5) : newTask.end_time;
-                        } else {
-                            const s = new Date(startDateTime); s.setHours(s.getHours() + 1);
-                            endTimeStr = `${String(s.getHours()).padStart(2, '0')}:${String(s.getMinutes()).padStart(2, '0')}`;
-                        }
-                        eventBody.start = { dateTime: startDateTime, timeZone };
-                        eventBody.end = { dateTime: `${dateStr}T${endTimeStr}:00`, timeZone };
-                    }
-
-                    if (eventBody.start) {
-                        try {
-                            const newEventId = await createGoogleEvent(token, targetCalId, eventBody);
-                            if (newEventId) {
-                                const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                googleMap[id] = { evtId: newEventId, calId: targetCalId };
-                                localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-                                console.log('[Google Sync] Created event for new task:', id, 'eventId:', newEventId);
-                                setToast({ msg: 'Google 行程已建立', type: 'info' });
-                            }
-                        } catch (e) {
-                            console.error('[Google Sync] Failed to create event for new task:', e);
-                        }
-                    }
-                }).catch(e => console.error('[Google Sync] Calendar list fetch failed:', e));
-            }
-        }
-
         setSyncStatus('synced');
         return id;
     };
@@ -2875,15 +2410,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     start_time: plan.start_time || null,
                     end_time: plan.end_time || null,
                     duration: plan.duration || null,
+                    // Basic color inheritance logic could be added here if needed, keeping simple for batch
                     color: plan.color,
                     tags: plan.tags || [],
                     status: plan.status || 'todo',
                     images: plan.images || [],
                     reviewed_at: null,
-                    reminder_minutes: plan.reminder_minutes || null,
-                    // Google Calendar linking fields (stored in localStorage, not DB)
-                    google_event_id: plan.google_event_id || null,
-                    google_calendar_id: plan.google_calendar_id || null
+                    reminder_minutes: plan.reminder_minutes || null
                 };
                 allTasksToInsert.push(newTask);
 
@@ -2910,32 +2443,18 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         const total = allTasksToInsert.length;
 
         try {
-            // Prepare Google Map for linking
-            const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-
             for (let i = 0; i < total; i += CHUNK_SIZE) {
                 const chunk = allTasksToInsert.slice(i, i + CHUNK_SIZE);
-
-                // Strip Google fields before DB insert (DB doesn't have these columns)
-                const cleanChunk = chunk.map(task => {
-                    const { google_event_id, google_calendar_id, ...cleanTask } = task;
-                    return cleanTask;
-                });
-
-                const { error } = await supabaseClient.from('tasks').insert(cleanChunk);
+                const { error } = await supabaseClient.from('tasks').insert(chunk);
 
                 if (error) {
                     console.error("Batch insert error in chunk " + i, error);
                     handleError(error);
+                    // Continue trying other chunks or break?
+                    // Breaking is safer to avoid partial state mismatch issues, but we already updated local state.
+                    // Ideally we'd rollback local state, but that's complex.
                     break;
                 }
-
-                // Update Google Map for successfully inserted tasks
-                chunk.forEach(task => {
-                    if (task.google_event_id && task.google_calendar_id) {
-                        googleMap[task.id] = { evtId: task.google_event_id, calId: task.google_calendar_id };
-                    }
-                });
 
                 processed += chunk.length;
                 if (onProgress) onProgress(processed, total);
@@ -2943,10 +2462,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 // Allow UI to breathe
                 await new Promise(resolve => setTimeout(resolve, 10));
             }
-
-            // Save updated Google Map
-            localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-
         } catch (e) {
             console.error("Batch process failed", e);
         }
@@ -3037,21 +2552,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return newIds;
     };
 
-    const updateTask = async (id: string, data: any, childIds: string[] = [], options?: { skipHistory?: boolean, skipGoogleLockCheck?: boolean }) => {
-        console.warn('[updateTask] CALLED:', id, 'status:', data.status);
+    const updateTask = async (id: string, data: any, childIds: string[] = [], options?: { skipHistory?: boolean }) => {
         if (!supabaseClient) return;
-
-        const original = tasks.find(t => t.id === id);
-
-        // Check if task is locked via Google tag (unless skipGoogleLockCheck is true - used by Google sync)
-        if (original && isTaskGoogleLocked(original) && !options?.skipGoogleLockCheck) {
-            console.warn('[updateTask] BLOCKED: Task is locked via Google tag:', id);
-            setToast({ msg: '此任務已被 Google 行事曆鎖定，無法編輯', type: 'error' });
-            return;
-        }
-
         setSyncStatus('syncing');
         markLocalUpdate(id);
+        const original = tasks.find(t => t.id === id);
 
         // Check if task will leave inbox view (view === 'inbox' is the inbox)
         if (view === 'inbox' && original && !original.parent_id) {
@@ -3170,10 +2675,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         });
         // Note: updated_at is tracked locally for sorting in 'recent' view
         // The database column will be added later via migration
-        // Strip Google fields preventing DB error
-        const { google_event_id, google_calendar_id, ...dbData } = data;
-
-        const { error } = await supabaseClient.from('tasks').update(dbData).eq('id', id);
+        const { error } = await supabaseClient.from('tasks').update(data).eq('id', id);
         if (error) {
             if (original) setTasks(prev => {
                 const next = prev.map(t => t.id === id ? original : t);
@@ -3181,470 +2683,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 return next;
             });
             handleError(error); return;
-        } else {
-            console.log('[updateTask] Database update successful, proceeding to Google sync check');
-            // Google Sync Logic (Map Based)
-            const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-
-            // If update contains Google IDs (from Import/Sidebar), update Map
-            if (google_event_id && google_calendar_id) {
-                googleMap[id] = { evtId: google_event_id, calId: google_calendar_id };
-                localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-            }
-
-            const gInfo = googleMap[id];
-
-            // Debug: Log Google sync check
-            if (data.status === 'deleted') {
-                console.log('[Google Sync Check] Task being deleted:', id, 'Has Google mapping:', !!gInfo);
-            }
-
-            if (original && gInfo && gInfo.evtId !== 'PENDING') {
-                const token = localStorage.getItem('google_access_token');
-                if (token) {
-                    const newData = { ...original, ...data };
-                    const payload: any = {};
-
-                    // Detect Google tag change (calendar switching)
-                    if (data.tags !== undefined) {
-                        const oldGoogleTag = tags.find(t => (original.tags || []).includes(t.id) && t.name.startsWith('Google:'));
-                        const newGoogleTag = tags.find(t => (data.tags || []).includes(t.id) && t.name.startsWith('Google:'));
-
-                        if (oldGoogleTag && newGoogleTag && oldGoogleTag.id !== newGoogleTag.id) {
-                            console.log('[Google Sync] Calendar tag changed from', oldGoogleTag.name, 'to', newGoogleTag.name);
-
-                            // Move event to new calendar
-                            const oldCalName = oldGoogleTag.name.replace('Google:', '').trim();
-                            const newCalName = newGoogleTag.name.replace('Google:', '').trim();
-
-                            fetchCalendarList(token).then(async (calendars) => {
-                                const newCal = calendars.find(c => c.summary === newCalName);
-                                if (newCal) {
-                                    try {
-                                        // Delete from old calendar
-                                        await deleteGoogleEvent(token, gInfo.calId, gInfo.evtId);
-                                        console.log('[Google Sync] Deleted event from old calendar:', gInfo.calId);
-
-                                        // Create in new calendar
-                                        const eventBody: any = {
-                                            summary: newData.title,
-                                            description: newData.description || ''
-                                        };
-
-                                        const dateStr = newData.start_date?.split('T')[0];
-                                        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-                                        if (newData.is_all_day && dateStr) {
-                                            eventBody.start = { date: dateStr };
-                                            const d = new Date(dateStr); d.setDate(d.getDate() + 1);
-                                            eventBody.end = { date: d.toISOString().split('T')[0] };
-                                        } else if (newData.start_time && dateStr) {
-                                            const timeStr = (newData.start_time || '').substring(0, 5);
-                                            eventBody.start = { dateTime: `${dateStr}T${timeStr}:00`, timeZone };
-                                            const endTimeStr = newData.end_time ? newData.end_time.substring(0, 5) :
-                                                (() => { const s = new Date(`${dateStr}T${timeStr}:00`); s.setHours(s.getHours() + 1); return `${String(s.getHours()).padStart(2, '0')}:${String(s.getMinutes()).padStart(2, '0')}`; })();
-                                            eventBody.end = { dateTime: `${dateStr}T${endTimeStr}:00`, timeZone };
-                                        }
-
-                                        if (eventBody.start) {
-                                            const newEventId = await createGoogleEvent(token, newCal.id, eventBody);
-                                            if (newEventId) {
-                                                // Update mapping
-                                                const updatedMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                                updatedMap[id] = { evtId: newEventId, calId: newCal.id };
-                                                localStorage.setItem('task_google_map', JSON.stringify(updatedMap));
-                                                console.log('[Google Sync] Moved event to new calendar:', newCal.id, 'new event ID:', newEventId);
-                                                setToast({ msg: `行程已移至 ${newCalName}`, type: 'info' });
-                                            }
-                                        }
-                                    } catch (e) {
-                                        console.error('[Google Sync] Calendar move failed:', e);
-                                        setToast({ msg: '日曆切換失敗', type: 'error' });
-                                    }
-                                }
-                            }).catch(e => console.error('[Google Sync] Failed to fetch calendars for move:', e));
-
-                            return; // Skip normal sync since we're moving the event
-                        }
-                    }
-
-                    // Skip sync for description-only updates (often triggered by autosave)
-                    // Only sync meaningful changes: title, status, or dates
-                    const hasMeaningfulChange =
-                        data.title !== undefined ||
-                        data.status !== undefined ||
-                        data.start_date !== undefined ||
-                        data.start_time !== undefined ||
-                        data.end_time !== undefined ||
-                        data.is_all_day !== undefined;
-
-                    if (!hasMeaningfulChange) {
-                        // Skip syncing non-essential changes
-                        return;
-                    }
-
-
-                    // Only include fields that ACTUALLY CHANGED
-                    if (data.title !== undefined && data.title !== original.title) {
-                        payload.summary = newData.title;
-                    }
-                    if (data.description !== undefined && data.description !== original.description) {
-                        payload.description = newData.description || '';
-                    }
-
-
-                    // Handle Soft Delete (Trash) -> Explicit Delete API
-                    if (data.status === 'deleted') {
-                        console.log('[Google Sync] Task moved to trash, calling DELETE API');
-                        deleteGoogleEvent(token, gInfo.calId, gInfo.evtId)
-                            .then(() => {
-                                setToast({ msg: 'Google 行事曆同步刪除成功', type: 'info' });
-                                // Optional: Keep in map if we want to support restore? 
-                                // Actually, if we delete from Google, we lose the link. 
-                                // If we want restore support, we should use 'cancelled' status but maybe that failed.
-                                // Let's try DELETE first as requested by user ("deleted from google").
-                                // If we delete, we should remove from map.
-                                const currentMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                delete currentMap[id];
-                                localStorage.setItem('task_google_map', JSON.stringify(currentMap));
-                            })
-                            .catch(e => console.error('Google Delete Error', e));
-                        return; // Stop processing payload
-                    } else if (data.status && original.status === 'deleted') {
-                        // Restore from trash - THIS WILL FAIL if we deleted the event above.
-                        // But since we can't easily "restore" a deleted google event without creating new,
-                        // we'll handle restore later if needed.
-                        payload.status = 'confirmed';
-                        console.log('[Google Sync] Task restored, setting event status to confirmed');
-                        // Restore from trash
-                        payload.status = 'confirmed';
-                        console.log('[Google Sync] Task restored, setting event status to confirmed');
-                    }
-
-                    try {
-                        // Helper to normalize date strings for comparison (extract YYYY-MM-DD)
-                        const normalizeDate = (d: any): string | null => {
-                            if (!d) return null;
-                            if (typeof d === 'string') {
-                                const match = d.match(/^(\d{4}-\d{2}-\d{2})/);
-                                return match ? match[1] : null;
-                            }
-                            return null;
-                        };
-
-                        // Helper to normalize time strings for comparison (extract HH:MM)
-                        const normalizeTimeForCompare = (t: any): string | null => {
-                            if (!t) return null;
-                            if (typeof t === 'string') {
-                                const match = t.match(/^(\d{1,2}):(\d{2})/);
-                                if (match) {
-                                    return `${match[1].padStart(2, '0')}:${match[2]}`;
-                                }
-                            }
-                            return null;
-                        };
-
-                        // Compare normalized dates and times
-                        const dateFieldsChanged =
-                            (data.start_date !== undefined && normalizeDate(data.start_date) !== normalizeDate(original.start_date)) ||
-                            (data.start_time !== undefined && normalizeTimeForCompare(data.start_time) !== normalizeTimeForCompare(original.start_time)) ||
-                            (data.end_time !== undefined && normalizeTimeForCompare(data.end_time) !== normalizeTimeForCompare(original.end_time)) ||
-                            (data.is_all_day !== undefined && data.is_all_day !== original.is_all_day);
-
-                        const shouldUpdateDates = dateFieldsChanged && newData.start_date;
-
-                        if (shouldUpdateDates) {
-                            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                            const normalizedStartDate = normalizeDate(newData.start_date);
-
-                            // Helper to normalize time strings (ensure HH:MM:SS format)
-                            const normalizeTime = (t: any): string | null => {
-                                if (!t) return null;
-                                if (typeof t === 'string') {
-                                    // Handle various formats: "09:00", "9:00", "09:00:00"
-                                    const match = t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-                                    if (match) {
-                                        const hours = match[1].padStart(2, '0');
-                                        const minutes = match[2];
-                                        const seconds = match[3] || '00';
-                                        return `${hours}:${minutes}:${seconds}`;
-                                    }
-                                }
-                                return null;
-                            };
-
-                            if (newData.is_all_day && normalizedStartDate) {
-                                payload.start = { date: normalizedStartDate };
-                                const d = new Date(normalizedStartDate);
-                                d.setDate(d.getDate() + 1);
-                                const nextDay = d.toISOString().split('T')[0];
-                                payload.end = { date: nextDay };
-                            } else if (normalizedStartDate && newData.start_time) {
-                                const normStartTime = normalizeTime(newData.start_time);
-                                if (normStartTime) {
-                                    // Format as local time string (YYYY-MM-DDTHH:MM:SS) instead of UTC
-                                    // Google Calendar expects local time when timeZone is specified
-                                    const startDateTimeStr = `${normalizedStartDate}T${normStartTime}`;
-                                    payload.start = { dateTime: startDateTimeStr, timeZone };
-
-                                    let endDateTimeStr = '';
-                                    const normEndTime = normalizeTime(newData.end_time);
-                                    if (normEndTime) {
-                                        endDateTimeStr = `${normalizedStartDate}T${normEndTime}`;
-                                    } else {
-                                        // Default 1 hour duration
-                                        const startDT = new Date(startDateTimeStr);
-                                        const endDT = new Date(startDT.getTime() + 60 * 60 * 1000);
-                                        const endHours = String(endDT.getHours()).padStart(2, '0');
-                                        const endMins = String(endDT.getMinutes()).padStart(2, '0');
-                                        endDateTimeStr = `${normalizedStartDate}T${endHours}:${endMins}:00`;
-                                    }
-                                    payload.end = { dateTime: endDateTimeStr, timeZone };
-                                }
-                            }
-                        }
-
-                        // Final validation: ensure start/end are both present and valid, or remove both
-                        if (payload.start || payload.end) {
-                            const hasValidStart = payload.start && (payload.start.date || payload.start.dateTime);
-                            const hasValidEnd = payload.end && (payload.end.date || payload.end.dateTime);
-
-                            if (!hasValidStart || !hasValidEnd) {
-                                // Remove incomplete date objects
-                                delete payload.start;
-                                delete payload.end;
-                                console.log('[Google Sync] Removed invalid date objects from payload');
-                            }
-                        }
-
-                        // Only call API if there's something meaningful to update
-                        const hasValidPayload = Object.keys(payload).length > 0 &&
-                            (payload.summary || payload.status || (payload.start && payload.end));
-
-                        // Detect if this is an event TYPE change (all-day <-> timed)
-                        // Google Calendar API cannot change event type via PATCH, must delete+create
-                        const isTypeChange = data.is_all_day !== undefined && original.is_all_day !== data.is_all_day;
-
-                        if (isTypeChange && payload.start && payload.end) {
-                            // Direct delete+create for event type changes
-                            console.log('[Google Sync] Event TYPE change detected (is_all_day:', original.is_all_day, '->', data.is_all_day, '), using delete+create');
-
-                            // Block syncGoogleToApp during recreation
-                            isRecreatingEventRef.current = true;
-                            // Track the old event ID so sync ignores its 'cancelled' status
-                            const oldEventId = gInfo.evtId;
-                            replacedEventIdsRef.current.add(oldEventId);
-
-                            (async () => {
-                                try {
-                                    // Delete old event
-                                    await deleteGoogleEvent(token, gInfo.calId, oldEventId);
-
-                                    // Create new event with full data
-                                    const newEventData = {
-                                        summary: newData.title,
-                                        description: newData.description || '',
-                                        start: payload.start,
-                                        end: payload.end
-                                    };
-
-                                    const newEventId = await createGoogleEvent(token, gInfo.calId, newEventData);
-
-                                    // Also add the NEW event ID to skip list
-                                    replacedEventIdsRef.current.add(newEventId);
-
-                                    // Update map with new event ID
-                                    const updatedMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                    updatedMap[id] = { evtId: newEventId, calId: gInfo.calId };
-                                    localStorage.setItem('task_google_map', JSON.stringify(updatedMap));
-
-                                    setToast({ msg: 'Google 行事曆已重建同步', type: 'info' });
-                                    console.log('[Google Sync] Event type change completed with new ID:', newEventId);
-                                } catch (recreateError) {
-                                    console.error('Failed to recreate event:', recreateError);
-                                    setToast({ msg: `Google 同步失敗: 無法重建事件`, type: 'error' });
-                                } finally {
-                                    isRecreatingEventRef.current = false;
-                                }
-                            })();
-                        } else if (hasValidPayload) {
-                            // Normal PATCH for non-type-changing updates
-                            console.log('[Google Sync] Updating event:', gInfo.evtId);
-                            console.log('[Google Sync] Full payload:', JSON.stringify(payload, null, 2));
-                            updateGoogleEvent(token, gInfo.calId, gInfo.evtId, payload)
-                                .then(() => setToast({ msg: 'Google 行事曆同步成功', type: 'info' }))
-                                .catch(async (e) => {
-                                    console.error('Google Update Error', e, 'Payload:', payload);
-                                    const msg = e.message || '';
-                                    if (!msg.includes('conflict')) {
-                                        setToast({ msg: `Google 同步失敗: ${e.message}`, type: 'error' });
-                                    }
-                                });
-                        }
-                    } catch (e) { console.error('Date parsing error', e); }
-                }
-            }
         }
-        // Google Restore: Sync back to Google if restored from trash and event is missing
-        const currentMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-        const existingGInfo = currentMap[id];
-
-        if (original && !existingGInfo && original.status === 'deleted' && data.status && data.status !== 'deleted') {
-            const token = localStorage.getItem('google_access_token');
-            const currentTask = { ...original, ...data };
-
-            // Check if task has valid time for Google Calendar
-            const hasTime = currentTask.start_date && (currentTask.start_time || currentTask.is_all_day);
-
-            if (token && hasTime) {
-                console.log('[Google Sync] Task restored from trash. Recreating Google Event...');
-                setToast({ msg: '正在還原 Google 行程...', type: 'info' });
-
-                const eventBody: any = {
-                    summary: currentTask.title,
-                    description: currentTask.description || ''
-                };
-
-                const dateStr = currentTask.start_date.split('T')[0];
-
-                if (currentTask.is_all_day) {
-                    eventBody.start = { date: dateStr };
-                    const d = new Date(dateStr); d.setDate(d.getDate() + 1);
-                    eventBody.end = { date: d.toISOString().split('T')[0] };
-                } else if (currentTask.start_time) {
-                    const timeStr = currentTask.start_time.length > 5 ? currentTask.start_time.substring(0, 5) : currentTask.start_time;
-                    const startDateTime = `${dateStr}T${timeStr}:00`;
-
-                    let endTimeStr = '';
-                    if (currentTask.end_time) {
-                        endTimeStr = currentTask.end_time.length > 5 ? currentTask.end_time.substring(0, 5) : currentTask.end_time;
-                    } else {
-                        // +1 hour default
-                        const s = new Date(startDateTime);
-                        s.setHours(s.getHours() + 1);
-                        const h = String(s.getHours()).padStart(2, '0');
-                        const m = String(s.getMinutes()).padStart(2, '0');
-                        endTimeStr = `${h}:${m}`;
-                    }
-                    const endDateTime = `${dateStr}T${endTimeStr}:00`;
-
-                    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                    eventBody.start = { dateTime: startDateTime, timeZone };
-                    eventBody.end = { dateTime: endDateTime, timeZone };
-                }
-
-                if (eventBody.start) {
-                    createGoogleEvent(token, 'primary', eventBody)
-                        .then((newId) => {
-                            if (newId) {
-                                const newMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                newMap[id] = { evtId: newId, calId: 'primary' };
-                                localStorage.setItem('task_google_map', JSON.stringify(newMap));
-                                setToast({ msg: 'Google 行程已還原', type: 'info' });
-                            }
-                        })
-                        .catch(e => console.error('Restore Google Error:', e));
-                }
-            }
-        }
-
-        // 3. Create New Sync (Tag-based)
-        if (original && !existingGInfo) {
-            const currentTask = { ...original, ...data, completed_at: null };
-            // Check for Google Tag
-            // data.tags might be the new list of tags. If not present in data, use original.
-            // Note: data.tags is usually the FULL list of tags when updated.
-            const combinedTags = data.tags !== undefined ? data.tags : (original.tags || []);
-
-            const googleTag = tags.find(t => combinedTags.includes(t.id) && t.name.startsWith('Google:'));
-
-            // Only sync if Google Tag present AND has time
-            const hasTime = currentTask.start_date && (currentTask.start_time || currentTask.is_all_day);
-
-            if (googleTag && hasTime && currentTask.status !== 'deleted') {
-                const token = localStorage.getItem('google_access_token');
-
-                if (token) {
-                    const tempMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                    if (tempMap[id]?.evtId === 'PENDING') return;
-                    tempMap[id] = { evtId: 'PENDING', calId: 'primary' };
-                    localStorage.setItem('task_google_map', JSON.stringify(tempMap));
-
-                    console.log('[Google Sync] Found Google Tag:', googleTag.name, 'Creating event...');
-                    setToast({ msg: '正在同步至 Google 行事曆...', type: 'info' });
-
-                    const targetName = googleTag.name.replace('Google:', '').trim();
-                    let targetCalId = 'primary'; // Default
-
-                    // Fetch calendars to resolve name
-                    fetchCalendarList(token).then(async (calendars) => {
-                        const match = calendars.find(c => c.summary === targetName);
-                        if (match) {
-                            targetCalId = match.id;
-                            console.log('[Google Sync] Resolved Calendar ID:', targetCalId);
-                        } else {
-                            console.warn('[Google Sync] Calendar not found:', targetName, 'Using primary.');
-                        }
-
-                        // Create Payload
-                        const eventBody: any = {
-                            summary: currentTask.title,
-                            description: currentTask.description || ''
-                        };
-                        // Ensure date is Local YYYY-MM-DD
-                        const dateStr = new Date(currentTask.start_date).toLocaleDateString('en-CA');
-                        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-                        if (currentTask.is_all_day) {
-                            eventBody.start = { date: dateStr };
-                            // Add 1 day for end date (exclusive)
-                            const startDate = new Date(dateStr);
-                            const endDate = new Date(startDate);
-                            endDate.setDate(endDate.getDate() + 1);
-                            eventBody.end = { date: endDate.toLocaleDateString('en-CA') };
-                        } else if (currentTask.start_time) {
-                            const timeStr = currentTask.start_time.length > 5 ? currentTask.start_time.substring(0, 5) : currentTask.start_time;
-                            const startDateTime = `${dateStr}T${timeStr}:00`;
-                            // End time logic
-                            let endTimeStr = '';
-                            if (currentTask.end_time) {
-                                endTimeStr = currentTask.end_time.length > 5 ? currentTask.end_time.substring(0, 5) : currentTask.end_time;
-                            } else {
-                                const s = new Date(startDateTime); s.setHours(s.getHours() + 1);
-                                const h = String(s.getHours()).padStart(2, '0');
-                                const m = String(s.getMinutes()).padStart(2, '0');
-                                endTimeStr = `${h}:${m}`;
-                            }
-                            const endDateTime = `${dateStr}T${endTimeStr}:00`;
-                            eventBody.start = { dateTime: startDateTime, timeZone };
-                            eventBody.end = { dateTime: endDateTime, timeZone };
-                        }
-
-                        if (eventBody.start) {
-                            try {
-                                const newId = await createGoogleEvent(token, targetCalId, eventBody);
-                                if (newId) {
-                                    const newMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                    newMap[id] = { evtId: newId, calId: targetCalId };
-                                    localStorage.setItem('task_google_map', JSON.stringify(newMap));
-                                    setToast({ msg: 'Google 行程已建立', type: 'info' });
-                                }
-                            } catch (e) {
-                                console.error('[Google Sync] Creation failed', e);
-                                const errMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                if (errMap[id]?.evtId === 'PENDING') { delete errMap[id]; localStorage.setItem('task_google_map', JSON.stringify(errMap)); }
-                                setToast({ msg: 'Google 同步失敗', type: 'error' });
-                            }
-                        }
-                    }).catch(err => {
-                        console.error('Fetch calendars failed', err);
-                        const errMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                        if (errMap[id]?.evtId === 'PENDING') { delete errMap[id]; localStorage.setItem('task_google_map', JSON.stringify(errMap)); }
-                    });
-                }
-            }
-        }
-
         // Also update subtasks in database
         if (subtaskIds.length > 0) {
             await supabaseClient.from('tasks').update({ completed_at: data.completed_at, status: 'completed' }).in('id', subtaskIds);
@@ -3706,31 +2745,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     // Batch update tasks with unified undo support
-    const batchUpdateTasks = async (updates: { id: string, data: any }[], options?: { skipHistory?: boolean }) => {
+    const batchUpdateTasks = async (updates: { id: string, data: any }[]) => {
         if (!supabaseClient || updates.length === 0) return;
-
-        // Filter out tasks that are locked via Google tag
-        const lockedUpdates = updates.filter(({ id }) => {
-            const task = tasksRef.current.find(t => t.id === id);
-            return task && isTaskGoogleLocked(task);
-        });
-
-        if (lockedUpdates.length > 0) {
-            console.warn('[batchUpdateTasks] BLOCKED:', lockedUpdates.length, 'tasks are locked via Google tag');
-            setToast({ msg: `${lockedUpdates.length} 個任務已被 Google 行事曆鎖定，無法編輯`, type: 'error' });
-        }
-
-        // Only process unlocked tasks
-        const unlockedUpdates = updates.filter(({ id }) => {
-            const task = tasksRef.current.find(t => t.id === id);
-            return !task || !isTaskGoogleLocked(task);
-        });
-
-        if (unlockedUpdates.length === 0) return;
-
-        // Replace updates with unlockedUpdates for the rest of the function
-        const processUpdates = unlockedUpdates;
-
         setSyncStatus('syncing');
 
         // Check if any tasks will leave inbox view (view === 'inbox' is the inbox)
@@ -3744,7 +2760,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             const journalTag = tags.find(t => t.name.trim().toLowerCase() === 'journal');
             const somedayTag = tags.find(t => t.name.trim().toLowerCase() === 'someday');
 
-            processUpdates.forEach(({ id, data }) => {
+            updates.forEach(({ id, data }) => {
                 const original = tasksRef.current.find(t => t.id === id);
                 if (original && !original.parent_id) {
                     const newTags = data.tags || original.tags || [];
@@ -3781,283 +2797,9 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             });
         }
 
-        // 1. Update Map and Strip Fields
-        const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-        const cleanUpdates = processUpdates.map(update => {
-            const { google_event_id, google_calendar_id, ...cleanData } = update.data;
-
-            // Update Map if Google IDs are present
-            if (google_event_id && google_calendar_id) {
-                googleMap[update.id] = { evtId: google_event_id, calId: google_calendar_id };
-            }
-
-            return { id: update.id, data: cleanData };
-        });
-        localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-
-        // 1b. Check for Google Restorations (Undo Delete)
-        // Since Undo often uses batchUpdateTasks, we need to handle restoration here too
-        const token = localStorage.getItem('google_access_token');
-        const restorationPromises: Promise<any>[] = [];
-        let hasRestorations = false;
-
-        if (token) {
-            updates.forEach(({ id, data }) => {
-                const original = tasksRef.current.find(t => t.id === id);
-                // If restore from deleted status AND no google mapping exists in current map
-                if (original && original.status === 'deleted' && data.status && data.status !== 'deleted' && !googleMap[id]) {
-                    const currentTask = { ...original, ...data };
-                    const hasTime = currentTask.start_date && (currentTask.start_time || currentTask.is_all_day);
-
-                    if (hasTime) {
-                        hasRestorations = true;
-                        restorationPromises.push((async () => {
-                            try {
-                                console.log('[batchUpdateTasks] Restoring Google Event for:', id);
-                                const eventBody: any = {
-                                    summary: currentTask.title,
-                                    description: currentTask.description || ''
-                                };
-                                const dateStr = currentTask.start_date.split('T')[0];
-
-                                if (currentTask.is_all_day) {
-                                    eventBody.start = { date: dateStr };
-                                    const d = new Date(dateStr); d.setDate(d.getDate() + 1);
-                                    eventBody.end = { date: d.toISOString().split('T')[0] };
-                                } else if (currentTask.start_time) {
-                                    const timeStr = currentTask.start_time.length > 5 ? currentTask.start_time.substring(0, 5) : currentTask.start_time;
-                                    const startDateTime = `${dateStr}T${timeStr}:00`;
-
-                                    let endTimeStr = '';
-                                    if (currentTask.end_time) {
-                                        endTimeStr = currentTask.end_time.length > 5 ? currentTask.end_time.substring(0, 5) : currentTask.end_time;
-                                    } else {
-                                        const s = new Date(startDateTime); s.setHours(s.getHours() + 1);
-                                        const h = String(s.getHours()).padStart(2, '0');
-                                        const m = String(s.getMinutes()).padStart(2, '0');
-                                        endTimeStr = `${h}:${m}`;
-                                    }
-                                    const endDateTime = `${dateStr}T${endTimeStr}:00`;
-                                    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                                    eventBody.start = { dateTime: startDateTime, timeZone };
-                                    eventBody.end = { dateTime: endDateTime, timeZone };
-                                }
-
-                                if (eventBody.start) {
-                                    const newId = await createGoogleEvent(token, 'primary', eventBody);
-                                    if (newId) {
-                                        googleMap[id] = { evtId: newId, calId: 'primary' };
-                                    }
-                                }
-                            } catch (e) {
-                                console.error('[batchUpdateTasks] Restore Error', e);
-                            }
-                        })());
-                    }
-                }
-            });
-        }
-
-        if (hasRestorations) {
-            setToast({ msg: '正在還原同步 Google 行程...', type: 'info' });
-            await Promise.all(restorationPromises);
-            localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-        }
-
-        // 1c. Google Sync (Updates & Creations for Batch Operations)
-        const syncPromises: Promise<any>[] = [];
-        let hasSyncUpdates = false;
-
-        if (token) {
-            updates.forEach(({ id, data }) => {
-                const original = tasksRef.current.find(t => t.id === id);
-                // Skip if not found, or if it's a delete operation (handled elsewhere)
-                // Also skip if we just restored it in step 1b (hasRestorations check is global, but detailed check hard. 
-                // Ideally 1b updates map, so we can check map. But map update is async/later? 
-                // Actually 1b awaits promises. So googleMap is updated!
-                // Wait, 1b updates `googleMap` object in memory? Step 13098: `googleMap[id] = ...` inside promise.
-                // But 1b `await Promise.all` finishes before we reach here.
-                // So gInfo should be fresh if restored.
-
-                if (!original || data.status === 'deleted') return;
-                // Skip if restored (already handled in 1b). 
-                // How to detect? 1b checks: original.status === 'deleted' && data.status !== 'deleted'.
-                const isRestore = original.status === 'deleted' && data.status && data.status !== 'deleted';
-                if (isRestore) return; // Already handled.
-
-                const currentTask = { ...original, ...data };
-                const gInfo = googleMap[id];
-
-                // A. Update Existing Google Event
-                if (gInfo) {
-                    const payload: any = {};
-                    // Always sync potentially changed fields
-                    if (data.title) payload.summary = data.title;
-                    if (data.description !== undefined) payload.description = data.description;
-
-                    // Date Sync Logic (Robust)
-                    const dateChanged = data.start_date || data.start_time || data.end_time || data.is_all_day !== undefined;
-                    if (dateChanged) {
-                        const dateStr = new Date(currentTask.start_date).toLocaleDateString('en-CA');
-                        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-                        console.log('[Batch Sync] Date change detected:', {
-                            taskId: id,
-                            is_all_day: currentTask.is_all_day,
-                            start_time: currentTask.start_time,
-                            end_time: currentTask.end_time,
-                            dateStr
-                        });
-
-                        if (currentTask.is_all_day) {
-                            payload.start = { date: dateStr };
-                            const d = new Date(dateStr);
-                            d.setDate(d.getDate() + 1);
-                            payload.end = { date: d.toLocaleDateString('en-CA') };
-                        } else {
-                            // Timed event - ensure we have times (default to 09:00-10:00 if missing)
-                            const startTime = currentTask.start_time || '09:00';
-                            const endTime = currentTask.end_time || '10:00';
-                            const timeStr = startTime.length > 5 ? startTime.substring(0, 5) : startTime;
-                            const startDateTime = `${dateStr}T${timeStr}:00`;
-                            const endTimeStr = endTime.length > 5 ? endTime.substring(0, 5) : endTime;
-                            payload.end = { dateTime: `${dateStr}T${endTimeStr}:00`, timeZone };
-                            payload.start = { dateTime: startDateTime, timeZone };
-                        }
-
-                        console.log('[Batch Sync] Payload constructed:', JSON.stringify(payload, null, 2));
-                    }
-
-                    // Detect if this is an event TYPE change (all-day <-> timed)
-                    // Google Calendar API cannot change event type via PATCH, must delete+create
-                    const isTypeChange = data.is_all_day !== undefined && original.is_all_day !== data.is_all_day;
-
-                    if (isTypeChange && payload.start && payload.end) {
-                        // Direct delete+create for event type changes
-                        console.log('[Batch Sync] Event TYPE change detected (is_all_day:', original.is_all_day, '->', data.is_all_day, '), using delete+create');
-                        hasSyncUpdates = true;
-
-                        // Block syncGoogleToApp during recreation to prevent race conditions
-                        isRecreatingEventRef.current = true;
-                        // Track the old event ID so sync ignores its 'cancelled' status
-                        const oldEventId = gInfo.evtId;
-                        replacedEventIdsRef.current.add(oldEventId);
-                        console.log('[Batch Sync] Marked old event as replaced:', oldEventId);
-
-                        syncPromises.push((async () => {
-                            try {
-                                // Delete old event first
-                                await deleteGoogleEvent(token, gInfo.calId, oldEventId);
-                                console.log('[Batch Sync] Old event deleted');
-
-                                // Create new event with correct type
-                                const newEventData = {
-                                    summary: currentTask.title,
-                                    description: currentTask.description || '',
-                                    start: payload.start,
-                                    end: payload.end
-                                };
-
-                                const newEventId = await createGoogleEvent(token, gInfo.calId, newEventData);
-                                console.log('[Batch Sync] New event created:', newEventId);
-
-                                // Also add the NEW event ID to skip list so sync doesn't create a duplicate task
-                                replacedEventIdsRef.current.add(newEventId);
-                                console.log('[Batch Sync] Marked new event to skip in sync:', newEventId);
-
-                                // Update the mapping to point to new event
-                                const updatedMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                updatedMap[id] = { evtId: newEventId, calId: gInfo.calId };
-                                localStorage.setItem('task_google_map', JSON.stringify(updatedMap));
-                                // Also update in-memory map
-                                googleMap[id] = { evtId: newEventId, calId: gInfo.calId };
-
-                                console.log('[Batch Sync] Event type change completed successfully');
-                            } catch (recreateError: any) {
-                                console.error('[Batch Sync] Failed to recreate event:', recreateError.message);
-                            } finally {
-                                // Always unblock sync
-                                isRecreatingEventRef.current = false;
-                            }
-                        })());
-                    } else if (Object.keys(payload).length > 0) {
-                        // Normal PATCH for non-type-changing updates
-                        hasSyncUpdates = true;
-                        syncPromises.push(
-                            updateGoogleEvent(token, gInfo.calId, gInfo.evtId, payload)
-                                .then(() => console.log('[Batch Sync] Update success for task:', id))
-                                .catch(async (e) => {
-                                    const msg = e.message || '';
-                                    console.error('[Batch Sync] Update failed for task:', id, 'Error:', msg);
-                                })
-                        );
-                    }
-                }
-                // B. Create New (Tag-based Sync)
-                else {
-                    const combinedTags = data.tags !== undefined ? data.tags : (original.tags || []);
-                    const googleTag = tags.find(t => combinedTags.includes(t.id) && t.name.startsWith('Google:'));
-                    const hasTime = currentTask.start_date && (currentTask.start_time || currentTask.is_all_day);
-
-                    if (googleTag && hasTime) {
-                        hasSyncUpdates = true;
-                        syncPromises.push((async () => {
-                            try {
-                                const targetName = googleTag.name.replace('Google:', '').trim();
-                                let targetCalId = 'primary';
-                                const calendars = await fetchCalendarList(token);
-                                const match = calendars.find(c => c.summary === targetName);
-                                if (match) targetCalId = match.id;
-
-                                const eventBody: any = {
-                                    summary: currentTask.title,
-                                    description: currentTask.description || ''
-                                };
-                                const dateStr = new Date(currentTask.start_date).toLocaleDateString('en-CA');
-                                const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-                                if (currentTask.is_all_day) {
-                                    eventBody.start = { date: dateStr };
-                                    const d = new Date(dateStr); d.setDate(d.getDate() + 1);
-                                    eventBody.end = { date: d.toLocaleDateString('en-CA') };
-                                } else if (currentTask.start_time) {
-                                    const timeStr = currentTask.start_time.length > 5 ? currentTask.start_time.substring(0, 5) : currentTask.start_time;
-                                    const startDateTime = `${dateStr}T${timeStr}:00`;
-                                    let endTimeStr = '';
-                                    if (currentTask.end_time) {
-                                        endTimeStr = currentTask.end_time.length > 5 ? currentTask.end_time.substring(0, 5) : currentTask.end_time;
-                                    } else {
-                                        const s = new Date(startDateTime); s.setHours(s.getHours() + 1);
-                                        const h = String(s.getHours()).padStart(2, '0');
-                                        const m = String(s.getMinutes()).padStart(2, '0');
-                                        endTimeStr = `${h}:${m}`;
-                                    }
-                                    eventBody.start = { dateTime: startDateTime, timeZone };
-                                    eventBody.end = { dateTime: `${dateStr}T${endTimeStr}:00`, timeZone };
-                                }
-
-                                if (eventBody.start) {
-                                    const newId = await createGoogleEvent(token, targetCalId, eventBody);
-                                    if (newId) {
-                                        googleMap[id] = { evtId: newId, calId: targetCalId };
-                                    }
-                                }
-                            } catch (e) { console.error('Batch Create Fail', e); }
-                        })());
-                    }
-                }
-            });
-        }
-
-        if (hasSyncUpdates) {
-            setToast({ msg: '正在批量同步 Google...', type: 'info' });
-            await Promise.all(syncPromises);
-            localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-        }
-
-        // 2. Build History
+        // Build batch update records for history
         const batchRecords: BatchUpdateRecord[] = [];
-        cleanUpdates.forEach(({ id, data }) => {
+        updates.forEach(({ id, data }) => {
             markLocalUpdate(id);
             const original = tasksRef.current.find(t => t.id === id);
             if (original) {
@@ -4069,23 +2811,24 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             }
         });
 
-        if (batchRecords.length > 0 && !options?.skipHistory) {
+        // Push single batch history record
+        if (batchRecords.length > 0) {
             pushToHistory({ type: 'BATCH_UPDATE', payload: batchRecords });
         }
 
-        // 3. Update Local State
+        // Update local state
         const now = new Date().toISOString();
         setTasks(prev => {
             const next = prev.map(t => {
-                const update = cleanUpdates.find(u => u.id === t.id);
+                const update = updates.find(u => u.id === t.id);
                 return update ? { ...t, ...update.data, updated_at: now } : t;
             });
             tasksRef.current = next;
             return next;
         });
 
-        // 4. Update Database
-        await Promise.all(cleanUpdates.map(({ id, data }) =>
+        // Update database (updated_at is tracked locally only for now)
+        await Promise.all(updates.map(({ id, data }) =>
             supabaseClient!.from('tasks').update(data).eq('id', id)
         ));
 
@@ -4094,77 +2837,18 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
 
     const batchDeleteTasks = async (ids: string[], permanent: boolean = false) => {
         if (ids.length === 0) return;
-
-        // Filter out tasks that are locked via Google tag
-        const lockedIds = ids.filter(id => {
-            const task = tasksRef.current.find(t => t.id === id);
-            return task && isTaskGoogleLocked(task);
-        });
-
-        if (lockedIds.length > 0) {
-            console.warn('[batchDeleteTasks] BLOCKED:', lockedIds.length, 'tasks are locked via Google tag');
-            setToast({ msg: `${lockedIds.length} 個任務已被 Google 行事曆鎖定，無法刪除`, type: 'error' });
-        }
-
-        // Only process unlocked tasks
-        const unlockedIds = ids.filter(id => {
-            const task = tasksRef.current.find(t => t.id === id);
-            return !task || !isTaskGoogleLocked(task);
-        });
-
-        if (unlockedIds.length === 0) return;
-
-        // Use unlockedIds for the rest of the function
-        const processIds = unlockedIds;
-
         setSyncStatus('syncing');
 
         if (!permanent) {
             // Soft delete: set status to 'deleted'
-
-            // --- Google Calendar Sync: Delete Events ---
-            const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-            const token = localStorage.getItem('google_access_token');
-            let deletedGoogleCount = 0;
-
-            if (token) {
-                // Execute deletes in parallel but don't block UI too long
-                const googleDeletes = processIds.map(async (id) => {
-                    const gInfo = googleMap[id];
-                    if (gInfo) {
-                        try {
-                            console.log('[batchDeleteTasks] Deleting Google Event:', gInfo.evtId);
-                            await deleteGoogleEvent(token, gInfo.calId, gInfo.evtId);
-                            delete googleMap[id]; // Update map in memory
-                            deletedGoogleCount++;
-                        } catch (e) {
-                            console.error('[batchDeleteTasks] Google Delete Error:', e);
-                        }
-                    }
-                });
-
-                // Wait for all google deletes to attempt
-                await Promise.all(googleDeletes);
-
-                if (deletedGoogleCount > 0) {
-                    localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-                }
-            }
-            // -------------------------------------------
-
-            const updates = processIds.map(id => ({ id, data: { status: 'deleted' } }));
+            const updates = ids.map(id => ({ id, data: { status: 'deleted' } }));
             await batchUpdateTasks(updates);
-
-            const msg = deletedGoogleCount > 0
-                ? `已將 ${processIds.length} 個任務移至垃圾桶 (含 ${deletedGoogleCount} 個 Google 行程)`
-                : `已將 ${processIds.length} 個任務移至垃圾桶`;
-
-            setToast({ msg, undo: () => undo() });
+            setToast({ msg: `已將 ${ids.length} 個任務移至垃圾桶`, undo: () => undo() });
             return;
         }
 
         // Permanent Delete
-        const tasksToDelete = tasksRef.current.filter(t => processIds.includes(t.id));
+        const tasksToDelete = tasksRef.current.filter(t => ids.includes(t.id));
         if (tasksToDelete.length === 0) {
             setSyncStatus('synced');
             return;
@@ -4248,26 +2932,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                 created_at: t.created_at || new Date().toISOString()
             }));
 
-            const cleanChunk = chunk.map(({ google_event_id, google_calendar_id, ...rest }) => rest);
             const { data, error } = await supabaseClient
                 .from('tasks')
-                .insert(cleanChunk)
+                .insert(chunk)
                 .select();
 
             if (error) {
                 console.error("Batch Add Error:", error);
                 setToast({ msg: `批次新增失敗: ${error.message}`, type: 'error' });
             } else if (data) {
-                // Update Google Map
-                const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                data.forEach((task: any, index: number) => {
-                    const originalPlan = chunk[index];
-                    if (originalPlan.google_event_id) {
-                        googleMap[task.id] = { evtId: originalPlan.google_event_id, calId: originalPlan.google_calendar_id };
-                    }
-                });
-                localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-
                 insertedTasks.push(...(data as TaskData[]));
             }
         }
@@ -4282,52 +2955,15 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const deleteTask = async (id: string, permanent: boolean = false) => {
-        console.warn('[deleteTask] CALLED! id:', id, 'permanent:', permanent);
-
-        const old = tasks.find(t => t.id === id);
-
-        // Check if task is locked via Google tag
-        if (old && isTaskGoogleLocked(old)) {
-            console.warn('[deleteTask] BLOCKED: Task is locked via Google tag:', id);
-            setToast({ msg: '此任務已被 Google 行事曆鎖定，無法刪除', type: 'error' });
-            return;
-        }
-
         setSyncStatus('syncing');
         markLocalUpdate(id);
+        const old = tasks.find(t => t.id === id);
 
         if (!permanent) {
             if (old) {
-                // Soft delete logic
-                console.log('[deleteTask] Soft deleting task:', id);
-
-                // Check Google Sync explicitly here
-                const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                const gInfo = googleMap[id];
-
-                if (gInfo) {
-                    setToast({ msg: '正在同步刪除 Google 行事曆...', type: 'info' });
-                    const token = localStorage.getItem('google_access_token');
-                    if (token) {
-                        console.log('[deleteTask] Found Google Event, deleting:', gInfo.evtId);
-                        deleteGoogleEvent(token, gInfo.calId, gInfo.evtId)
-                            .then(() => {
-                                console.log('[deleteTask] Google Event deleted successfully');
-                                setToast({ msg: 'Google 行事曆刪除成功', type: 'info' });
-                                delete googleMap[id];
-                                localStorage.setItem('task_google_map', JSON.stringify(googleMap));
-                            })
-                            .catch(e => {
-                                console.error('[deleteTask] Google Delete Error:', e);
-                                setToast({ msg: 'Google 刪除失敗: ' + e.message, type: 'error' });
-                            });
-                    }
-                } else {
-                    console.warn('[deleteTask] No Google mapping found for task:', id);
-                }
-
+                // Soft delete
                 await updateTask(id, { status: 'deleted' });
-                setToast({ msg: "已移至垃圾桶 (v2)", undo: () => undo() });
+                setToast({ msg: "已移至垃圾桶", undo: () => undo() });
             }
             return;
         }
@@ -4383,19 +3019,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
                     return next;
                 });
                 return;
-            } else if (old) {
-                // Google Sync Logic (Permanent Delete)
-                const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                const gInfo = googleMap[old.id];
-
-                if (gInfo) {
-                    const token = localStorage.getItem('google_access_token');
-                    if (token) {
-                        deleteGoogleEvent(token, gInfo.calId, gInfo.evtId)
-                            .then(() => setToast({ msg: 'Google 行事曆事件已刪除', type: 'info' }))
-                            .catch(e => console.error('Google Delete Error', e));
-                    }
-                }
             }
         }
         setSyncStatus('synced');
@@ -4637,507 +3260,16 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
 
-    // Google Two-Way Sync
-    const isSyncingRef = useRef(false);
-    const isRecreatingEventRef = useRef(false); // Prevents sync during event type change (all-day <-> timed)
-    const replacedEventIdsRef = useRef<Set<string>>(new Set()); // Tracks old event IDs that were replaced (to ignore their 'cancelled' status)
-
-    const syncGoogleToApp = async () => {
-        console.log('[Google Sync] Attempting sync...');
-        if (isSyncingRef.current) {
-            console.log('[Google Sync] Already syncing, skipping.');
-            return;
-        }
-        if (isRecreatingEventRef.current) {
-            console.log('[Google Sync] Event recreation in progress, skipping to avoid conflicts.');
-            return;
-        }
-        let token = localStorage.getItem('google_access_token');
-        if (!token) {
-            console.log('[Google Sync] No token found, skipping.');
-            return;
-        }
-
-        // Validate token by making a test API call
-        try {
-            const testResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (testResponse.status === 401) {
-                console.log('[Google Sync] Token expired, attempting silent refresh...');
-
-                // Try silent refresh using Google Identity Services
-                const clientId = localStorage.getItem('google_client_id');
-                if (clientId && (window as any).google?.accounts?.oauth2) {
-                    try {
-                        const newToken = await new Promise<string | null>((resolve) => {
-                            const tokenClient = (window as any).google.accounts.oauth2.initTokenClient({
-                                client_id: clientId,
-                                scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
-                                callback: (resp: any) => {
-                                    if (resp.error) {
-                                        console.log('[Google Sync] Silent refresh failed:', resp.error);
-                                        resolve(null);
-                                    } else {
-                                        console.log('[Google Sync] Silent refresh successful!');
-                                        resolve(resp.access_token);
-                                    }
-                                },
-                            });
-                            // Request with prompt: '' for silent refresh
-                            tokenClient.requestAccessToken({ prompt: '' });
-
-                            // Timeout after 5 seconds
-                            setTimeout(() => resolve(null), 5000);
-                        });
-
-                        if (newToken) {
-                            token = newToken;
-                            localStorage.setItem('google_access_token', newToken);
-                            console.log('[Google Sync] Token refreshed successfully');
-                        } else {
-                            console.error('[Google Sync] Silent refresh returned no token');
-                            setToast({ msg: 'Google 授權已過期，請重新點擊「匯入 Google 行事曆」以重新登入', type: 'error' });
-                            localStorage.removeItem('google_access_token');
-                            return;
-                        }
-                    } catch (refreshError) {
-                        console.error('[Google Sync] Silent refresh error:', refreshError);
-                        setToast({ msg: 'Google 授權已過期，請重新點擊「匯入 Google 行事曆」以重新登入', type: 'error' });
-                        localStorage.removeItem('google_access_token');
-                        return;
-                    }
-                } else {
-                    // Google script not loaded, try loading it first
-                    console.log('[Google Sync] Google script not loaded, attempting to load...');
-                    try {
-                        const { loadGoogleScript } = await import('../utils/googleCalendar');
-                        await loadGoogleScript();
-                        setToast({ msg: 'Google 授權已過期，請重新點擊「匯入 Google 行事曆」以重新登入', type: 'error' });
-                    } catch (e) {
-                        setToast({ msg: 'Google 授權已過期，請重新點擊「匯入 Google 行事曆」以重新登入', type: 'error' });
-                    }
-                    localStorage.removeItem('google_access_token');
-                    return;
-                }
-            } else if (!testResponse.ok) {
-                console.error('[Google Sync] Token validation failed:', testResponse.status);
-                setToast({ msg: 'Google API 請求失敗，請稍後再試', type: 'error' });
-                return;
-            }
-        } catch (e) {
-            console.error('[Google Sync] Token validation error:', e);
-            setToast({ msg: '無法連接 Google 服務，請檢查網路連線', type: 'error' });
-            return;
-        }
-
-        console.log('[Google Sync] Starting sync...');
-        console.log('[Google Sync] replacedEventIdsRef has', replacedEventIdsRef.current.size, 'entries:', Array.from(replacedEventIdsRef.current));
-        isSyncingRef.current = true;
-        try {
-            // 1. Identify Calendars to Sync
-            const googleMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-            const usedCalIds = new Set<string>();
-
-            // Add calendars from map
-            Object.values(googleMap).forEach((v: any) => {
-                if (v.calId) usedCalIds.add(v.calId);
-            });
-
-            // Add calendars from tags
-            let calendars: any[] = [];
-            try {
-                if (!(window as any)['google_calendar_list_cache']) {
-                    calendars = await fetchCalendarList(token);
-                    (window as any)['google_calendar_list_cache'] = calendars; // Simple cache
-                } else {
-                    calendars = (window as any)['google_calendar_list_cache'];
-                }
-            } catch (e) {
-                console.error('[Google Sync] List Calendars Check failed', e);
-            }
-
-            // Debug: Log Google tags
-            const googleTags = tags.filter(t => t.name.startsWith('Google:'));
-            console.log('[Google Sync] Found Google tags:', googleTags.map(t => t.name));
-
-            if (calendars.length > 0) {
-                const tagNames = tags
-                    .filter(t => t.name.startsWith('Google:'))
-                    .map(t => t.name.replace('Google:', '').trim());
-
-                console.log('[Google Sync] Tag names to match:', tagNames);
-
-                tagNames.forEach(name => {
-                    const match = calendars.find(c => c.summary === name);
-                    console.log(`[Google Sync] Matching "${name}" -> ${match ? match.id : 'NOT FOUND'}`);
-                    if (match) usedCalIds.add(match.id);
-                });
-            } else {
-                console.log('[Google Sync] No calendars to match against');
-            }
-
-            // 2. Sync Each Calendar
-            const syncTokens = JSON.parse(localStorage.getItem('google_sync_tokens') || '{}');
-            // Snapshot of current tasks to modify locally
-            let newTasks = [...tasksRef.current];
-            const newMap = { ...googleMap };
-            let hasChanges = false;
-
-            console.log('[Google Sync] Syncing calendars:', Array.from(usedCalIds));
-
-            for (const calId of Array.from(usedCalIds)) {
-                const syncToken = syncTokens[calId];
-                console.log(`[Google Sync] Checking calendar: ${calId}, hasToken: ${!!syncToken}`);
-                try {
-                    const { events, nextSyncToken, fullSyncRequired } = await fetchUpdatedGoogleEvents(token, calId, syncToken);
-                    console.log(`[Google Sync] Calendar ${calId}: ${events.length} events, fullSyncRequired: ${fullSyncRequired}`);
-
-                    if (fullSyncRequired) {
-                        console.log(`[Google Sync] Full sync required for ${calId}, will retry next time.`);
-                        delete syncTokens[calId];
-                        continue;
-                    }
-
-                    if (nextSyncToken) syncTokens[calId] = nextSyncToken;
-
-                    if (events.length > 0) {
-                        console.log(`[Google Sync] Got ${events.length} updates for ${calId}:`, events.map(e => ({ id: e.id, summary: e.summary, status: (e as any).status })));
-                        hasChanges = true;
-
-                        for (const evt of events) {
-                            // Skip events that were intentionally replaced (during all-day <-> timed type change)
-                            if (replacedEventIdsRef.current.has(evt.id)) {
-                                console.log('[Google Sync] Ignoring replaced event (type change in progress):', evt.id);
-                                // Don't delete from set here - same event might appear from multiple calendars
-                                continue;
-                            }
-
-                            // Find Task
-                            const existingTaskId = Object.keys(newMap).find(key => newMap[key].evtId === evt.id);
-
-                            // Detailed logging for debugging
-                            console.log(`[Google Sync] Processing event: "${evt.summary}" (${evt.id})`, {
-                                hasMapping: !!existingTaskId,
-                                mappedTaskId: existingTaskId || 'none',
-                                eventStatus: (evt as any).status
-                            });
-
-                            if ((evt as any).status === 'cancelled') {
-                                if (existingTaskId) {
-                                    // Delete Task (soft)
-                                    // CRITICAL: Only delete if the mapping matches THIS calendar.
-                                    // If the event moved to another calendar, the mapping might have already been updated 
-                                    // (if that calendar was processed first), or will be updated later.
-                                    // We don't want to delete it if it's active elsewhere.
-                                    const currentMapping = newMap[existingTaskId];
-
-                                    if (currentMapping && currentMapping.calId === calId) {
-                                        const t = newTasks.find(n => n.id === existingTaskId);
-                                        if (t && t.status !== 'deleted') {
-                                            markLocalUpdate(existingTaskId);
-                                            // Update local
-                                            newTasks = newTasks.map(nt => nt.id === existingTaskId ? { ...nt, status: 'deleted' as TaskStatus } : nt);
-                                            // Update DB
-                                            if (supabaseClient) await supabaseClient.from('tasks').update({ status: 'deleted' }).eq('id', existingTaskId);
-                                            console.log('[Google Auto-Sync] Deleted Task', existingTaskId, 'from calendar', calId);
-                                        }
-                                    } else {
-                                        console.log(`[Google Sync] Ignored deletion of ${existingTaskId} from ${calId} (mapped to ${currentMapping?.calId})`);
-                                    }
-                                }
-                            } else {
-                                // Update or Create
-                                const title = evt.summary || '(No Title)';
-                                const desc = evt.description || '';
-                                let start_date: string | null = null;
-                                let start_time: string | null = null;
-                                let end_time: string | null = null;
-                                let is_all_day = false;
-
-                                if (evt.start.date) {
-                                    is_all_day = true;
-                                    start_date = evt.start.date;
-                                } else if (evt.start.dateTime) {
-                                    const d = new Date(evt.start.dateTime);
-                                    // Use local string YYYY-MM-DD
-                                    start_date = d.toLocaleDateString('en-CA');
-                                    start_time = d.toTimeString().substring(0, 5);
-                                    if (evt.end.dateTime) {
-                                        const end = new Date(evt.end.dateTime);
-                                        end_time = end.toTimeString().substring(0, 5);
-                                    }
-                                }
-
-                                if (start_date) {
-                                    if (existingTaskId) {
-                                        // Update
-                                        const tIndex = newTasks.findIndex(t => t.id === existingTaskId);
-                                        if (tIndex !== -1) {
-                                            const old = newTasks[tIndex];
-
-                                            // Check if we need to restore from trash (if previously deleted)
-                                            const isDeleted = old.status === 'deleted';
-
-                                            // Simple change detection
-                                            const changed = old.title !== title || old.description !== desc ||
-                                                old.start_date?.split('T')[0] !== start_date ||
-                                                (old.start_time || '').substring(0, 5) !== (start_time || '') ||
-                                                (old.end_time || '').substring(0, 5) !== (end_time || '') ||
-                                                old.is_all_day !== is_all_day ||
-                                                isDeleted; // If deleted, forced update to restore
-
-                                            console.log(`[Google Sync] Checking update for "${title}": changed=${changed}, isDeleted=${isDeleted}`, {
-                                                oldTitle: old.title, newTitle: title,
-                                                oldDate: old.start_date?.split('T')[0], newDate: start_date,
-                                                oldIsAllDay: old.is_all_day, newIsAllDay: is_all_day,
-                                                oldStartTime: old.start_time, newStartTime: start_time
-                                            });
-
-                                            // Check if calendar has changed (event moved to different calendar)
-                                            const oldCalId = newMap[existingTaskId]?.calId;
-                                            // If we found it via ID but calId is different in our current loop 'calId', then it moved
-                                            // Note: newMap[existingTaskId] might be updated by a previous loop if we process multiple calendars
-                                            // But here we are processing 'calId'. If newMap says 'oldCal', then it changed TO 'calId'.
-                                            const calendarChanged = oldCalId && oldCalId !== calId;
-
-                                            if (changed || calendarChanged) {
-                                                const upd: any = {
-                                                    title,
-                                                    description: desc,
-                                                    start_date,
-                                                    is_all_day,
-                                                    status: 'todo' // Always restore status to todo if syncing from valid event
-                                                };
-                                                if (start_time) upd.start_time = start_time;
-                                                if (end_time) upd.end_time = end_time;
-
-                                                // Handle calendar/tag switching
-                                                let taskTags = [...(old.tags || [])];
-                                                if (calendars.length > 0) {
-                                                    const cal = calendars.find(c => c.id === calId) ||
-                                                        (calId === 'primary' ? calendars.find(c => c.primary) : null);
-
-                                                    if (cal) {
-                                                        const newTagName = `Google:${cal.summary}`;
-                                                        const newTag = tags.find(t => t.name === newTagName);
-
-                                                        if (calendarChanged) {
-                                                            // Remove ALL old Google:xxx tags
-                                                            const googleTagIds = tags
-                                                                .filter(t => t.name.startsWith('Google:'))
-                                                                .map(t => t.id);
-                                                            taskTags = taskTags.filter(tid => !googleTagIds.includes(tid));
-                                                            console.log('[Google Sync] Calendar changed from', oldCalId, 'to', calId);
-                                                        }
-
-                                                        // Add new tag if not present
-                                                        if (newTag && !taskTags.includes(newTag.id)) {
-                                                            taskTags.push(newTag.id);
-                                                            console.log('[Google Sync] Switched tag to:', newTagName);
-                                                        }
-
-                                                        upd.tags = taskTags;
-
-                                                        // Update the mapping with new calendar ID
-                                                        newMap[existingTaskId] = { evtId: evt.id, calId };
-                                                    }
-                                                }
-
-                                                newTasks[tIndex] = { ...old, ...upd };
-                                                markLocalUpdate(existingTaskId);
-                                                if (supabaseClient) await supabaseClient.from('tasks').update(upd).eq('id', existingTaskId);
-                                                console.log('[Google Sync] Updated Task', existingTaskId, 'with', upd);
-                                                hasChanges = true;
-                                            }
-                                        } else {
-                                            // Mapping exists but task doesn't exist locally - STALE MAPPING
-                                            // Try to find the task by title instead
-                                            console.log(`[Google Sync] Stale mapping for "${title}" (taskId: ${existingTaskId}), trying to find by title...`);
-
-                                            // Remove the stale mapping first
-                                            delete newMap[existingTaskId];
-
-                                            // Try to find a task with matching title that has a Google: tag
-                                            const googleTagIds = tags.filter(t => t.name.startsWith('Google:')).map(t => t.id);
-                                            const matchingTask = newTasks.find(t =>
-                                                t.title === title &&
-                                                t.status !== 'deleted' &&
-                                                t.tags?.some(tagId => googleTagIds.includes(tagId))
-                                            );
-
-                                            if (matchingTask) {
-                                                console.log(`[Google Sync] Found matching task by title: "${title}" -> ${matchingTask.id}`);
-
-                                                // Update this task instead
-                                                const mIndex = newTasks.findIndex(t => t.id === matchingTask.id);
-                                                if (mIndex !== -1) {
-                                                    const old = newTasks[mIndex];
-                                                    const isDeleted = old.status === 'deleted';
-
-                                                    const changed = old.title !== title || old.description !== desc ||
-                                                        old.start_date?.split('T')[0] !== start_date ||
-                                                        (old.start_time || '').substring(0, 5) !== (start_time || '') ||
-                                                        (old.end_time || '').substring(0, 5) !== (end_time || '') ||
-                                                        old.is_all_day !== is_all_day ||
-                                                        isDeleted;
-
-                                                    console.log(`[Google Sync] (Recovered) Checking update for "${title}": changed=${changed}`);
-
-                                                    if (changed) {
-                                                        const upd: any = {
-                                                            title,
-                                                            description: desc,
-                                                            start_date,
-                                                            is_all_day,
-                                                            status: 'todo'
-                                                        };
-                                                        if (start_time) upd.start_time = start_time;
-                                                        if (end_time) upd.end_time = end_time;
-
-                                                        newTasks[mIndex] = { ...old, ...upd };
-                                                        markLocalUpdate(matchingTask.id);
-                                                        if (supabaseClient) await supabaseClient.from('tasks').update(upd).eq('id', matchingTask.id);
-                                                        console.log('[Google Sync] (Recovered) Updated Task', matchingTask.id, 'with', upd);
-                                                        hasChanges = true;
-                                                    }
-
-                                                    // Update the mapping to point to the correct task
-                                                    newMap[matchingTask.id] = { evtId: evt.id, calId };
-                                                    console.log('[Google Sync] Updated mapping:', matchingTask.id, '->', evt.id);
-                                                }
-                                            } else {
-                                                console.log(`[Google Sync] No matching task found for "${title}", will be created on next sync if tag exists`);
-                                            }
-                                        }
-                                    } else {
-                                        // Create New
-                                        // CRITICAL: Re-check localStorage for latest mapping to avoid duplicates
-                                        // (Another operation like event recreation might have just updated the map)
-                                        const freshMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-                                        const alreadyMapped = Object.values(freshMap).some((v: any) => v.evtId === evt.id);
-                                        if (alreadyMapped) {
-                                            console.log('[Google Sync] Event already mapped (found in fresh check), skipping creation:', evt.id);
-                                            continue;
-                                        }
-
-                                        // Only create if not recently deleted?
-                                        // Determine Tags - find matching calendar and add Google:xxx tag
-                                        let taskTags: string[] = [];
-                                        let shouldCreate = false;
-
-                                        if (calendars.length > 0) {
-                                            // Find calendar by ID or use primary
-                                            let cal = calendars.find(c => c.id === calId);
-                                            if (!cal && calId === 'primary') {
-                                                // If calId is 'primary', find the calendar marked as primary
-                                                cal = calendars.find(c => c.primary === true);
-                                            }
-                                            if (cal) {
-                                                const tagName = `Google:${cal.summary}`;
-                                                const tag = tags.find(t => t.name === tagName);
-                                                if (tag) {
-                                                    taskTags.push(tag.id);
-                                                    console.log('[Google Sync] Assigned tag:', tagName, 'to new task:', title);
-                                                    shouldCreate = true;
-                                                } else {
-                                                    console.log('[Google Sync] Tag not found:', tagName, '- skipping creation');
-                                                }
-                                            }
-                                        }
-
-                                        if (!shouldCreate) continue;
-
-                                        const newTask: any = {
-                                            user_id: user?.id,
-                                            title,
-                                            description: desc,
-                                            status: 'todo',
-                                            start_date,
-                                            start_time,
-                                            end_time,
-                                            is_all_day,
-                                            tags: taskTags,
-                                            order_index: 0
-                                        };
-
-                                        if (supabaseClient && user) {
-                                            const { data: inserted } = await supabaseClient.from('tasks').insert(newTask).select().single();
-                                            if (inserted) {
-                                                newTasks.push(inserted);
-                                                newMap[inserted.id] = { evtId: evt.id, calId };
-                                                console.log('[Google Sync] Created Task', inserted.id, 'with mapping:', { evtId: evt.id, calId }, 'title:', title);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                } catch (e) {
-                    // console.error(`Sync error for ${calId}`, e);
-                }
-            }
-
-            if (hasChanges) {
-                newTasks.sort((a, b) => (a.order_index || 0) - (b.order_index || 0) || a.created_at.localeCompare(b.created_at));
-                setTasks(newTasks);
-                setToast({ msg: 'Google 行事曆已同步更新', type: 'info' });
-            }
-
-            // Always save map and tokens regardless of hasChanges
-            // This ensures new mappings from "Create New" path are persisted
-            const existingMap = JSON.parse(localStorage.getItem('task_google_map') || '{}');
-            const mergedMap = { ...existingMap, ...newMap };
-            localStorage.setItem('task_google_map', JSON.stringify(mergedMap));
-            localStorage.setItem('google_sync_tokens', JSON.stringify(syncTokens));
-            console.log('[Google Sync] Saved', Object.keys(newMap).length, 'mappings. Total:', Object.keys(mergedMap).length);
-
-        } finally {
-            console.log('[Google Sync] Sync completed.');
-            isSyncingRef.current = false;
-            // Clear replaced event IDs after sync is complete
-            if (replacedEventIdsRef.current.size > 0) {
-                console.log('[Google Sync] Cleared', replacedEventIdsRef.current.size, 'replaced event IDs');
-                replacedEventIdsRef.current.clear();
-            }
-        }
-    };
-
-    // Poll every 60s
-    useEffect(() => {
-        console.log('[Google Sync] useEffect running, user:', !!user);
-        if (!user) return;
-        console.log('[Google Sync] Setting up 60s interval and 3s initial timeout...');
-        const interval = setInterval(() => {
-            console.log('[Google Sync] 60s interval triggered');
-            syncGoogleToApp();
-        }, 60000);
-        // Initial sync delay
-        const timeout = setTimeout(() => {
-            console.log('[Google Sync] Initial 3s timeout triggered');
-            syncGoogleToApp();
-        }, 3000);
-        return () => {
-            console.log('[Google Sync] Cleaning up interval and timeout');
-            clearInterval(interval);
-            clearTimeout(timeout);
-        };
-    }, [user, tags]); // Re-run if tags change (new Google tags)
-
-
     return (
         <AppContext.Provider value={{
-            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, lockTask, unlockTask, verifyTaskPassword, temporarilyUnlockTask, archiveCompletedTasks, archivedTasks, restoreArchivedTask, deleteArchivedTask, updateArchivedTask, batchDeleteArchivedTasks, clearAllTasks, exportData, importData, syncGoogleToApp, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, expandedTaskIds, setExpandedTaskIds, toggleExpansion,
+            user, tasks, tags, visibleTasks, loading, syncStatus, dragState, startDrag, updateDropState, endDrag, updateGhostPosition, addTask, batchAddTasks, duplicateTasks, updateTask, batchUpdateTasks, deleteTask, batchDeleteTasks, addTag, updateTag, deleteTag, keyboardMove, smartReschedule, archiveCompletedTasks, archivedTasks, restoreArchivedTask, clearAllTasks, exportData, importData, undo, redo, canUndo: historyStack.length > 0, canRedo: redoStack.length > 0, logout, navigateToTask, navigateBack, canNavigateBack: navStack.length > 0, toast, setToast, selectedTaskIds, setSelectedTaskIds, handleSelection, selectionAnchor, setSelectionAnchor, focusedTaskId, setFocusedTaskId, editingTaskId, setEditingTaskId, inlineEditingTaskId, setInlineEditingTaskId, expandedTaskIds, toggleExpansion,
             view, setView: setViewAndPersist,
             tagFilter, setTagFilter, advancedFilters, setAdvancedFilters, themeSettings, setThemeSettings: setThemeSettingsAndPersist, calculateVisibleTasks, pendingFocusTaskId, setPendingFocusTaskId, leavingTaskIds, addLeavingTask, dismissLeavingTasks, initError,
             sidebarWidth, setSidebarWidth: setSidebarWidthAndPersist, sidebarCollapsed, toggleSidebar,
             expandedTags, setExpandedTags: setExpandedTagsAndPersist,
             calendarDate, setCalendarDate, taskCounts,
             focusSplitWidth, setFocusSplitWidth,
-            reviewTask, restoreTask, restoreTrash, emptyTrash, moveTaskToView,
+            reviewTask, restoreTask, emptyTrash, moveTaskToView,
             isCmdPressed, tagsWithResolvedColors,
             language,
             setLanguage,
@@ -5151,9 +3283,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
             deleteSearchHistory,
             searchOpen,
             setSearchOpen,
-            lockedGoogleTagIds,
-            toggleGoogleTagLock,
-            isTaskGoogleLocked,
         }}>
             {children}
         </AppContext.Provider>

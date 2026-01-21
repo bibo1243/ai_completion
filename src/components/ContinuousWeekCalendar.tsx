@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useContext, useCallback, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AppContext } from '../context/AppContext';
 import { isSameDay, getRootTask } from '../utils';
 import { COLOR_THEMES } from '../constants';
@@ -30,6 +31,8 @@ interface ContinuousWeekCalendarProps {
     filterProjects?: string[];
 }
 
+// CalendarTooltip removed - tooltips are now handled inline with hover state
+
 export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTagsExclude = [], filterColors = [], filterProjects = [] }: ContinuousWeekCalendarProps) => {
     const {
         tasks,
@@ -37,6 +40,7 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
         batchUpdateTasks,
         addTask,
         setEditingTaskId,
+        editingTaskId,
         selectedTaskIds,
         setSelectedTaskIds,
         constructionModeEnabled,
@@ -44,8 +48,51 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
         setCalendarDate,
         view,
         viewTagFilters,
-        themeSettings
+        themeSettings,
+        tagsWithResolvedColors
     } = useContext(AppContext);
+
+    // Hover tooltip state - includes position for Portal rendering
+    const [hoverTooltip, setHoverTooltip] = useState<{ taskId: string; title: string; x: number; y: number } | null>(null);
+    const taskTitleRefs = useRef<Map<string, HTMLSpanElement>>(new Map());
+    const taskBubbleRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+    // Clear hovered task when editing modal opens
+    useEffect(() => {
+        setHoverTooltip(null);
+    }, [editingTaskId]);
+
+    const getTaskColor = (task: any) => {
+        // 1. Google/Tag Priority
+        if (task.tags && task.tags.length > 0) {
+            const googleTagId = task.tags.find((tagId: string) => {
+                const t = tags.find((x: any) => x.id === tagId);
+                return t && t.name.toLowerCase().includes('google');
+            });
+            if (googleTagId) {
+                if (tagsWithResolvedColors && tagsWithResolvedColors[googleTagId]) return tagsWithResolvedColors[googleTagId];
+                const t = tags.find((x: any) => x.id === googleTagId);
+                if (t?.color) return t.color;
+            }
+            // Any Tag Fallback
+            for (const tid of task.tags) {
+                if (tagsWithResolvedColors && tagsWithResolvedColors[tid]) return tagsWithResolvedColors[tid];
+                const t = tags.find((x: any) => x.id === tid);
+                if (t?.color) return t.color;
+            }
+        }
+
+        // 2. Root Task Fallback
+        const rootTask = getRootTask(task, tasks);
+        if (rootTask && rootTask.color && rootTask.color !== 'gray') { // If root has specific color
+            const theme = COLOR_THEMES[rootTask.color];
+            if (theme) return theme.color;
+        }
+
+        // 3. Task Color Fallback
+        const legacyKey = (task.color || 'blue') as keyof typeof COLOR_THEMES;
+        return COLOR_THEMES[legacyKey]?.color || COLOR_THEMES.blue.color;
+    };
 
     const containerRef = useRef<HTMLDivElement>(null);
     const dragImageRef = useRef<HTMLDivElement>(null);
@@ -478,9 +525,21 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                         const newDate = new Date(day.date);
                                                         newDate.setHours(9, 0, 0, 0);
 
+                                                        // Determine drop zone by mouse Y position relative to cell
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        const relativeY = e.clientY - rect.top;
+                                                        const isAllDayZone = relativeY < rect.height * 0.35; // Top 35% = All-Day zone
+
                                                         const updates = taskIds.map((id: string) => ({
                                                             id,
-                                                            data: { start_date: newDate.toISOString() }
+                                                            data: {
+                                                                start_date: newDate.toISOString(),
+                                                                is_all_day: isAllDayZone,
+                                                                // Clear time if converting to all-day, set default time if converting to timed
+                                                                ...(isAllDayZone
+                                                                    ? { start_time: null, end_time: null }
+                                                                    : { start_time: '09:00', end_time: '10:00' })
+                                                            }
                                                         }));
 
                                                         batchUpdateTasks(updates);
@@ -537,32 +596,42 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
 
                                                 <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                                     {dayTasks.map((task: any) => {
-                                                        const rootTask = getRootTask(task, tasks);
-                                                        const theme = COLOR_THEMES[rootTask.color] || COLOR_THEMES[task.color] || COLOR_THEMES.gray;
+                                                        const taskColor = getTaskColor(task);
                                                         const isAllDay = task.is_all_day;
                                                         const isSelected = selectedTaskIds.includes(task.id);
-                                                        const scheduleTagId = tags.find(t => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
+                                                        const scheduleTagId = tags.find((t: any) => t.name.toLowerCase() === 'schedule' || t.name === '行程')?.id;
                                                         const isScheduleTask = scheduleTagId && task.tags?.includes(scheduleTagId);
 
                                                         const bgStyle = isAllDay ? {
-                                                            backgroundColor: theme.color,
+                                                            backgroundColor: taskColor,
                                                             color: 'white',
                                                             boxShadow: '0 1px 1px rgba(0,0,0,0.1)',
-                                                            border: isSelected ? '2px solid white' : `1px solid ${theme.color}40`
+                                                            border: isSelected ? '2px solid white' : `1px solid ${taskColor}40`
                                                         } : {
-                                                            backgroundColor: theme.bg,
-                                                            color: theme.text,
-                                                            borderLeft: `3px solid ${theme.accent}`,
-                                                            borderTop: isSelected ? `1px solid ${theme.color}` : undefined,
-                                                            borderBottom: isSelected ? `1px solid ${theme.color}` : undefined,
-                                                            borderRight: isSelected ? `1px solid ${theme.color}` : undefined
+                                                            backgroundColor: isSelected ? taskColor + '30' : taskColor + '1A', // Darker background for selection visibility
+                                                            color: taskColor,
+                                                            borderLeft: `3px solid ${taskColor}`,
                                                         };
 
                                                         const formatTime = (t: string) => t ? t.replace(':', '') : '';
 
+                                                        // Ref callbacks for truncation detection and position tracking
+                                                        const titleRefCallback = (el: HTMLSpanElement | null) => {
+                                                            if (el) {
+                                                                taskTitleRefs.current.set(task.id, el);
+                                                            }
+                                                        };
+                                                        const bubbleRefCallback = (el: HTMLDivElement | null) => {
+                                                            if (el) {
+                                                                taskBubbleRefs.current.set(task.id, el);
+                                                            }
+                                                        };
+
                                                         return (
                                                             <div
                                                                 key={task.id}
+                                                                ref={bubbleRefCallback}
+                                                                id={`task-bubble-${task.id}`}
                                                                 draggable
                                                                 onDragStart={(e) => {
                                                                     // Determine which tasks are being dragged
@@ -573,6 +642,7 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
 
                                                                     e.dataTransfer.setData('application/json', JSON.stringify(idsToDrag));
                                                                     e.dataTransfer.effectAllowed = 'move';
+                                                                    setHoverTooltip(null);
 
                                                                     // Visual Feedback: Custom Drag Image
                                                                     if (dragImageRef.current) {
@@ -612,11 +682,25 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                                     e.stopPropagation();
                                                                     setEditingTaskId(task.id);
                                                                 }}
-                                                                title={task.title}
+                                                                onMouseEnter={() => {
+                                                                    const titleEl = taskTitleRefs.current.get(task.id);
+                                                                    const bubbleEl = taskBubbleRefs.current.get(task.id);
+                                                                    if (titleEl && bubbleEl && titleEl.scrollWidth > titleEl.clientWidth) {
+                                                                        const rect = bubbleEl.getBoundingClientRect();
+                                                                        setHoverTooltip({
+                                                                            taskId: task.id,
+                                                                            title: task.title,
+                                                                            x: rect.left,
+                                                                            y: rect.top - 8
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                onMouseLeave={() => setHoverTooltip(null)}
                                                                 className={`
-                                                                    truncate text-[9.5px] px-1.5 rounded-md cursor-pointer hover:brightness-95 transition-all mb-0.5
+                                                                    relative text-[9.5px] px-1.5 rounded-md cursor-pointer hover:brightness-95 transition-all mb-0.5
                                                                     flex items-center justify-between gap-1
-                                                                    ${isSelected ? 'ring-2 ring-indigo-400 z-10' : ''}
+                                                                    ${isSelected && isAllDay ? 'ring-2 ring-indigo-400 z-10' : ''}
+                                                                    ${isSelected && !isAllDay ? 'z-10' : ''}
                                                                 `}
                                                                 style={{
                                                                     ...bgStyle,
@@ -626,7 +710,7 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                                     ...(isScheduleTask ? { backgroundImage: `repeating-linear-gradient(45deg, rgba(255,255,255,0.1) 0px, rgba(255,255,255,0.1) 4px, transparent 4px, transparent 8px)` } : {})
                                                                 }}
                                                             >
-                                                                <span className="truncate flex-1 font-medium select-none">{task.title || '無標題'}</span>
+                                                                <span ref={titleRefCallback} className="truncate flex-1 font-medium select-none">{task.title || '無標題'}</span>
 
                                                                 {!isAllDay && (task.start_time || task.end_time) && (
                                                                     <div className="flex flex-col items-end leading-none shrink-0 opacity-80" style={{ fontSize: '7px', transform: 'scale(0.95)', transformOrigin: 'right center' }}>
@@ -716,6 +800,22 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                     <div id="drag-ghost-stack-2" className="absolute top-2 left-2 w-full h-full bg-white/30 border border-gray-200/30 rounded-xl -z-30 transform rotate-4 scale-90 origin-center transition-opacity"></div>
                 </div>
             </div>
+
+            {/* Hover Tooltip (Portal) - escapes overflow hidden containers */}
+            {hoverTooltip && createPortal(
+                <div
+                    className="fixed z-[9999] w-max max-w-[300px] bg-white/95 backdrop-blur-xl text-slate-800 text-base px-4 py-2.5 rounded-xl shadow-2xl break-words whitespace-normal leading-relaxed font-medium tracking-normal animate-in fade-in zoom-in-95 duration-150 pointer-events-none border border-slate-200/80 ring-1 ring-black/5"
+                    style={{
+                        left: hoverTooltip.x,
+                        top: hoverTooltip.y,
+                        transform: 'translateY(-100%)'
+                    }}
+                >
+                    {hoverTooltip.title}
+                    <div className="absolute left-4 top-full w-0 h-0 border-[6px] border-transparent border-t-white/95" />
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

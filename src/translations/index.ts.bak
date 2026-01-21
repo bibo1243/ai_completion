@@ -29,8 +29,6 @@ export const translations = {
         emptyTrash: '清空垃圾桶',
         emptyTrashConfirm: '確定要永久刪除垃圾桶內的所有項目嗎？此操作不可撤銷。',
         trashEmptyTitle: '垃圾桶',
-        restoreTrash: '還原所有項目',
-        restoreTrashConfirm: '確定要還原垃圾桶中的所有項目嗎？',
 
         // Task Item Actions
         putBack: '放回',
@@ -124,8 +122,6 @@ export const translations = {
         emptyTrash: 'Empty Trash',
         emptyTrashConfirm: 'Are you sure you want to permanently delete all items in the trash? This action is irreversible.',
         trashEmptyTitle: 'Trash',
-        restoreTrash: 'Restore All',
-        restoreTrashConfirm: 'Are you sure you want to restore all items in the trash?',
 
         // Task Item Actions
         putBack: 'Put Back',
