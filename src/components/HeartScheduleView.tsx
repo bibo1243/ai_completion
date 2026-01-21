@@ -521,25 +521,84 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         type: 'move' | 'resize';
         currentStartMin: number;
         currentDuration: number;
+        isTouch?: boolean;
     } | null>(null);
+    const dragStateRef = useRef(dragState);
+    useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
         e.stopPropagation();
-        // Prevent default to avoid browser interpretation as scroll (avoids touchcancel)
-        if (e.cancelable) e.preventDefault();
+        // NOTE: We do NOT determine drag immediacy here to allow Click (Tap) to pass through.
+        // We only attach listeners and decide later or update state immediately if we want instant feedback?
+        // User requirements: "Adjust via drag". Instant feedback is expected.
+        // But if we preventDefault, we kill Scrolling.
+        // And we kill Click.
+        // Compromise: We preventDefault inside the *Listeners* if we detect movement?
+        // Actually, for "Grip", we always Drag. For "Body", we might want to Scroll?
+        // Assuming "Touch and Hold" or just "Touch" = Drag.
+        // Let's implement immediate drag but handle logic carefully.
 
-        const startMin = timeToMinutes(task.start_time);
         const touch = e.touches[0];
+        const initialY = touch.clientY;
+        const startMin = timeToMinutes(task.start_time);
+        const duration = task.duration || 60;
 
+        // Update Visuals
         setDragState({
             taskId: task.id,
-            initialY: touch.clientY,
+            initialY: initialY,
             originalStartMin: startMin,
-            originalDuration: task.duration || 60,
+            originalDuration: duration,
             type,
             currentStartMin: startMin,
-            currentDuration: task.duration || 60
+            currentDuration: duration,
+            isTouch: true
         });
+
+        const onTouchMove = (evt: TouchEvent) => {
+            if (evt.cancelable) evt.preventDefault(); // Lock scroll
+            const deltaY = evt.touches[0].clientY - initialY;
+            const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
+
+            if (type === 'move') {
+                let newStart = startMin + deltaMin;
+                newStart = Math.max(0, Math.min(1440 - duration, newStart));
+                setDragState(prev => prev ? { ...prev, currentStartMin: newStart } : null);
+            } else {
+                let newDuration = duration + deltaMin;
+                newDuration = Math.max(15, newDuration);
+                setDragState(prev => prev ? { ...prev, currentDuration: newDuration } : null);
+            }
+        };
+
+        const onTouchEnd = () => {
+            const finalState = dragStateRef.current;
+            if (finalState && finalState.taskId === task.id) {
+                const { currentStartMin, currentDuration } = finalState;
+                const start_time = minutesToTime(currentStartMin);
+                const end_time = minutesToTime(currentStartMin + currentDuration);
+
+                const d = new Date(currentDate);
+                d.setHours(Math.floor(currentStartMin / 60));
+                d.setMinutes(currentStartMin % 60);
+
+                const updates = { start_time, duration: currentDuration, end_time, start_date: d.toISOString() };
+                updateTask(task.id, updates);
+
+                if (isSnapshotMode) {
+                    setUrlTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+                }
+            }
+            setDragState(null);
+
+            window.removeEventListener('touchmove', onTouchMove);
+            window.removeEventListener('touchend', onTouchEnd);
+            window.removeEventListener('touchcancel', onTouchEnd);
+        };
+
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', onTouchEnd);
+        window.addEventListener('touchcancel', onTouchEnd);
     };
 
     const handleTaskMouseDown = (e: React.MouseEvent, task: any, type: 'move' | 'resize') => {
@@ -577,7 +636,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     };
 
     useEffect(() => {
-        if (!dragState && !creationDrag) return;
+        if ((!dragState || dragState.isTouch) && !creationDrag) return;
 
         const handleMove = (clientY: number) => {
             if (dragState) {
