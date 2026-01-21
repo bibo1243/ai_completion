@@ -260,13 +260,24 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             alert(`錯誤：無法識別擁有者 ID (URL ID: ${ownerId})，無法同步。`);
                             return '';
                         }
-                        // Direct Supabase Insert for Guest
+                        // Auto-assign tags if none provided to ensure visibility
+                        let finalTags = enriched.tags || [];
+                        if (finalTags.length === 0) {
+                            if (selectedTagIds.length > 0) {
+                                finalTags = selectedTagIds;
+                            } else if (displayTags.length > 0) {
+                                // Default to the first tag available in the view context
+                                finalTags = [displayTags[0].id];
+                            }
+                        }
+
                         const newTaskPayload = {
                             ...enriched,
                             id: newId,
                             user_id: ownerId, // CRITICAL: Assign to Owner
                             created_at: new Date().toISOString(),
                             status: 'todo', // Default
+                            tags: finalTags
                         };
                         console.log('[Guest] Inserting task for owner:', ownerId, newTaskPayload);
                         const { error } = await supabase.from('tasks').insert([newTaskPayload]);
