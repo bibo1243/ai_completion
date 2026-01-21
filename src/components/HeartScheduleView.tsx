@@ -1050,7 +1050,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             </AnimatePresence>
 
             {/* Timeline View */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth overscroll-none">
                 {/* Background Container for Click-and-Drag Creation */}
                 <div
                     className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
