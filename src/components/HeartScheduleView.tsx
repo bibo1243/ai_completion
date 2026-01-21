@@ -201,6 +201,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
         return {
             ...context,
+            tasks: isSnapshotMode ? urlTasks : tasks, // Provide correct tasks list to prevent finding crashes in MobileTaskEditor
             tags: displayTags, // Allow TaskInput to see snapshot tags
             // Intercept Update
             updateTask: async (id: string, data: any, childIds?: string[]) => {
@@ -654,6 +655,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // --- Mobile Long Press for Creation ---
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const touchStartPos = useRef({ x: 0, y: 0 });
+    const isLongPressCreation = useRef(false);
+    const longPressStartMin = useRef(0);
+    const currentDragDuration = useRef(60);
 
     const handleTouchStart = (e: React.TouchEvent) => {
         // Ignore if touching a task (event bubbles up but we can check target if needed, 
@@ -668,6 +672,27 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     const handleTouchMove = (e: React.TouchEvent) => {
         const touch = e.touches[0];
+
+        if (isLongPressCreation.current && scrollRef.current) {
+            // e.preventDefault();
+            const rect = scrollRef.current.getBoundingClientRect();
+            const scrollTop = scrollRef.current.scrollTop;
+            const offsetY = touch.clientY - rect.top + scrollTop;
+
+            const currentMin = (offsetY / HOUR_HEIGHT) * 60;
+            let newDuration = currentMin - longPressStartMin.current;
+            if (newDuration < 15) newDuration = 15;
+            newDuration = Math.round(newDuration / 15) * 15;
+
+            currentDragDuration.current = newDuration;
+
+            setCreationDrag(prev => {
+                if (!prev) return prev;
+                return { ...prev, currentDuration: newDuration };
+            });
+            return;
+        }
+
         const moveX = Math.abs(touch.clientX - touchStartPos.current.x);
         const moveY = Math.abs(touch.clientY - touchStartPos.current.y);
 
@@ -680,10 +705,33 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         }
     };
 
+
     const handleTouchEnd = () => {
         if (longPressTimer.current) {
             clearTimeout(longPressTimer.current);
             longPressTimer.current = null;
+        }
+
+        if (isLongPressCreation.current) {
+            isLongPressCreation.current = false;
+
+            const startMin = longPressStartMin.current;
+            const duration = currentDragDuration.current;
+            const startStr = minutesToTime(startMin);
+            const endStr = minutesToTime(startMin + duration);
+
+            setDraftTaskForModal({
+                title: '',
+                start_time: startStr,
+                end_time: endStr,
+                start_date: format(currentDate, 'yyyy-MM-dd'),
+                duration: duration,
+                is_all_day: false,
+            });
+            setEditingTaskId('new');
+
+            // Clear creation ghost
+            setCreationDrag(null);
         }
     };
 
@@ -713,21 +761,21 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         // Snap to 15 min
         const snappedMinutes = Math.round(totalMinutes / 15) * 15;
 
-        const startStr = minutesToTime(snappedMinutes);
-        const endStr = minutesToTime(snappedMinutes + 60);
-
-        setDraftTaskForModal({
-            title: '',
-            start_time: startStr,
-            end_time: endStr,
-            start_date: format(currentDate, 'yyyy-MM-dd'),
-            duration: 60,
+        // Start Drag Creation Mode
+        setCreationDrag({
+            startY: offsetY,
+            startMin: snappedMinutes,
+            currentDuration: 60
         });
-        setEditingTaskId('new');
+
+        isLongPressCreation.current = true;
+        longPressStartMin.current = snappedMinutes;
+        currentDragDuration.current = 60;
 
         // Clear timer
         longPressTimer.current = null;
     };
+
 
     const handleCopyLink = () => {
         const snapshotTasks = dailyTasks;
@@ -1029,6 +1077,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             end_time: endStr,
                             start_date: format(currentDate, 'yyyy-MM-dd'),
                             duration: 60,
+                            is_all_day: false,
                         });
                         setEditingTaskId('new');
                     }}
