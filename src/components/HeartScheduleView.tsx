@@ -266,8 +266,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             if (selectedTagIds.length > 0) {
                                 finalTags = selectedTagIds;
                             } else if (displayTags.length > 0) {
-                                // Default to ALL tags available in the view context to ensure visibility for owner
-                                finalTags = displayTags.map(t => t.id);
+                                // Intelligent Auto-Tagging:
+                                // Priority 1: Tag name contains "Wei" (case insensitive) -> for specific user request
+                                // Priority 2: Tag name contains "行程" -> generic schedule tag
+                                // Priority 3: First available tag
+                                const weiTag = displayTags.find(t => t.name.toLowerCase().includes('wei'));
+                                const scheduleTag = displayTags.find(t => t.name.includes('行程'));
+
+                                if (weiTag) {
+                                    finalTags = [weiTag.id];
+                                } else if (scheduleTag) {
+                                    finalTags = [scheduleTag.id];
+                                } else {
+                                    finalTags = [displayTags[0].id];
+                                }
                             }
                         }
 
