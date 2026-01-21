@@ -354,8 +354,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     const toggleTagSelection = (tagId: string) => {
         setSelectedTagIds(prev => {
-            if (prev.includes(tagId)) return prev.filter(id => id !== tagId);
-            const next = [...prev, tagId];
+            const next = prev.includes(tagId)
+                ? prev.filter(id => id !== tagId)
+                : [...prev, tagId];
             localStorage.setItem('heart_schedule_tags', JSON.stringify(next));
             return next;
         });
