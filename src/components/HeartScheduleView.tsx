@@ -120,6 +120,26 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
         // console.log("Guest View: Subscribing to Owner updates:", ownerId);
 
+        // Load initial data from Supabase
+        const loadInitialData = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('tasks')
+                    .select('*')
+                    .eq('user_id', ownerId)
+                    .neq('status', 'deleted');
+
+                if (error) {
+                    console.error('[GuestRealtime] Failed to load initial data:', error);
+                } else if (data) {
+                    console.log('[GuestRealtime] Loaded initial data:', data.length, 'tasks');
+                    setUrlTasks(data);
+                }
+            } catch (err) {
+                console.error('[GuestRealtime] Error loading initial data:', err);
+            }
+        };
+
         const channel = supabase
             .channel(`guest-sync-${ownerId}`)
             .on(
@@ -151,7 +171,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             .subscribe((status, err) => {
                 console.log(`[GuestRealtime] Status: ${status}`, err);
                 if (status === 'SUBSCRIBED') {
-                    // console.log('[GuestRealtime] Connected to updates');
+                    // Load initial data after subscription is established
+                    loadInitialData();
                 }
                 if (status === 'CHANNEL_ERROR') {
                     console.error('[GuestRealtime] Connection Error:', err);
