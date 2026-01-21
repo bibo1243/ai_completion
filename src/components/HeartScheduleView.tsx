@@ -133,7 +133,19 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     });
                 }
             )
-            .subscribe();
+            .subscribe((status, err) => {
+                console.log(`[GuestRealtime] Status: ${status}`, err);
+                if (status === 'SUBSCRIBED') {
+                    // console.log('[GuestRealtime] Connected to updates');
+                }
+                if (status === 'CHANNEL_ERROR') {
+                    console.error('[GuestRealtime] Connection Error:', err);
+                    if (err?.message?.includes('401')) {
+                        // This usually confirms RLS policy missing for 'anon'
+                        console.error('RLS Policy likely blocking anon access. Please check supabase_guest_policy.sql');
+                    }
+                }
+            });
 
         return () => {
             supabase.removeChannel(channel);
@@ -203,7 +215,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 // 1. Call Update
                 if (isSnapshotMode && ownerId && supabase) {
                     // Direct Supabase Update for Guest
-                    await supabase.from('tasks').update(enriched).eq('id', id);
+                    const { error } = await supabase.from('tasks').update(enriched).eq('id', id);
+                    if (error) {
+                        alert(`同步更新失敗: ${error.message}\n請檢查網路或權限設置`);
+                        console.error('Guest Update Error:', error);
+                        return; // Stop optimistic update if failed? Maybe keep it for better UX but warn.
+                    }
                 } else {
                     // Owner Mode
                     await updateTask(id, enriched, childIds);
@@ -250,8 +267,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         // Owner Mode
                         newId = await addTask(enriched, childIds);
                     }
-                } catch (e) {
+                } catch (e: any) {
                     console.warn("Guest addTask failed", e);
+                    alert(`同步新增失敗: ${e?.message || '未知錯誤'}`);
                     // Fallback to local only if DB fails
                     if (!isSnapshotMode) return ''; // If owner fails, return empty?
                 }
@@ -267,7 +285,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             deleteTask: async (id: string) => {
                 if (isSnapshotMode && ownerId && supabase) {
                     // Direct Supabase Delete for Guest
-                    await supabase.from('tasks').delete().eq('id', id);
+                    const { error } = await supabase.from('tasks').delete().eq('id', id);
+                    if (error) {
+                        alert(`同步刪除失敗: ${error.message}`);
+                        console.error('Guest Delete Error:', error);
+                    }
                 } else {
                     // Owner Mode - Call original
                     // Note: context.deleteTask might have different signature (id, childIds?)
