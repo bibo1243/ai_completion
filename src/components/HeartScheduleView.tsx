@@ -1029,7 +1029,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     <div className="text-xs text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
                     {(() => {
                         const solarTerm = getSolarTerm(currentDate);
-                        console.log('[HeartScheduleView] Current date:', currentDate.toString(), '| Solar term:', solarTerm);
                         if (solarTerm) {
                             return (
                                 <div className="text-xs text-amber-600 font-bold mt-0.5 tracking-wide">
