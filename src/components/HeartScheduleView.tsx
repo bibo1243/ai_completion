@@ -647,8 +647,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             d.setMinutes(clickMin % 60);
 
             // Auto-Tag Logic
-            const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
-                displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+            // Auto-Tag: Priority Google:冠葦行程 (User Request for Sync Visibility)
+            const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
+                displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
+                displayTags.find(t => t.name.includes('-Wei行程'));
             const defaultTags = targetTag ? [targetTag.id] : [];
 
             const draft = {
@@ -729,9 +731,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 d.setHours(Math.floor(creationDrag.startMin / 60));
                 d.setMinutes(creationDrag.startMin % 60);
 
-                // Auto-Tag: Default to -Wei行程, strictly avoiding Google tags
-                const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
-                    displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+                // Auto-Tag: Priority Google:冠葦行程
+                const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
+                    displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
+                    displayTags.find(t => t.name.includes('-Wei行程'));
                 const defaultTags = targetTag ? [targetTag.id] : [];
 
                 const draft = {
@@ -1217,9 +1220,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         const startStr = "08:00";
                         const endStr = "09:00";
 
-                        // Auto-Tag: Default to -Wei行程, strictly avoiding Google tags
-                        const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
-                            displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
+                        // Auto-Tag: Priority Google:冠葦行程
+                        const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
+                            displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
+                            displayTags.find(t => t.name.includes('-Wei行程'));
                         const defaultTags = targetTag ? [targetTag.id] : [];
 
                         setDraftTaskForModal({
