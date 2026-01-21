@@ -266,8 +266,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             if (selectedTagIds.length > 0) {
                                 finalTags = selectedTagIds;
                             } else if (displayTags.length > 0) {
-                                // Default to the first tag available in the view context
-                                finalTags = [displayTags[0].id];
+                                // Default to ALL tags available in the view context to ensure visibility for owner
+                                finalTags = displayTags.map(t => t.id);
                             }
                         }
 
