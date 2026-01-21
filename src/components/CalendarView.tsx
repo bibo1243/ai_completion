@@ -569,6 +569,9 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
       const holiday = getTaiwanHoliday(date);
       const lunar = getLunarDate(date);
       const solarTerm = getSolarTerm(date);
+      if (solarTerm) {
+        console.log('[CalendarView] Rendering solar term for day', d, ':', solarTerm);
+      }
       days.push(
         <div key={d}
           onDragOver={handleDragOver}

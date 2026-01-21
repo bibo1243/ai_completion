@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AppContext } from '../context/AppContext';
 import { isSameDay, getRootTask } from '../utils';
 import { COLOR_THEMES } from '../constants';
-import { getTaiwanHoliday, getLunarDate } from '../utils/calendar';
+import { getTaiwanHoliday, getLunarDate, getSolarTerm } from '../utils/calendar';
 import { CalendarCheck } from 'lucide-react';
 
 
@@ -490,6 +490,7 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                     // 節假日資訊
                                     const holiday = getTaiwanHoliday(day.date);
                                     const lunar = getLunarDate(day.date);
+                                    const solarTerm = getSolarTerm(day.date);
                                     const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
                                     const isSunday = day.date.getDay() === 0;
                                     const isSaturday = day.date.getDay() === 6;
@@ -576,8 +577,13 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                                 {holiday}
                                                             </span>
                                                         )}
+                                                        {solarTerm && (
+                                                            <span className="text-[8px] font-bold truncate text-amber-600">
+                                                                🌾 {solarTerm}
+                                                            </span>
+                                                        )}
                                                         {themeSettings.showLunar && (
-                                                            <span className={`text-[8px] truncate ${holiday ? 'text-gray-400' : 'text-gray-300'}`}>
+                                                            <span className={`text-[8px] truncate ${holiday || solarTerm ? 'text-gray-400' : 'text-gray-300'}`}>
                                                                 {lunar}
                                                             </span>
                                                         )}

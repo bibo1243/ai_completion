@@ -144,6 +144,12 @@ const SOLAR_TERMS: Record<string, string> = {
 };
 
 export const getSolarTerm = (date: Date): string | null => {
-    const key = date.toISOString().split('T')[0];
-    return SOLAR_TERMS[key] || null;
+    // Use local date to avoid timezone issues
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const key = `${year}-${month}-${day}`;
+    const result = SOLAR_TERMS[key] || null;
+    console.log('[getSolarTerm] Date object:', date.toString(), '| Key:', key, '| Result:', result || 'no solar term');
+    return result;
 };
