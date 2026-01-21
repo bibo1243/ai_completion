@@ -719,6 +719,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             const startStr = minutesToTime(startMin);
             const endStr = minutesToTime(startMin + duration);
 
+            // Auto-Tag: Default to Wei/Schedule tag
+            const targetTag = displayTags.find(t => t.name.toLowerCase().includes('wei') && t.name.includes('行程')) ||
+                displayTags.find(t => t.name.toLowerCase().includes('wei')) ||
+                displayTags.find(t => t.name.includes('行程'));
+            const defaultTags = targetTag ? [targetTag.id] : [];
+
             setDraftTaskForModal({
                 title: '',
                 start_time: startStr,
@@ -726,6 +732,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 start_date: format(currentDate, 'yyyy-MM-dd'),
                 duration: duration,
                 is_all_day: false,
+                tags: defaultTags,
             });
             setEditingTaskId('new');
 
@@ -1070,6 +1077,13 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     onClick={() => {
                         const startStr = "08:00";
                         const endStr = "09:00";
+
+                        // Auto-Tag: Default to Wei/Schedule tag
+                        const targetTag = displayTags.find(t => t.name.toLowerCase().includes('wei') && t.name.includes('行程')) ||
+                            displayTags.find(t => t.name.toLowerCase().includes('wei')) ||
+                            displayTags.find(t => t.name.includes('行程'));
+                        const defaultTags = targetTag ? [targetTag.id] : [];
+
                         setDraftTaskForModal({
                             title: '',
                             start_time: startStr,
@@ -1077,6 +1091,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             start_date: format(currentDate, 'yyyy-MM-dd'),
                             duration: 60,
                             is_all_day: false,
+                            tags: defaultTags,
                         });
                         setEditingTaskId('new');
                     }}
