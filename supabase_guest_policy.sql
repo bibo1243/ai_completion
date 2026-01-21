@@ -1,31 +1,29 @@
--- Enable Realtime for tasks table
-alter publication supabase_realtime add table tasks;
+-- 1. Enable Realtime for tasks table
+-- Note: If you see "relation tasks is already member of publication", it means Realtime is already enabled. You can ignore that error or comment this line.
+-- alter publication supabase_realtime add table tasks;
 
--- Enable Row Level Security (RLS)
+-- 2. Enable Row Level Security (RLS)
 alter table tasks enable row level security;
 
--- POLICY 1: Allow public READ access to tasks
--- This allows anyone to query tasks. In the app, we filter by user_id.
--- Security Note: This exposes all tasks to anyone who can query the API.
+-- 3. Create/Update Policies
+-- We drop existing policies first to avoid "policy already exists" errors when re-running.
+
+drop policy if exists "Allow public read access" on tasks;
 create policy "Allow public read access"
 on tasks for select
 using ( true );
 
--- POLICY 2: Allow public INSERT access to tasks
--- This allows anyone to create tasks.
--- Security Note: Anyone can spam tasks.
+drop policy if exists "Allow public insert access" on tasks;
 create policy "Allow public insert access"
 on tasks for insert
 with check ( true );
 
--- POLICY 3: Allow public UPDATE access to tasks
--- This allows anyone to edit tasks.
--- Security Note: Anyone can edit any task if they know the ID.
+drop policy if exists "Allow public update access" on tasks;
 create policy "Allow public update access"
 on tasks for update
 using ( true );
 
--- POLICY 4: Allow public DELETE access to tasks (Optional)
+drop policy if exists "Allow public delete access" on tasks;
 create policy "Allow public delete access"
 on tasks for delete
 using ( true );
