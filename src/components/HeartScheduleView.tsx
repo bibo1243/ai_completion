@@ -389,7 +389,24 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Filter Tasks
     const dailyTasks = useMemo(() => {
-        if (isSnapshotMode) return urlTasks.filter(t => t.status !== 'deleted');
+        if (isSnapshotMode) {
+            // Apply tag filtering in snapshot mode
+            return urlTasks.filter(task => {
+                if (task.status === 'deleted') return false;
+
+                let taskDate = null;
+                if (task.start_date) taskDate = parseISO(task.start_date);
+                else if (task.due_date) taskDate = parseISO(task.due_date);
+
+                if (!taskDate) return false;
+                if (!isSameDay(taskDate, currentDate)) return false;
+
+                // Apply tag filtering
+                if (selectedTagIds.length === 0) return true;
+                if (!task.tags || task.tags.length === 0) return false;
+                return task.tags.some((tid: string) => selectedTagIds.includes(tid));
+            });
+        }
 
         const hasLiveData = tasks.some(t => {
             const tDate = t.start_date ? parseISO(t.start_date) : (t.due_date ? parseISO(t.due_date) : null);
