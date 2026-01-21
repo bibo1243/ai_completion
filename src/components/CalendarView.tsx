@@ -6,7 +6,7 @@ import { AppContext } from '../context/AppContext';
 import { isSameDay } from '../utils';
 import { COLOR_THEMES } from '../constants';
 import { TaskData } from '../types';
-import { getTaiwanHoliday, getLunarDate } from '../utils/calendar';
+import { getTaiwanHoliday, getLunarDate, getSolarTerm } from '../utils/calendar';
 
 const HOUR_HEIGHT = 60;
 type ViewMode = 'month' | 'week' | 'custom';
@@ -568,6 +568,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
       const isTodayDate = isSameDay(date, new Date());
       const holiday = getTaiwanHoliday(date);
       const lunar = getLunarDate(date);
+      const solarTerm = getSolarTerm(date);
       days.push(
         <div key={d}
           onDragOver={handleDragOver}
@@ -587,6 +588,7 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
             <div className={`text-xs font-bold ${isTodayDate ? 'text-indigo-600' : 'text-gray-400'}`}>{d} {isTodayDate && '(Today)'}</div>
             <div className="flex flex-col items-end">
               {themeSettings.showTaiwanHolidays && holiday && <span className="text-[9px] font-bold text-red-400 leading-tight">{holiday}</span>}
+              {solarTerm && <span className="text-[9px] font-bold text-amber-600 leading-tight">🌾 {solarTerm}</span>}
               {themeSettings.showLunar && lunar && <span className="text-[9px] text-gray-300 leading-tight">{lunar}</span>}
             </div>
           </div>
@@ -663,12 +665,14 @@ export const CalendarView = ({ forcedViewMode, forcedNumDays }: { forcedViewMode
               const isTodayDate = isSameDay(date, new Date());
               const holiday = getTaiwanHoliday(date);
               const lunar = getLunarDate(date);
+              const solarTerm = getSolarTerm(date);
               return (
                 <div key={i} className={`flex-1 min-w-[150px] p-3 border-r border-gray-100 bg-white sticky top-0 z-20 ${isTodayDate ? 'bg-indigo-50/10' : ''}`}>
                   <div className="flex justify-between items-start">
                     <div className={`text-[10px] uppercase font-bold mb-0.5 ${isTodayDate ? 'text-indigo-600' : 'text-gray-400'}`}>{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                     <div className="flex flex-col items-end">
                       {themeSettings.showTaiwanHolidays && holiday && <span className="text-[8px] font-bold text-red-400 leading-none mb-0.5">{holiday}</span>}
+                      {solarTerm && <span className="text-[8px] font-bold text-amber-600 leading-none mb-0.5">🌾 {solarTerm}</span>}
                       {themeSettings.showLunar && lunar && <span className="text-[8px] text-gray-300 leading-none">{lunar}</span>}
                     </div>
                   </div>
