@@ -647,10 +647,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             d.setMinutes(clickMin % 60);
 
             // Auto-Tag Logic
-            // Auto-Tag: Priority Google:冠葦行程 (User Request for Sync Visibility)
-            const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
-                displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
-                displayTags.find(t => t.name.includes('-Wei行程'));
+            let targetTag;
+            if (isSnapshotMode) {
+                // Guest: -Wei行程
+                targetTag = displayTags.find(t => t.name.includes('-Wei行程'));
+            } else {
+                // Owner: Google:冠葦行程
+                targetTag = displayTags.find(t => t.name.includes('Google:冠葦行程')) ||
+                    displayTags.find(t => t.name.includes('冠葦行程'));
+            }
             const defaultTags = targetTag ? [targetTag.id] : [];
 
             const draft = {
@@ -731,10 +736,16 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 d.setHours(Math.floor(creationDrag.startMin / 60));
                 d.setMinutes(creationDrag.startMin % 60);
 
-                // Auto-Tag: Priority Google:冠葦行程
-                const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
-                    displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
-                    displayTags.find(t => t.name.includes('-Wei行程'));
+                // Auto-Tag Logic
+                let targetTag;
+                if (isSnapshotMode) {
+                    // Guest: -Wei行程
+                    targetTag = displayTags.find(t => t.name.includes('-Wei行程'));
+                } else {
+                    // Owner: Google:冠葦行程
+                    targetTag = displayTags.find(t => t.name.includes('Google:冠葦行程')) ||
+                        displayTags.find(t => t.name.includes('冠葦行程'));
+                }
                 const defaultTags = targetTag ? [targetTag.id] : [];
 
                 const draft = {
@@ -1220,10 +1231,16 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         const startStr = "08:00";
                         const endStr = "09:00";
 
-                        // Auto-Tag: Priority Google:冠葦行程
-                        const targetTag = displayTags.find(t => t.name === 'Google:冠葦行程') ||
-                            displayTags.find(t => t.name.includes('Google') && t.name.includes('Wei')) ||
-                            displayTags.find(t => t.name.includes('-Wei行程'));
+                        // Auto-Tag Logic
+                        let targetTag;
+                        if (isSnapshotMode) {
+                            // Guest: -Wei行程
+                            targetTag = displayTags.find(t => t.name.includes('-Wei行程'));
+                        } else {
+                            // Owner: Google:冠葦行程
+                            targetTag = displayTags.find(t => t.name.includes('Google:冠葦行程')) ||
+                                displayTags.find(t => t.name.includes('冠葦行程'));
+                        }
                         const defaultTags = targetTag ? [targetTag.id] : [];
 
                         setDraftTaskForModal({
