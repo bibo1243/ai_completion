@@ -799,6 +799,13 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         }));
 
         const usedTagIds = new Set(simpleTasks.flatMap(t => t.tags || []));
+
+        // Essential: Always include '-Wei行程' in shared tags so Guests can use it for new tasks
+        const weiTag = tags.find(t => t.name.includes('-Wei行程'));
+        if (weiTag) {
+            usedTagIds.add(weiTag.id);
+        }
+
         const tagsToShare = tags.filter(t => usedTagIds.has(t.id)).map(t => ({
             id: t.id, name: t.name, color: t.color
         }));
