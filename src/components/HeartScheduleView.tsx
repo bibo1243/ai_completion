@@ -651,6 +651,84 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         };
     }, [dragState, creationDrag, currentDate, updateTask, isSnapshotMode, tags]);
 
+    // --- Mobile Long Press for Creation ---
+    const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const touchStartPos = useRef({ x: 0, y: 0 });
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        // Ignore if touching a task (event bubbles up but we can check target if needed, 
+        // but tasks have stopPropagation on their handlers so it should be fine)
+        const touch = e.touches[0];
+        touchStartPos.current = { x: touch.clientX, y: touch.clientY };
+
+        longPressTimer.current = setTimeout(() => {
+            handleLongPress(touch.clientX, touch.clientY);
+        }, 500); // 500ms threshold
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        const touch = e.touches[0];
+        const moveX = Math.abs(touch.clientX - touchStartPos.current.x);
+        const moveY = Math.abs(touch.clientY - touchStartPos.current.y);
+
+        // If moved more than 10px, cancel long press
+        if (moveX > 10 || moveY > 10) {
+            if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+        }
+    };
+
+    const handleLongPress = (clientX: number, clientY: number) => {
+        if (!scrollRef.current) return;
+
+        // Haptic feedback
+        if (navigator.vibrate) navigator.vibrate(50);
+
+        const rect = scrollRef.current.getBoundingClientRect();
+        // Calculate relative Y inside the scroll container
+        // Note: The click is on the viewport. Container might be scrolled.
+        // We need the Y relative to the top of the 24h content div.
+        // The content div is `relative`. 
+        // The scrollContainer has `scrollTop`. 
+        // Y relative to container visible top = clientY - rect.top.
+        // Y absolute in content = Y relative + scrollTop.
+        const scrollTop = scrollRef.current.scrollTop;
+        const offsetY = clientY - rect.top + scrollTop;
+
+        // Calculate time
+        // HOUR_HEIGHT is usually 60 or derived.
+        // Let's assume HOUR_HEIGHT is defined in scope (it is constant 64 in this file? Line 13)
+        // Step 15752: `const HOUR_HEIGHT = 64;`
+
+        const totalMinutes = (offsetY / HOUR_HEIGHT) * 60;
+        // Snap to 15 min
+        const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+
+        const startStr = minutesToTime(snappedMinutes);
+        const endStr = minutesToTime(snappedMinutes + 60);
+
+        setDraftTaskForModal({
+            title: '',
+            start_time: startStr,
+            end_time: endStr,
+            start_date: format(currentDate, 'yyyy-MM-dd'),
+            duration: 60,
+        });
+        setEditingTaskId('new');
+
+        // Clear timer
+        longPressTimer.current = null;
+    };
+
     const handleCopyLink = () => {
         const snapshotTasks = dailyTasks;
 
@@ -777,6 +855,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 <div
                     className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
                     onMouseDown={handleBgMouseDown}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
                 >
                     {/* Grid Lines */}
                     {Array.from({ length: 24 }).map((_, i) => (
