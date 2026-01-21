@@ -264,22 +264,18 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         // Auto-assign tags if none provided to ensure visibility
                         let finalTags = enriched.tags || [];
                         if (finalTags.length === 0) {
-                            // Intelligent Auto-Tagging per User Request ("-Wei行程")
-                            // Strictly prioritize detecting "-Wei行程" or similar tags
-                            const targetTag = displayTags.find(t =>
-                                t.name.toLowerCase().includes('wei') && t.name.includes('行程')
-                            ) || displayTags.find(t =>
-                                t.name.toLowerCase().includes('wei')
-                            ) || displayTags.find(t =>
-                                t.name.includes('行程')
-                            );
+                            // Strictly prioritize "-Wei行程" and exclude Google tags
+                            const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                                displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
 
                             if (targetTag) {
                                 finalTags = [targetTag.id];
                             } else if (selectedTagIds.length > 0) {
                                 finalTags = selectedTagIds;
                             } else if (displayTags.length > 0) {
-                                finalTags = [displayTags[0].id];
+                                // Fallback: prefer non-Google tags
+                                const nonGoogle = displayTags.find(t => !t.name.toLowerCase().includes('google'));
+                                finalTags = [nonGoogle ? nonGoogle.id : displayTags[0].id];
                             }
                         }
 
@@ -719,10 +715,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             const startStr = minutesToTime(startMin);
             const endStr = minutesToTime(startMin + duration);
 
-            // Auto-Tag: Default to Wei/Schedule tag
-            const targetTag = displayTags.find(t => t.name.toLowerCase().includes('wei') && t.name.includes('行程')) ||
-                displayTags.find(t => t.name.toLowerCase().includes('wei')) ||
-                displayTags.find(t => t.name.includes('行程'));
+            // Auto-Tag: Default to -Wei行程, strictly avoiding Google tags
+            const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
             const defaultTags = targetTag ? [targetTag.id] : [];
 
             setDraftTaskForModal({
@@ -1078,10 +1073,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         const startStr = "08:00";
                         const endStr = "09:00";
 
-                        // Auto-Tag: Default to Wei/Schedule tag
-                        const targetTag = displayTags.find(t => t.name.toLowerCase().includes('wei') && t.name.includes('行程')) ||
-                            displayTags.find(t => t.name.toLowerCase().includes('wei')) ||
-                            displayTags.find(t => t.name.includes('行程'));
+                        // Auto-Tag: Default to -Wei行程, strictly avoiding Google tags
+                        const targetTag = displayTags.find(t => t.name.includes('-Wei行程')) ||
+                            displayTags.find(t => t.name.toLowerCase().includes('wei') && !t.name.toLowerCase().includes('google'));
                         const defaultTags = targetTag ? [targetTag.id] : [];
 
                         setDraftTaskForModal({
