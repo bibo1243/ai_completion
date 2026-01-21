@@ -44,11 +44,30 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             // Guest Mode: Always -Wei行程
             return displayTags.find(t => t.name.includes('-Wei行程'));
         } else {
-            // Owner Mode: Robustly find 'Google:冠葦行程'
-            return displayTags.find(t => t.name === 'Google:冠葦行程') || // Exact match
-                displayTags.find(t => t.name.includes('Google:冠葦行程')) || // Substring match
-                displayTags.find(t => t.name.includes('冠葦行程') && t.name.toLowerCase().includes('google')) || // Keyword match
-                displayTags.find(t => t.name.includes('冠葦行程')); // Fallback
+            // Owner Mode: Robust Search
+            // Debug: Log available tags to help diagnose
+            console.log('[HeartSchedule] Available Tags:', displayTags.map(t => t.name));
+
+            // 1. Strict-ish match (handle fullwidth colon)
+            let target = displayTags.find(t => {
+                const n = t.name.toLowerCase().replace(/：/g, ':').replace(/\s/g, '');
+                return n.includes('google:冠葦行程');
+            });
+            if (target) return target;
+
+            // 2. Loose match "冠葦行程"
+            target = displayTags.find(t => t.name.includes('冠葦行程'));
+            if (target) return target;
+
+            // 3. Keyword match "Google" AND "冠葦"
+            target = displayTags.find(t => {
+                const n = t.name.toLowerCase();
+                return n.includes('google') && n.includes('冠葦');
+            });
+            if (target) return target;
+
+            // 4. Fallback: Any "冠葦"
+            return displayTags.find(t => t.name.includes('冠葦'));
         }
     };
 
