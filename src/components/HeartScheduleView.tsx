@@ -629,7 +629,26 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         navigator.clipboard.writeText(url);
         alert(`連結已複製！(包含 ${simpleTasks.length} 個行程，所見即所得)`);
         setShowShareModal(false);
+
     };
+
+    // --- Layout Calculation ---
+    // Calculate layout for all tasks once, incorporating the current drag state
+    // so that the layout updates in real-time as you drag (avoiding overlap)
+    const dailyLayout = useMemo(() => {
+        // Create a list of tasks where the dragged task has its *current* time/duration
+        const layoutTasks = dailyTasks.map(t => {
+            if (dragState && dragState.taskId === t.id) {
+                return {
+                    ...t,
+                    start_time: minutesToTime(dragState.currentStartMin),
+                    duration: dragState.currentDuration,
+                };
+            }
+            return t;
+        });
+        return getLayoutForDay(layoutTasks);
+    }, [dailyTasks, dragState]);
 
     return (
         <div className="fixed inset-0 z-[1000] bg-white/95 backdrop-blur-xl flex flex-col overflow-hidden font-sans text-gray-800">
@@ -742,22 +761,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     <div className="absolute top-0 right-2 left-16 bottom-0 pointer-events-none">
                         {dailyTasks.map(task => {
                             const isDraft = dragState?.taskId === task.id;
-                            const layoutStyle = isDraft ? null : getLayoutForDay(dailyTasks)[task.id];
-                            // Optimization note: getLayoutForDay is called for every task here! 
-                            // Ideally calculate outside map. But dailyTasks is small, so it's okay for now.
-                            // Better: useMemo the layout.
-
+                            // Use the pre-calculated layout
+                            const layoutInfo = dailyLayout[task.id];
                             const style = isDraft
                                 ? {
-                                    top: `${(dragState.currentStartMin / 60) * HOUR_HEIGHT}px`,
-                                    height: `${(dragState.currentDuration / 60) * HOUR_HEIGHT}px`,
-                                    left: '0%', width: '100%',
+                                    top: `${(dragState!.currentStartMin / 60) * HOUR_HEIGHT}px`,
+                                    height: `${(dragState!.currentDuration / 60) * HOUR_HEIGHT}px`,
+                                    left: layoutInfo?.left || '0%',
+                                    width: layoutInfo?.width || '100%',
                                     zIndex: 50
                                 }
                                 : {
                                     ...getTaskStyle(task),
-                                    left: layoutStyle?.left || '0%',
-                                    width: layoutStyle?.width || '100%'
+                                    left: layoutInfo?.left || '0%',
+                                    width: layoutInfo?.width || '100%'
                                 };
 
                             // Resolve Color
