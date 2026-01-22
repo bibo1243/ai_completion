@@ -106,7 +106,13 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         if (task) {
             setTitle(task.title || '');
             setDescription(task?.description || '');
-            setStartDate(task.start_date || '');
+            // Convert ISO start_date to local yyyy-MM-dd
+            setStartDate(() => {
+                const raw = task.start_date;
+                if (!raw) return '';
+                if (raw.includes('T')) return getLocalDateStr(new Date(raw));
+                return raw;
+            });
             setDueDate(task.due_date || '');
             setSelectedTags(task.tags || []);
             setParentId(task.parent_id || null);
