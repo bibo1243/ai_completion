@@ -123,6 +123,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         // Load initial data from Supabase
         const loadInitialData = async () => {
             try {
+                // Load tasks
                 const { data, error } = await supabase
                     .from('tasks')
                     .select('*')
@@ -134,6 +135,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 } else if (data) {
                     console.log('[GuestRealtime] Loaded initial data:', data.length, 'tasks');
                     setUrlTasks(data);
+                }
+
+                // Load tags
+                const { data: tagsData, error: tagsError } = await supabase
+                    .from('tags')
+                    .select('*')
+                    .eq('user_id', ownerId)
+                    .order('order_index', { ascending: true });
+
+                if (tagsError) {
+                    console.error('[GuestRealtime] Failed to load tags:', tagsError);
+                } else if (tagsData) {
+                    console.log('[GuestRealtime] Loaded tags:', tagsData.length, 'tags');
+                    setSnapshotTags(tagsData);
                 }
             } catch (err) {
                 console.error('[GuestRealtime] Error loading initial data:', err);
@@ -159,6 +174,31 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         }
                         if (eventType === 'UPDATE') {
                             // If update, merge properties
+                            return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
+                        }
+                        if (eventType === 'DELETE') {
+                            return prev.filter(t => t.id !== oldRec.id);
+                        }
+                        return prev;
+                    });
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'tags',
+                    filter: `user_id=eq.${ownerId}`
+                },
+                (payload) => {
+                    const { eventType, new: newRec, old: oldRec } = payload;
+                    setSnapshotTags(prev => {
+                        if (eventType === 'INSERT') {
+                            if (prev.some(t => t.id === newRec.id)) return prev;
+                            return [...prev, newRec];
+                        }
+                        if (eventType === 'UPDATE') {
                             return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
                         }
                         if (eventType === 'DELETE') {
