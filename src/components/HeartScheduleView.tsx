@@ -1527,6 +1527,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                 setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
                                                 return;
                                             }
+                                            e.stopPropagation(); // Prevent bubbling to parent move handler
                                             handleTaskTouchStart(e, task, 'resize');
                                         }}
                                     >
