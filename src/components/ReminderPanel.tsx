@@ -290,15 +290,17 @@ export const ReminderPanel = () => {
             {/* Bell Button */}
             <button
                 onClick={() => setIsReminderPanelOpen(!isReminderPanelOpen)}
-                className={`relative p-1.5 rounded-lg transition-colors ${isReminderPanelOpen ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100 text-gray-500 hover:text-orange-500'}`}
+                className={`p-1.5 rounded-lg transition-colors ${isReminderPanelOpen ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100 text-gray-500 hover:text-orange-500'}`}
                 title="提醒通知"
             >
-                <Bell size={18} />
-                {unseenCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
-                        {unseenCount > 9 ? '9+' : unseenCount}
-                    </span>
-                )}
+                <div className="relative">
+                    <Bell size={18} />
+                    {unseenCount > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse ring-2 ring-white">
+                            {unseenCount > 9 ? '9+' : unseenCount}
+                        </span>
+                    )}
+                </div>
             </button>
 
             {/* Panel Dropdown */}
