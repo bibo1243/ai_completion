@@ -614,6 +614,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const dragStateRef = useRef(dragState);
     useEffect(() => { dragStateRef.current = dragState; }, [dragState]);
 
+    const dragDelayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     // Safety Ref to track and kill zombie listeners
     const activeTouchListeners = useRef<{ move: EventListener; end: EventListener } | null>(null);
 
@@ -628,76 +630,124 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     };
 
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
-        e.stopPropagation();
-
-        // Ensure we start clean
-        cleanupTouchListeners();
+        // NOTE: We do NOT stop propagation here to allow scrolling and clicking (tap)
 
         const touch = e.touches[0];
-        const initialY = touch.clientY;
+        const startX = touch.clientX;
+        const startY = touch.clientY;
         const startMin = timeToMinutes(task.start_time);
         const duration = task.duration || 60;
 
-        setDragState({
-            taskId: task.id,
-            initialY: initialY,
-            originalStartMin: startMin,
-            originalDuration: duration,
-            type,
-            currentStartMin: startMin,
-            currentDuration: duration,
-            isTouch: true
-        });
+        // Cleanup any existing timer
+        if (dragDelayTimer.current) clearTimeout(dragDelayTimer.current);
 
-        const onTouchMove = (evt: any) => {
-            if (evt.cancelable) evt.preventDefault(); // Lock scroll
-            // Note: evt is global TouchEvent
-            const clientY = evt.touches ? evt.touches[0].clientY : 0;
-            const deltaY = clientY - initialY;
-            const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
+        const cancelDelay = () => {
+            if (dragDelayTimer.current) {
+                clearTimeout(dragDelayTimer.current);
+                dragDelayTimer.current = null;
+            }
+            window.removeEventListener('touchmove', checkMove);
+            window.removeEventListener('touchend', cancelDelay);
+            window.removeEventListener('touchcancel', cancelDelay);
+        };
 
-            if (type === 'move') {
-                let newStart = startMin + deltaMin;
-                newStart = Math.max(0, Math.min(1440 - duration, newStart));
-                setDragState(prev => prev ? { ...prev, currentStartMin: newStart } : null);
-            } else {
-                let newDuration = duration + deltaMin;
-                newDuration = Math.max(15, newDuration);
-                setDragState(prev => prev ? { ...prev, currentDuration: newDuration } : null);
+        const checkMove = (evt: TouchEvent) => {
+            const moveX = evt.touches[0].clientX;
+            const moveY = evt.touches[0].clientY;
+            // If moved significantly, cancel drag intent (it's a scroll)
+            if (Math.abs(moveX - startX) > 10 || Math.abs(moveY - startY) > 10) {
+                cancelDelay();
             }
         };
 
-        const onTouchEnd = () => {
-            try {
-                const finalState = dragStateRef.current;
-                if (finalState && finalState.taskId === task.id) {
-                    const { currentStartMin, currentDuration } = finalState;
-                    const start_time = minutesToTime(currentStartMin);
-                    const end_time = minutesToTime(currentStartMin + currentDuration);
+        // Start Delay Timer
+        dragDelayTimer.current = setTimeout(() => {
+            // 1. Visual Feedback
+            if (navigator.vibrate) navigator.vibrate(50);
 
-                    const d = new Date(currentDate);
-                    d.setHours(Math.floor(currentStartMin / 60));
-                    d.setMinutes(currentStartMin % 60);
+            // 2. Cleanup old listeners and delay watchers
+            cancelDelay();
+            cleanupTouchListeners();
 
-                    const updates = { start_time, duration: currentDuration, end_time, start_date: d.toISOString() };
-                    updateTask(task.id, updates);
+            // 3. Set Drag State
+            setDragState({
+                taskId: task.id,
+                initialY: startY,
+                originalStartMin: startMin,
+                originalDuration: duration,
+                type,
+                currentStartMin: startMin,
+                currentDuration: duration,
+                isTouch: true
+            });
 
-                    if (isSnapshotMode) {
-                        setUrlTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
-                    }
+            // 4. Attach Drag Listeners
+            const onTouchMove = (evt: any) => {
+                if (evt.cancelable) evt.preventDefault(); // Lock scroll
+                const clientY = evt.touches ? evt.touches[0].clientY : 0;
+                const deltaY = clientY - startY;
+                const deltaMin = Math.round((deltaY / HOUR_HEIGHT) * 60 / 15) * 15;
+
+                if (type === 'move') {
+                    let newStart = startMin + deltaMin;
+                    newStart = Math.max(0, Math.min(1440 - duration, newStart));
+                    setDragState(prev => prev ? { ...prev, currentStartMin: newStart } : null);
+                } else {
+                    let newDuration = duration + deltaMin;
+                    newDuration = Math.max(15, newDuration);
+                    setDragState(prev => prev ? { ...prev, currentDuration: newDuration } : null);
                 }
-            } finally {
-                setDragState(null);
-                cleanupTouchListeners();
-            }
-        };
+            };
 
-        // Store for external cleanup
-        activeTouchListeners.current = { move: onTouchMove as EventListener, end: onTouchEnd as EventListener };
+            const onTouchEnd = () => {
+                try {
+                    const finalState = dragStateRef.current;
+                    if (finalState && finalState.taskId === task.id) {
+                        const { currentStartMin, currentDuration } = finalState;
 
-        window.addEventListener('touchmove', onTouchMove, { passive: false });
-        window.addEventListener('touchend', onTouchEnd);
-        window.addEventListener('touchcancel', onTouchEnd);
+                        // Check edit permission
+                        const editCheck = canEditTask(task);
+                        if (!editCheck.canEdit) {
+                            setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                            return;
+                        }
+
+                        const start_time = minutesToTime(currentStartMin);
+                        const end_time = minutesToTime(currentStartMin + currentDuration);
+
+                        const d = new Date(currentDate);
+                        d.setHours(Math.floor(currentStartMin / 60));
+                        d.setMinutes(currentStartMin % 60);
+
+                        const updates = {
+                            start_time,
+                            duration: currentDuration,
+                            end_time,
+                            start_date: d.toISOString()
+                        };
+
+                        updateTask(task.id, updates);
+
+                        if (isSnapshotMode) {
+                            setUrlTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...updates } : t));
+                        }
+                    }
+                } finally {
+                    setDragState(null);
+                    cleanupTouchListeners();
+                }
+            };
+
+            activeTouchListeners.current = { move: onTouchMove as EventListener, end: onTouchEnd as EventListener };
+            window.addEventListener('touchmove', onTouchMove, { passive: false });
+            window.addEventListener('touchend', onTouchEnd);
+            window.addEventListener('touchcancel', onTouchEnd);
+
+        }, 1000); // 1 Second Delay
+
+        window.addEventListener('touchmove', checkMove);
+        window.addEventListener('touchend', cancelDelay);
+        window.addEventListener('touchcancel', cancelDelay);
     };
 
     const handleTaskMouseDown = (e: React.MouseEvent, task: any, type: 'move' | 'resize') => {
@@ -1136,44 +1186,48 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             <div className="absolute bottom-0 left-0 w-[50vh] h-[50vh] bg-purple-200/20 rounded-full blur-[100px] pointer-events-none"></div>
 
             {/* Header */}
-            <header className="flex-shrink-0 px-6 py-4 flex items-center justify-between relative z-10 bg-white/50 backdrop-blur-sm border-b border-pink-100">
+            <header className="flex-shrink-0 px-3 py-2 md:px-6 md:py-4 flex items-center justify-between relative z-10 bg-white/50 backdrop-blur-sm border-b border-pink-100">
                 {!isStandalone && onClose && (
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 text-gray-500"><X size={20} /></button>
+                    <button onClick={onClose} className="p-1 md:p-2 rounded-full hover:bg-gray-100 text-gray-500"><X size={18} className="md:w-5 md:h-5" /></button>
                 )}
-                {isStandalone && <div className="w-10"></div>}
-                <div className="flex items-center gap-2">
-                    <Heart className="text-pink-500 fill-pink-500 animate-pulse" size={24} />
-                    <span className="text-lg font-bold tracking-wide bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">Our Time</span>
+                {isStandalone && <div className="w-8 md:w-10"></div>}
+                <div className="flex items-center gap-1 md:gap-2">
+                    <Heart className="text-pink-500 fill-pink-500 animate-pulse md:w-6 md:h-6" size={20} />
+                    <span className="hidden md:inline text-lg font-bold tracking-wide bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">Our Time</span>
+                    <span className="md:hidden text-base font-bold text-pink-500">Our Time</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-1 md:gap-2 items-center">
                     {isSnapshotMode && (
                         <button
                             onClick={() => {
                                 setIsSnapshotMode(false);
                                 window.history.replaceState({}, '', window.location.pathname);
                             }}
-                            className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-medium"
-                        >預覽模式 (點此退出)</button>
+                            className="text-[10px] md:text-xs bg-amber-100 text-amber-700 px-2 py-0.5 md:px-3 md:py-1 rounded-full font-medium whitespace-nowrap"
+                        >
+                            <span className="md:hidden">退出</span>
+                            <span className="hidden md:inline">預覽模式 (點此退出)</span>
+                        </button>
                     )}
                     {/* Undo/Redo Buttons */}
                     <button
                         onClick={() => undo()}
                         disabled={!canUndo}
-                        className={`p-2 rounded-full transition-colors ${canUndo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        className={`p-1 md:p-2 rounded-full transition-colors ${canUndo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
                         title="復原 (Ctrl+Z)"
                     >
-                        <Undo size={18} />
+                        <Undo size={16} className="md:w-[18px] md:h-[18px]" />
                     </button>
                     <button
                         onClick={() => redo()}
                         disabled={!canRedo}
-                        className={`p-2 rounded-full transition-colors ${canRedo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        className={`p-1 md:p-2 rounded-full transition-colors ${canRedo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
                         title="重作 (Ctrl+Shift+Z)"
                     >
-                        <Redo size={18} />
+                        <Redo size={16} className="md:w-[18px] md:h-[18px]" />
                     </button>
-                    <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-pink-100 text-pink-600' : 'hover:bg-gray-100 text-gray-500'}`}><Settings size={20} /></button>
-                    <button onClick={() => setShowShareModal(true)} className="p-2 rounded-full bg-pink-50 text-pink-500 hover:bg-pink-100"><Share2 size={20} /></button>
+                    <button onClick={() => setShowSettings(!showSettings)} className={`p-1 md:p-2 rounded-full transition-colors ${showSettings ? 'bg-pink-100 text-pink-600' : 'hover:bg-gray-100 text-gray-500'}`}><Settings size={18} className="md:w-5 md:h-5" /></button>
+                    <button onClick={() => setShowShareModal(true)} className="p-1 md:p-2 rounded-full bg-pink-50 text-pink-500 hover:bg-pink-100"><Share2 size={18} className="md:w-5 md:h-5" /></button>
                 </div>
             </header>
 
