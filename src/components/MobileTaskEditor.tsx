@@ -23,9 +23,23 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
     const task = taskId ? tasks.find((t: any) => t.id === taskId) : null;
     const src = task || initialData || {};
 
+    // Helper to get local date string in YYYY-MM-DD format (fixes timezone issues)
+    const getLocalDateStr = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const parseDateToLocalWrapper = (dStr: string) => {
+        if (!dStr) return '';
+        if (dStr.includes('T')) return getLocalDateStr(new Date(dStr));
+        return dStr;
+    };
+
     const [title, setTitle] = useState(src.title || '');
     const [description, setDescription] = useState(src.description || '');
-    const [startDate, setStartDate] = useState<string>(src.start_date || '');
+    const [startDate, setStartDate] = useState<string>(parseDateToLocalWrapper(src.start_date || ''));
     const [dueDate, setDueDate] = useState<string>(src.due_date || '');
     const [selectedTags, setSelectedTags] = useState<string[]>(src.tags || []);
     const [parentId, setParentId] = useState<string | null>(src.parent_id || null);
@@ -106,7 +120,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         if (task) {
             setTitle(task.title || '');
             setDescription(task?.description || '');
-            setStartDate(task.start_date || '');
+            setStartDate(parseDateToLocalWrapper(task.start_date || ''));
             setDueDate(task.due_date || '');
             setSelectedTags(task.tags || []);
             setParentId(task.parent_id || null);
@@ -119,7 +133,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
             // New task with initialData - preserve default tags from HeartScheduleView
             setTitle(initialData.title || '');
             setDescription(initialData.description || '');
-            setStartDate(initialData.start_date || '');
+            setStartDate(parseDateToLocalWrapper(initialData.start_date || ''));
             setDueDate(initialData.due_date || '');
             setSelectedTags(initialData.tags || []); // Preserve default tags!
             setParentId(initialData.parent_id || null);
@@ -277,13 +291,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' });
     };
 
-    // Helper to get local date string in YYYY-MM-DD format (fixes timezone issues)
-    const getLocalDateStr = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
+
 
 
 

@@ -84,8 +84,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Timeline Scroll Ref
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [snapshotOwnerId, setSnapshotOwnerId] = useState<string | null>(null);
 
-    // Initial Scroll
+    // Initial Scroll to 8am
     useEffect(() => {
         if (scrollRef.current) {
             const hour = 8;
@@ -189,6 +190,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 } else if (data) {
                     console.log('[GuestRealtime] Loaded initial data:', data.length, 'tasks');
                     setUrlTasks(data);
+                    if (data.length > 0 && data[0].user_id) {
+                        setSnapshotOwnerId(data[0].user_id);
+                    }
                 }
             } catch (err) {
                 console.error('[GuestRealtime] Error loading initial data:', err);
@@ -259,14 +263,18 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // Extract Owner ID for Guest Mode
     const ownerId = useMemo(() => {
         if (!isSnapshotMode) return null;
+        // Prefer resolved snapshot owner
+        if (snapshotOwnerId) return snapshotOwnerId;
+
         const pathParts = window.location.pathname.split('/');
         const shareIndex = pathParts.indexOf('heart');
         if (shareIndex !== -1 && pathParts[shareIndex + 1]) {
             const id = pathParts[shareIndex + 1];
-            return id === 'share' ? null : id; // 'share' is a placeholder, not an actual ID
+            // Exclude 'share' and 's' placeholders
+            return (id === 'share' || id === 's') ? null : id;
         }
         return null;
-    }, [isSnapshotMode]);
+    }, [isSnapshotMode, snapshotOwnerId]);
 
     // Intercepted Context for Guest Editing
     const interceptedContext = useMemo(() => {
@@ -903,7 +911,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 start_time: minutesToTime(clickMin),
                 duration: 60,
                 end_time: minutesToTime(clickMin + 60),
-                start_date: d.toISOString(),
+                start_date: format(d, 'yyyy-MM-dd'), // Use Local Date String to prevent UTC shift
                 is_all_day: false,
                 tags: defaultTags
             };
