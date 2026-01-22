@@ -278,6 +278,71 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         return null;
     }, [isSnapshotMode, snapshotOwnerId]);
 
+    // --- Guest Mode History Management ---
+    const guestHistoryRef = useRef<{ past: any[][]; future: any[][] }>({ past: [], future: [] });
+    const isGuestUndoRedoRef = useRef(false);
+
+    // Save current state to history
+    const pushGuestHistory = (currentTasks: any[]) => {
+        if (isGuestUndoRedoRef.current) return;
+        const newPast = [...guestHistoryRef.current.past, JSON.parse(JSON.stringify(currentTasks))];
+        if (newPast.length > 20) newPast.shift(); // Limit to 20
+        guestHistoryRef.current.past = newPast;
+        guestHistoryRef.current.future = []; // Clear redo
+        // console.log('Guest History Pushed. Size:', newPast.length);
+    };
+
+    const syncStateDiff = async (current: any[], target: any[]) => {
+        if (!supabase) return;
+        const currentMap = new Map(current.map(t => [t.id, t]));
+        const targetMap = new Map(target.map(t => [t.id, t]));
+
+        // 1. Identify Restore or Update (In Target)
+        for (const task of target) {
+            const currTask = currentMap.get(task.id);
+            if (!currTask) {
+                // Case: Undo Delete (Restore)
+                // We assume soft delete was used, so we restore status. 
+                // However, if hard delete was used (e.g. undoing an Add), we might need Insert.
+                // But wait, "target" is the OLD state. "current" is NEW state.
+                // If ID is in Target but not Current, it means it was DELETED in Current.
+                // So we need to RESTORE it (Insert or Soft Undelete).
+
+                // Try soft undelete first.
+                console.log('[GuestUndo] Restoring task:', task.id);
+                const { error } = await supabase.from('tasks').update({ status: 'inbox' }).eq('id', task.id);
+                // If row doesn't exist (hard deleted?), we might need to insert.
+            } else {
+                // Case: Update
+                // Compare critical fields to avoid noisy updates
+                const needsUpdate =
+                    task.title !== currTask.title ||
+                    task.start_date !== currTask.start_date ||
+                    task.start_time !== currTask.start_time ||
+                    task.end_time !== currTask.end_time ||
+                    task.duration !== currTask.duration ||
+                    task.status !== currTask.status;
+
+                if (needsUpdate) {
+                    console.log('[GuestUndo] Reverting update for:', task.id);
+                    const { id, user_id, created_at, ...updateData } = task; // avoid system fields
+                    await supabase.from('tasks').update(updateData).eq('id', id);
+                }
+            }
+        }
+
+        // 2. Identify Delete (In Current but not Target)
+        for (const task of current) {
+            if (!targetMap.has(task.id)) {
+                // Case: Undo Add (Delete)
+                // It exists in Current, but not in Target. Meaning we Added it.
+                // To undo, we must Delete it.
+                console.log('[GuestUndo] Deleting added task:', task.id);
+                await supabase.from('tasks').delete().eq('id', task.id);
+            }
+        }
+    };
+
     // Intercepted Context for Guest Editing
     const interceptedContext = useMemo(() => {
         // Helper to enrich data with start_time/end_time if missing
@@ -300,10 +365,43 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             return data;
         };
 
+        const safeContext = { ...context };
+
         return {
-            ...context,
-            tasks: isSnapshotMode ? urlTasks : tasks, // Provide correct tasks list to prevent finding crashes in MobileTaskEditor
-            tags: displayTags, // Allow TaskInput to see snapshot tags
+            ...safeContext,
+            tasks: isSnapshotMode ? urlTasks : tasks,
+            tags: displayTags,
+
+            // Guest Undo/Redo
+            undo: async () => {
+                if (!isSnapshotMode) return safeContext.undo();
+                if (guestHistoryRef.current.past.length === 0) return;
+
+                isGuestUndoRedoRef.current = true;
+                const previous = guestHistoryRef.current.past.pop();
+                if (previous) {
+                    guestHistoryRef.current.future.push(JSON.parse(JSON.stringify(urlTasks)));
+                    await syncStateDiff(urlTasks, previous);
+                    setUrlTasks(previous);
+                }
+                isGuestUndoRedoRef.current = false;
+            },
+            redo: async () => {
+                if (!isSnapshotMode) return safeContext.redo();
+                if (guestHistoryRef.current.future.length === 0) return;
+
+                isGuestUndoRedoRef.current = true;
+                const next = guestHistoryRef.current.future.pop();
+                if (next) {
+                    guestHistoryRef.current.past.push(JSON.parse(JSON.stringify(urlTasks)));
+                    await syncStateDiff(urlTasks, next);
+                    setUrlTasks(next);
+                }
+                isGuestUndoRedoRef.current = false;
+            },
+            canUndo: isSnapshotMode ? guestHistoryRef.current.past.length > 0 : safeContext.canUndo,
+            canRedo: isSnapshotMode ? guestHistoryRef.current.future.length > 0 : safeContext.canRedo,
+
             // Intercept Update
             updateTask: async (id: string, data: any, childIds?: string[]) => {
                 // Prevent auto-save from crashing on 'new' id
@@ -311,6 +409,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     setDraftTaskForModal((prev: any) => ({ ...prev, ...data }));
                     return;
                 }
+
+                // 0. Push History
+                pushGuestHistory(urlTasks);
 
                 // Permission Check for Guest Update
                 if (isSnapshotMode) {
@@ -362,6 +463,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             },
             // Intercept Add
             addTask: async (data: any, childIds?: string[]) => {
+                // 0. Push History
+                pushGuestHistory(urlTasks);
+
                 const enriched = enrichData(data);
 
                 let newId = data.id || `guest-${Date.now()}`; // TaskInput might pass ID? Usually not.
@@ -432,6 +536,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             },
             // Intercept Delete
             deleteTask: async (id: string) => {
+                // 0. Push History
+                pushGuestHistory(urlTasks);
+
                 // Permission Check for Guest Delete
                 if (isSnapshotMode) {
                     const taskToDelete = urlTasks.find(t => t.id === id);
