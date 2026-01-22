@@ -36,6 +36,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [allDayExpanded, setAllDayExpanded] = useState(false); // 整日行程摺疊狀態，預設折疊
 
+    // Share State
+    const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+    const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+
 
     // Tag Handling for Snapshot
     const [snapshotTags, setSnapshotTags] = useState<any[]>([]);
@@ -400,14 +404,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             // Intercept Delete
             deleteTask: async (id: string) => {
                 if (isSnapshotMode && ownerId && supabase) {
-                    // Direct Supabase Delete for Guest
-                    console.log('[Guest] Deleting task:', id);
-                    const { error } = await supabase.from('tasks').delete().eq('id', id);
+                    // Soft Delete (Move to Trash) for Guest
+                    console.log('[Guest] Deleting task (soft):', id);
+                    const { error } = await supabase.from('tasks').update({ status: 'deleted' }).eq('id', id);
                     if (error) {
                         alert(`同步刪除失敗: ${error.message}`);
                         console.error('Guest Delete Error:', error);
                     } else {
-                        setToast?.({ msg: '已刪除並同步', type: 'info' });
+                        setToast?.({ msg: '已移至垃圾桶', type: 'info' });
                     }
                 } else {
                     // Owner Mode - Call original
@@ -422,7 +426,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
             }
         };
-    }, [context, isSnapshotMode, displayTags, ownerId, selectedTaskId, setToast]);
+    }, [context, isSnapshotMode, urlTasks, displayTags, ownerId, supabase, selectedTaskId, setToast]);
 
     const toggleTagSelection = (tagId: string) => {
         setSelectedTagIds(prev => {
@@ -656,8 +660,20 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     };
 
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
-        // NOTE: We do NOT stop propagation here to allow scrolling and clicking (tap)
+        // Permission Check for Guest Move
+        if (isSnapshotMode && type === 'move') {
+            const hasWeiTag = task.tags?.some((tId: string) => {
+                const tag = displayTags.find(t => t.id === tId);
+                return tag?.name?.includes('-Wei行程');
+            });
 
+            if (!hasWeiTag) {
+                // Just don't start drag.
+                return;
+            }
+        }
+
+        // NOTE: We do NOT stop propagation here to allow scrolling and clicking (tap)
         const touch = e.touches[0];
         const startX = touch.clientX;
         const startY = touch.clientY;
@@ -780,6 +796,19 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         // Guests CAN edit now!
         e.stopPropagation();
         e.preventDefault();
+
+        // Permission Check for Guest Move
+        if (isSnapshotMode && type === 'move') {
+            const hasWeiTag = task.tags?.some((tId: string) => {
+                const tag = displayTags.find(t => t.id === tId);
+                return tag?.name?.includes('-Wei行程');
+            });
+
+            if (!hasWeiTag) {
+                setToast?.({ msg: '您只能移動 Wei行程', type: 'error' });
+                return;
+            }
+        }
 
         const startMin = timeToMinutes(task.start_time);
 
@@ -1142,10 +1171,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
 
     const handleCopyLink = async () => {
+        setIsGeneratingLink(true);
         const snapshotTasks = dailyTasks;
 
         if (snapshotTasks.length === 0) {
             if (!confirm("目前的畫面沒有任何行程（可能被標籤隱藏了），確定要分享空白的日程表嗎？")) {
+                setIsGeneratingLink(false);
                 return;
             }
         }
@@ -1189,9 +1220,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 if (data && !error) {
                     const url = `${window.location.origin}/share/heart/s/${data.id}`;
-                    navigator.clipboard.writeText(url);
-                    alert(`短網址已生成並複製！`);
-                    setShowShareModal(false);
+                    setGeneratedUrl(url);
+                    // Attempt auto-copy but don't rely on it
+                    navigator.clipboard.writeText(url).catch(() => console.warn('Auto-copy failed'));
+                    setIsGeneratingLink(false);
                     return;
                 } else {
                     console.error('Snapshot Creation Error:', error);
@@ -1210,10 +1242,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const dateStr = format(currentDate, 'yyyy-MM-dd');
 
         const url = `${window.location.origin}/share/heart/${user?.id || 'share'}?date=${dateStr}&d=${d}&tags=${tagsParam}`;
-        navigator.clipboard.writeText(url);
-        alert(`連結已複製！(包含 ${simpleTasks.length} 個行程，所見即所得)`);
-        setShowShareModal(false);
-
+        setGeneratedUrl(url);
+        navigator.clipboard.writeText(url).catch(() => { });
+        setIsGeneratingLink(false);
     };
 
     // --- Layout Calculation ---
@@ -1636,11 +1667,62 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 {showShareModal && (
                     <div className="fixed inset-0 z-[1100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
                         <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
-                            <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold">邀請共編</h3><button onClick={() => setShowShareModal(false)}><X size={20} /></button></div>
-                            <div className="bg-pink-50 rounded-xl p-4 flex flex-col items-center mb-6">
-                                <p className="text-center text-sm text-gray-600">分享連結將包含<br />當前篩選可見的行程。</p>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold">邀請共編</h3>
+                                <button onClick={() => { setShowShareModal(false); setGeneratedUrl(null); }}><X size={20} /></button>
                             </div>
-                            <button onClick={handleCopyLink} className="w-full py-3 bg-gray-900 text-white rounded-xl font-medium flex items-center justify-center gap-2"><LinkIcon size={18} />複製連結</button>
+
+                            {!generatedUrl ? (
+                                <>
+                                    <div className="bg-pink-50 rounded-xl p-4 flex flex-col items-center mb-6">
+                                        <p className="text-center text-sm text-gray-600">分享連結將包含<br />當前篩選可見的行程。</p>
+                                    </div>
+                                    <button
+                                        onClick={handleCopyLink}
+                                        disabled={isGeneratingLink}
+                                        className="w-full py-3 bg-gray-900 text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        {isGeneratingLink ? (
+                                            <>生成中...</>
+                                        ) : (
+                                            <><LinkIcon size={18} /> 產生分享連結</>
+                                        )}
+                                    </button>
+                                </>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm text-center">
+                                        連結已生成！如果沒有自動複製，請手動複製下方連結。
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={generatedUrl}
+                                            readOnly
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-sm text-gray-600 pr-10"
+                                            onClick={(e) => e.currentTarget.select()}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(generatedUrl);
+                                                setToast?.({ msg: '已複製！', type: 'success' });
+                                            }}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-900"
+                                        >
+                                            <LinkIcon size={16} />
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(generatedUrl);
+                                            setToast?.({ msg: '已複製！', type: 'success' });
+                                        }}
+                                        className="w-full py-3 bg-gray-900 text-white rounded-xl font-medium"
+                                    >
+                                        複製連結
+                                    </button>
+                                </div>
+                            )}
                         </motion.div>
                     </div>
                 )}
