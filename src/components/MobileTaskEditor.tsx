@@ -78,7 +78,6 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
     });
 
     const [activeSection, setActiveSection] = useState<'date' | 'tags' | 'parent' | 'importance' | 'repeat' | null>(null);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -1051,14 +1050,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
 
                     {/* Delete */}
                     <div className="pt-4 border-t border-gray-100 pb-4">
-                        {showDeleteConfirm ? (
-                            <div className="flex gap-3">
-                                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold">取消</button>
-                                <button onClick={handleDelete} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確認刪除</button>
-                            </div>
-                        ) : (
-                            <button onClick={() => setShowDeleteConfirm(true)} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
-                        )}
+                        <button onClick={handleDelete} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
                     </div>
                 </div>
 
