@@ -312,6 +312,25 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     return;
                 }
 
+                // Permission Check for Guest Update
+                if (isSnapshotMode) {
+                    const taskToUpdate = urlTasks.find(t => t.id === id);
+                    if (taskToUpdate) {
+                        const hasWeiTag = taskToUpdate.tags?.some((tId: string) => {
+                            const tag = displayTags.find(t => t.id === tId);
+                            return tag?.name?.includes('-Wei行程');
+                        });
+                        // Note: If adding tag that IS Wei tag, we might allow? But here we are updating an EXISTING task.
+                        if (!hasWeiTag) {
+                            // Exception: If we are ADDING the Wei tag to a task that doesn't have it? 
+                            // No, Guest shouldn't touch others' tasks at all.
+                            // Unless it's a new task (id='new') handled above.
+                            alert('您只能編輯 Wei行程');
+                            return;
+                        }
+                    }
+                }
+
                 const enriched = enrichData(data);
 
                 // 1. Call Update
@@ -413,6 +432,21 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             },
             // Intercept Delete
             deleteTask: async (id: string) => {
+                // Permission Check for Guest Delete
+                if (isSnapshotMode) {
+                    const taskToDelete = urlTasks.find(t => t.id === id);
+                    if (taskToDelete) {
+                        const hasWeiTag = taskToDelete.tags?.some((tId: string) => {
+                            const tag = displayTags.find(t => t.id === tId);
+                            return tag?.name?.includes('-Wei行程');
+                        });
+                        if (!hasWeiTag) {
+                            setToast?.({ msg: '您只能刪除 Wei行程', type: 'error' });
+                            return;
+                        }
+                    }
+                }
+
                 if (isSnapshotMode && ownerId && supabase) {
                     // Soft Delete (Move to Trash) for Guest
                     console.log('[Guest] Deleting task (soft):', id);
@@ -460,6 +494,19 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
+
+                // Permission Check for Keyboard Delete
+                if (isSnapshotMode) {
+                    const taskToDelete = urlTasks.find(t => t.id === selectedTaskId);
+                    if (taskToDelete) {
+                        const check = canEditTask(taskToDelete);
+                        if (!check.canEdit) {
+                            setToast?.({ msg: check.reason || '無法刪除此任務', type: 'error' });
+                            return;
+                        }
+                    }
+                }
+
                 if (window.confirm('確定要刪除此行程嗎？')) {
                     const idToDelete = selectedTaskId;
                     // Use interceptedContext to handle both guest and owner
@@ -671,7 +718,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     const handleTaskTouchStart = (e: React.TouchEvent, task: any, type: 'move' | 'resize') => {
         // Permission Check for Guest Move
-        if (isSnapshotMode && type === 'move') {
+        if (isSnapshotMode && (type === 'move' || type === 'resize')) {
             const hasWeiTag = task.tags?.some((tId: string) => {
                 const tag = displayTags.find(t => t.id === tId);
                 return tag?.name?.includes('-Wei行程');
@@ -807,15 +854,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         e.stopPropagation();
         e.preventDefault();
 
-        // Permission Check for Guest Move
-        if (isSnapshotMode && type === 'move') {
+        // Permission Check for Guest Move/Resize
+        if (isSnapshotMode && (type === 'move' || type === 'resize')) {
             const hasWeiTag = task.tags?.some((tId: string) => {
                 const tag = displayTags.find(t => t.id === tId);
                 return tag?.name?.includes('-Wei行程');
             });
 
             if (!hasWeiTag) {
-                setToast?.({ msg: '您只能移動 Wei行程', type: 'error' });
+                setToast?.({ msg: '您只能編輯 Wei行程', type: 'error' });
                 return;
             }
         }
