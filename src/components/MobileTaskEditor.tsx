@@ -115,8 +115,21 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
             setRepeatRule(task.repeat_rule || null);
             setImages(task.images || []);
             setAttachments(task.attachments || []);
+        } else if (!taskId && initialData) {
+            // New task with initialData - preserve default tags from HeartScheduleView
+            setTitle(initialData.title || '');
+            setDescription(initialData.description || '');
+            setStartDate(initialData.start_date || '');
+            setDueDate(initialData.due_date || '');
+            setSelectedTags(initialData.tags || []); // Preserve default tags!
+            setParentId(initialData.parent_id || null);
+            setColor(initialData.color || 'blue');
+            setImportance(initialData.importance || 'unplanned');
+            setRepeatRule(initialData.repeat_rule || null);
+            setImages(initialData.images || []);
+            setAttachments(initialData.attachments || []);
         } else if (!taskId) {
-            // Reset for new task
+            // Reset for new task without initialData
             setTitle('');
             setDescription('');
             setStartDate('');
@@ -129,7 +142,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
             setImages([]);
             setAttachments([]);
         }
-    }, [task, taskId]);
+    }, [task, taskId, initialData]);
 
     // Prevent body scroll
     useEffect(() => {
@@ -179,6 +192,20 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                 finalStartDate = `${startDate.split('T')[0]}T${startTime}:00`;
             }
 
+            // Calculate duration in minutes if we have start_time and end_time
+            let calculatedDuration: number | null = null;
+            if (!isAllDay && startTime && endTime) {
+                const [startHour, startMin] = startTime.split(':').map(Number);
+                const [endHour, endMin] = endTime.split(':').map(Number);
+                const startMinutes = startHour * 60 + startMin;
+                const endMinutes = endHour * 60 + endMin;
+                calculatedDuration = endMinutes - startMinutes;
+                // Handle case where end time is before start time (crosses midnight)
+                if (calculatedDuration < 0) {
+                    calculatedDuration += 24 * 60; // Add 24 hours
+                }
+            }
+
             const taskData = {
                 title: title.trim(),
                 description,
@@ -194,6 +221,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                 is_all_day: isAllDay,
                 start_time: isAllDay ? null : startTime,
                 end_time: isAllDay ? null : endTime,
+                duration: calculatedDuration,
                 reminder_minutes: reminderMinutes
             };
 
