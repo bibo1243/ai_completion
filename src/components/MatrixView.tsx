@@ -10,13 +10,14 @@ interface QuadrantProps {
     tasks: TaskData[];
     onDrop: (e: React.DragEvent, importance: ImportanceLevel, newOrder?: number) => void;
     onAddTask: (importance: ImportanceLevel) => void;
+    setEditingTaskId: (id: string) => void;
     bgColor: string;
     borderColor: string;
     titleColor: string;
     infoText?: string;
 }
 
-const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, bgColor, borderColor, titleColor, infoText }: QuadrantProps) => {
+const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, setEditingTaskId, bgColor, borderColor, titleColor, infoText }: QuadrantProps) => {
     const { updateGhostPosition, endDrag } = useContext(AppContext);
     const [isOver, setIsOver] = useState(false);
 
@@ -130,9 +131,7 @@ const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, bgColor, border
                                 index: index
                             }}
                             isFocused={false}
-                            onEdit={() => { }} // Handle separately if needed
-                        // Enable default selection behavior
-                        // onSelect={() => { }}
+                            onEdit={() => setEditingTaskId(task.id)}
                         />
                     </div>
                 ))}
@@ -150,7 +149,7 @@ const Quadrant = ({ title, importance, tasks, onDrop, onAddTask, bgColor, border
 };
 
 export const MatrixView = () => {
-    const { tasks, tags, viewTagFilters, updateTask, addTask, setEditingTaskId, endDrag } = useContext(AppContext);
+    const { tasks, tags, viewTagFilters, updateTask, addTask, setEditingTaskId, setPendingFocusTaskId, endDrag } = useContext(AppContext);
 
     const filteredTasks = useMemo(() => {
         // Find schedule tag ID
@@ -207,7 +206,7 @@ export const MatrixView = () => {
             importance,
             status: 'inbox' // Or active?
         });
-        if (id) setEditingTaskId(id);
+        if (id) setPendingFocusTaskId(id);
     };
 
     return (
@@ -231,6 +230,7 @@ export const MatrixView = () => {
                     tasks={quadrants.urgent}
                     onDrop={handleDrop}
                     onAddTask={handleAddTask}
+                    setEditingTaskId={setEditingTaskId}
                     bgColor="bg-red-50/50"
                     borderColor="border-red-100"
                     titleColor="text-red-600"
@@ -244,6 +244,7 @@ export const MatrixView = () => {
                     tasks={quadrants.planned}
                     onDrop={handleDrop}
                     onAddTask={handleAddTask}
+                    setEditingTaskId={setEditingTaskId}
                     bgColor="bg-amber-50/50"
                     borderColor="border-amber-100"
                     titleColor="text-amber-600"
@@ -257,6 +258,7 @@ export const MatrixView = () => {
                     tasks={quadrants.delegated}
                     onDrop={handleDrop}
                     onAddTask={handleAddTask}
+                    setEditingTaskId={setEditingTaskId}
                     bgColor="bg-green-50/50"
                     borderColor="border-green-100"
                     titleColor="text-green-600"
@@ -270,6 +272,7 @@ export const MatrixView = () => {
                     tasks={quadrants.unplanned}
                     onDrop={handleDrop}
                     onAddTask={handleAddTask}
+                    setEditingTaskId={setEditingTaskId}
                     bgColor="bg-gray-50/50"
                     borderColor="border-gray-200"
                     titleColor="text-gray-500"

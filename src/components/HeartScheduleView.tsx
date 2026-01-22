@@ -844,6 +844,18 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const handleUp = () => {
             if (dragState) {
                 const { taskId, currentStartMin, currentDuration } = dragState;
+
+                // Check edit permission before updating
+                const task = (isSnapshotMode ? urlTasks : tasks).find(t => t.id === taskId);
+                if (task) {
+                    const editCheck = canEditTask(task);
+                    if (!editCheck.canEdit) {
+                        setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                        setDragState(null);
+                        return;
+                    }
+                }
+
                 const start_time = minutesToTime(currentStartMin);
                 const end_time = minutesToTime(currentStartMin + currentDuration);
 
@@ -1410,6 +1422,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                             className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full shadow-lg z-50 cursor-pointer transform hover:scale-110 active:scale-95 transition-all"
                                             onClick={(e) => {
                                                 e.stopPropagation();
+                                                const editCheck = canEditTask(task);
+                                                if (!editCheck.canEdit) {
+                                                    setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
+                                                    return;
+                                                }
                                                 if (window.confirm('確定刪除此行程？')) {
                                                     interceptedContext.deleteTask(task.id);
                                                     setSelectedTaskId(null);

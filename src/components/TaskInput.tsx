@@ -2248,36 +2248,58 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                 />
                                 {/* Title Suggestions Dropdown */}
                                 {showTitleSuggestions && title.length > 0 && (() => {
-                                    const suggestions = tasks
+                                    // Helper function to get parent task path
+                                    const getParentPath = (taskId: string): string => {
+                                        const task = tasks.find((t: any) => t.id === taskId);
+                                        if (!task || !task.parent_id) return '';
+
+                                        const parentTask = tasks.find((t: any) => t.id === task.parent_id);
+                                        if (!parentTask) return '';
+
+                                        const parentPath = getParentPath(parentTask.id);
+                                        return parentPath ? `${parentPath} > ${parentTask.title}` : parentTask.title;
+                                    };
+
+                                    const suggestionTasks = tasks
                                         .filter((t: any) =>
                                             t.id !== initialData?.id &&
                                             t.title &&
                                             t.title.toLowerCase().includes(title.toLowerCase()) &&
                                             t.title.toLowerCase() !== title.toLowerCase()
                                         )
-                                        .map((t: any) => t.title)
-                                        .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i) // unique
                                         .slice(0, 5);
 
-                                    if (suggestions.length === 0) return null;
+                                    if (suggestionTasks.length === 0) return null;
 
                                     return (
                                         <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50 overflow-hidden animate-in slide-in-from-top-2 fade-in duration-200">
-                                            {suggestions.map((s: string, idx: number) => (
-                                                <button
-                                                    key={idx}
-                                                    type="button"
-                                                    onMouseDown={(e) => {
-                                                        e.preventDefault();
-                                                        setTitle(s);
-                                                        setShowTitleSuggestions(false);
-                                                    }}
-                                                    className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700/50 last:border-b-0 transition-colors flex items-center gap-2 group"
-                                                >
-                                                    <span className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">↳</span>
-                                                    <span className="truncate">{s}</span>
-                                                </button>
-                                            ))}
+                                            {suggestionTasks.map((s: any) => {
+                                                const parentPath = getParentPath(s.id);
+                                                return (
+                                                    <button
+                                                        key={s.id}
+                                                        type="button"
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            setTitle(s.title);
+                                                            setShowTitleSuggestions(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700/50 last:border-b-0 transition-colors group"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">↳</span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-slate-700 dark:text-slate-300 truncate">{s.title}</div>
+                                                                {parentPath && (
+                                                                    <div className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                                                        {parentPath}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     );
                                 })()}

@@ -274,7 +274,7 @@ export const MainLayout = () => {
         </div>
 
         {/* Modal for Calendar/Journal Editing if needed */}
-        {editingTaskId && (view === 'calendar' || view === 'journal' || view === 'focus') && editingTask && (
+        {editingTaskId && (view === 'calendar' || view === 'journal' || view === 'focus' || view === 'matrix') && editingTask && (
           <DraggableTaskModal
             initialData={editingTask}
             onClose={() => setEditingTaskId(null)}
