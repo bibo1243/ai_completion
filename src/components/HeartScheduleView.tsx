@@ -100,11 +100,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 setUrlTasks(prev => prev.map(t => t.id === action.id ? { ...t, ...action.before } : t));
             } else if (action.type === 'delete') {
                 await supabase!.from('tasks').update({ status: 'todo' }).eq('id', action.id);
-                const restored = { ...action.taskData, status: 'todo' };
-                setUrlTasks(prev => {
-                    if (prev.some(t => t.id === action.id)) return prev;
-                    return [...prev, restored];
-                });
+                // Ensure status is 'todo' when adding back to local state
+                setUrlTasks(prev => [...prev, { ...action.taskData, status: 'todo' }]);
             } else if (action.type === 'add') {
                 await supabase!.from('tasks').update({ status: 'deleted' }).eq('id', action.id);
                 setUrlTasks(prev => prev.filter(t => t.id !== action.id));
@@ -130,7 +127,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 setUrlTasks(prev => prev.filter(t => t.id !== action.id));
             } else if (action.type === 'add') {
                 await supabase!.from('tasks').update({ status: 'todo' }).eq('id', action.id);
-                setUrlTasks(prev => [...prev, action.taskData]);
+                setUrlTasks(prev => [...prev, { ...action.taskData, status: 'todo' }]);
             }
             setGuestHistory({ past: [...guestHistory.past, action], future: newFuture });
         } catch (e) {
@@ -426,8 +423,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
 
                 try {
-                    if (isSnapshotMode) {
-                        if (!ownerId || !supabase) {
+                    if (isSnapshotMode && ownerId && supabase) {
+                        if (!ownerId) {
                             alert(`錯誤：無法識別擁有者 ID (URL ID: ${ownerId})，無法同步。`);
                             return '';
                         }
@@ -488,12 +485,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             },
             // Intercept Delete
             deleteTask: async (id: string) => {
-                if (isSnapshotMode) {
-                    if (!ownerId || !supabase) {
-                        alert("錯誤：無法識別管理者 ID，無法刪除。");
-                        return;
-                    }
-
+                if (isSnapshotMode && ownerId && supabase) {
                     const taskToDelete = urlTasks.find(t => t.id === id);
                     if (taskToDelete) {
                         setGuestHistory(prev => ({

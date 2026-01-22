@@ -269,9 +269,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         }
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
+        console.log('[MobileTaskEditor] handleDelete called, taskId:', taskId);
         if (taskId) {
-            deleteTask(taskId);
+            await deleteTask(taskId);
+            // Toast is handled by interceptedContext.deleteTask (includes Undo button)
         }
         onClose();
     };
