@@ -100,7 +100,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 setUrlTasks(prev => prev.map(t => t.id === action.id ? { ...t, ...action.before } : t));
             } else if (action.type === 'delete') {
                 await supabase!.from('tasks').update({ status: 'todo' }).eq('id', action.id);
-                setUrlTasks(prev => [...prev, action.taskData]);
+                const restored = { ...action.taskData, status: 'todo' };
+                setUrlTasks(prev => {
+                    if (prev.some(t => t.id === action.id)) return prev;
+                    return [...prev, restored];
+                });
             } else if (action.type === 'add') {
                 await supabase!.from('tasks').update({ status: 'deleted' }).eq('id', action.id);
                 setUrlTasks(prev => prev.filter(t => t.id !== action.id));
@@ -422,8 +426,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
 
                 try {
-                    if (isSnapshotMode && ownerId && supabase) {
-                        if (!ownerId) {
+                    if (isSnapshotMode) {
+                        if (!ownerId || !supabase) {
                             alert(`錯誤：無法識別擁有者 ID (URL ID: ${ownerId})，無法同步。`);
                             return '';
                         }
@@ -484,7 +488,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             },
             // Intercept Delete
             deleteTask: async (id: string) => {
-                if (isSnapshotMode && ownerId && supabase) {
+                if (isSnapshotMode) {
+                    if (!ownerId || !supabase) {
+                        alert("錯誤：無法識別管理者 ID，無法刪除。");
+                        return;
+                    }
+
                     const taskToDelete = urlTasks.find(t => t.id === id);
                     if (taskToDelete) {
                         setGuestHistory(prev => ({

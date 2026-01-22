@@ -272,7 +272,6 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
     const handleDelete = () => {
         if (taskId) {
             deleteTask(taskId);
-            setToast?.({ msg: '已刪除', type: 'info' });
         }
         onClose();
     };
