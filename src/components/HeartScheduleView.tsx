@@ -455,6 +455,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         });
     }, [tasks, currentDate, selectedTagIds, urlTasks, isSnapshotMode]);
 
+    // Separate all-day and timed tasks
+    const allDayTasks = useMemo(() => {
+        return dailyTasks.filter(t => t.is_all_day || !t.start_time);
+    }, [dailyTasks]);
+
+    const timedTasks = useMemo(() => {
+        return dailyTasks.filter(t => !t.is_all_day && t.start_time);
+    }, [dailyTasks]);
+
     // --- Timeline Helpers ---
     const timeToMinutes = (time?: string | null) => {
         if (!time) return 0;
@@ -682,6 +691,60 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             currentStartMin: startMin,
             currentDuration: task.duration || 60
         });
+    };
+
+    // Handle drag from all-day area to timed area
+    const handleAllDayDragStart = (e: React.DragEvent, task: any) => {
+        e.dataTransfer.setData('text/plain', task.id);
+        e.dataTransfer.setData('from-allday', 'true');
+    };
+
+    const handleTimedDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('text/plain');
+        const fromAllDay = e.dataTransfer.getData('from-allday') === 'true';
+
+        if (!taskId) return;
+
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const scrollY = (e.currentTarget as HTMLElement).scrollTop || 0;
+        const offsetY = e.clientY - rect.top + scrollY;
+        const startMin = Math.floor((offsetY / HOUR_HEIGHT) * 60 / 15) * 15; // Snap to 15min
+
+        const task = (isSnapshotMode ? urlTasks : tasks).find((t: any) => t.id === taskId);
+        const duration = task?.duration || 60;
+
+        const d = new Date(currentDate);
+        d.setHours(Math.floor(startMin / 60));
+        d.setMinutes(startMin % 60);
+
+        await interceptedContext.updateTask(taskId, {
+            start_date: d.toISOString(),
+            start_time: minutesToTime(startMin),
+            end_time: minutesToTime(startMin + duration),
+            duration: duration,
+            is_all_day: false
+        });
+    };
+
+    const handleAllDayDrop = async (e: React.DragEvent) => {
+        e.preventDefault();
+        const taskId = e.dataTransfer.getData('text/plain');
+
+        if (!taskId) return;
+
+        await interceptedContext.updateTask(taskId, {
+            start_date: currentDate.toISOString(),
+            is_all_day: true,
+            start_time: null,
+            end_time: null,
+            duration: null
+        });
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
     };
 
     const handleBgMouseDown = (e: React.MouseEvent) => {
@@ -1016,7 +1079,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // so that the layout updates in real-time as you drag (avoiding overlap)
     const dailyLayout = useMemo(() => {
         // Create a list of tasks where the dragged task has its *current* time/duration
-        const layoutTasks = dailyTasks.map(t => {
+        const layoutTasks = timedTasks.map(t => {
             if (dragState && dragState.taskId === t.id) {
                 return {
                     ...t,
@@ -1027,7 +1090,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             return t;
         });
         return getLayoutForDay(layoutTasks);
-    }, [dailyTasks, dragState]);
+    }, [timedTasks, dragState]);
 
     return (
         <div className="fixed inset-0 z-[1000] bg-white/95 backdrop-blur-xl flex flex-col overflow-hidden font-sans text-gray-800">
@@ -1105,6 +1168,55 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
             {/* Timeline View */}
             <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth">
+                {/* All-Day Tasks Area */}
+                {allDayTasks.length > 0 && (
+                    <div
+                        className="sticky top-0 z-30 bg-gradient-to-b from-pink-50/90 to-purple-50/90 backdrop-blur-md border-b-2 border-pink-200/50 px-6 py-3 mb-2"
+                        onDragOver={handleDragOver}
+                        onDrop={handleAllDayDrop}
+                        onDoubleClick={async () => {
+                            const newId = await interceptedContext.addTask({
+                                title: '',
+                                start_date: currentDate.toISOString(),
+                                is_all_day: true,
+                                status: 'inbox'
+                            });
+                            setEditingTaskId(newId);
+                        }}
+                    >
+                        <div className="text-[10px] font-bold text-pink-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
+                            整日行程
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {allDayTasks.map(task => {
+                                const taskColor = tags.find(t => task.tags?.includes(t.id))?.color || '#ec4899';
+                                return (
+                                    <div
+                                        key={task.id}
+                                        draggable
+                                        onDragStart={(e) => handleAllDayDragStart(e, task)}
+                                        onClick={() => setEditingTaskId(task.id)}
+                                        className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
+                                        style={{
+                                            backgroundColor: taskColor + '20',
+                                            borderColor: taskColor + '60',
+                                            color: taskColor
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-1.5">
+                                            {task.status === 'completed' && (
+                                                <CheckCircle2 size={12} className="flex-shrink-0" />
+                                            )}
+                                            <span className="truncate max-w-[200px]">{task.title || '(無標題)'}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Background Container for Click-and-Drag Creation */}
                 <div
                     className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
@@ -1112,6 +1224,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
+                    onDragOver={handleDragOver}
+                    onDrop={handleTimedDrop}
                 >
                     {/* Grid Lines */}
                     {Array.from({ length: 24 }).map((_, i) => (
@@ -1152,7 +1266,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                     {/* Tasks */}
                     <div className="absolute top-0 right-2 left-16 bottom-0 pointer-events-none">
-                        {dailyTasks.map(task => {
+                        {timedTasks.map(task => {
                             const isDraft = dragState?.taskId === task.id;
                             // Use the pre-calculated layout
                             const layoutInfo = dailyLayout[task.id];
@@ -1264,7 +1378,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     </div>
 
                     {/* Empty State */}
-                    {dailyTasks.length === 0 && !creationDrag && (
+                    {allDayTasks.length === 0 && timedTasks.length === 0 && !creationDrag && (
                         <div className="absolute top-1/3 left-0 right-0 text-center text-gray-400 pointer-events-none">
                             <Heart size={48} className="mx-auto mb-2 opacity-20" />
                             <p>沒有安排行程<br /><span className="text-xs opacity-50">點擊空白處新增</span></p>
