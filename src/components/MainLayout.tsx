@@ -215,18 +215,17 @@ export const MainLayout = () => {
               <button disabled={!canUndo} onClick={undo} className={`p-1 rounded hover:bg-theme-hover ${!canUndo ? 'opacity-30' : 'opacity-100'}`} title="復原 (Ctrl+Z)"><Undo size={14} /></button>
               <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-theme-hover ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
               <div className="w-px h-4 bg-theme-hover mx-1"></div>
-              {user?.email === 'bibo1243@gmail.com' && (
-                <>
-                  <button
-                    onClick={() => setShowHeartSchedule(true)}
-                    className="p-1.5 rounded-full hover:bg-pink-50 text-pink-400 hover:text-pink-600 transition-colors"
-                    title="我們的日程 (Shared Schedule)"
-                  >
-                    <Heart size={18} className={showHeartSchedule ? 'fill-pink-500 text-pink-500' : ''} />
-                  </button>
-                  <div className="w-px h-4 bg-theme-hover mx-1"></div>
-                </>
-              )}
+              {/* Heart Schedule Button - Always render to prevent layout shift */}
+              <div className={user?.email === 'bibo1243@gmail.com' ? '' : 'hidden'}>
+                <button
+                  onClick={() => setShowHeartSchedule(true)}
+                  className="p-1.5 rounded-full hover:bg-pink-50 text-pink-400 hover:text-pink-600 transition-colors"
+                  title="我們的日程 (Shared Schedule)"
+                >
+                  <Heart size={18} className={showHeartSchedule ? 'fill-pink-500 text-pink-500' : ''} />
+                </button>
+                <div className="w-px h-4 bg-theme-hover mx-1 inline-block"></div>
+              </div>
               <ReminderPanel />
             </div>
 
