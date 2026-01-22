@@ -260,14 +260,33 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 },
                 (payload) => {
                     const { eventType, new: newRec, old: oldRec } = payload;
+                    console.log('[GuestRealtime] Event:', eventType, newRec?.id, newRec?.status);
                     setUrlTasks(prev => {
                         if (eventType === 'INSERT') {
+                            // Don't add deleted tasks
+                            if (newRec.status === 'deleted') return prev;
                             if (prev.some(t => t.id === newRec.id)) return prev;
                             return [...prev, newRec];
                         }
                         if (eventType === 'UPDATE') {
-                            // If update, merge properties
-                            return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
+                            const existsInList = prev.some(t => t.id === newRec.id);
+
+                            // If task was soft-deleted, remove from list
+                            if (newRec.status === 'deleted') {
+                                return prev.filter(t => t.id !== newRec.id);
+                            }
+
+                            // If task exists, update it
+                            if (existsInList) {
+                                return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
+                            }
+
+                            // If task doesn't exist but is now active (restored), add it
+                            if (!existsInList && newRec.status !== 'deleted') {
+                                return [...prev, newRec];
+                            }
+
+                            return prev;
                         }
                         if (eventType === 'DELETE') {
                             return prev.filter(t => t.id !== oldRec.id);
@@ -1657,10 +1676,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                     setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
                                                     return;
                                                 }
-                                                if (window.confirm('確定刪除此行程？')) {
-                                                    interceptedContext.deleteTask(task.id);
-                                                    setSelectedTaskId(null);
-                                                }
+                                                // Direct delete without confirm (user can Undo)
+                                                interceptedContext.deleteTask(task.id);
+                                                setSelectedTaskId(null);
                                             }}
                                         >
                                             <Trash2 size={14} />
