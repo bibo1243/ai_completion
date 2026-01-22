@@ -869,6 +869,33 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                             autoFocus
                                         />
                                     </div>
+                                    {/* Selected Tags Display */}
+                                    {selectedTags.length > 0 && (
+                                        <div className="px-4 pb-3">
+                                            <div className="text-xs text-gray-500 mb-2 font-medium">已選擇 ({selectedTags.length})</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedTags.map(tagId => {
+                                                    const tag = tags.find((t: any) => t.id === tagId);
+                                                    if (!tag) return null;
+                                                    return (
+                                                        <button
+                                                            key={tagId}
+                                                            type="button"
+                                                            onClick={() => setSelectedTags(prev => prev.filter(id => id !== tagId))}
+                                                            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium hover:bg-purple-200 transition-colors"
+                                                        >
+                                                            <div
+                                                                className="w-2 h-2 rounded-full"
+                                                                style={{ backgroundColor: tag.color || '#6366f1' }}
+                                                            />
+                                                            <span>{tag.name}</span>
+                                                            <X size={12} className="ml-0.5" />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                                 {/* Tag List */}
                                 <div className="flex-1 overflow-y-auto p-2">
@@ -918,23 +945,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                                                 const tagNameToCreate = tagSearch.trim();
                                                                 try {
                                                                     const newTagId = await addTag(tagNameToCreate, newTagParent);
-                                                                    if (newTagId && noteEditorRef.current) {
-                                                                        const editor = noteEditorRef.current;
-                                                                        if (editor && editor.chain) {
-                                                                            editor.chain().focus().insertContent([
-                                                                                {
-                                                                                    type: 'mention',
-                                                                                    attrs: {
-                                                                                        id: newTagId,
-                                                                                        label: tagNameToCreate,
-                                                                                    },
-                                                                                },
-                                                                                { type: 'text', text: ' ' },
-                                                                            ]).run();
-                                                                        }
+                                                                    if (newTagId) {
+                                                                        // Add the new tag to task's tags array
+                                                                        setSelectedTags(prev => [...prev, newTagId]);
                                                                     }
                                                                     setToast?.({ msg: `已新增標籤 "${tagNameToCreate}"`, type: 'info' });
-                                                                    setShowTagPicker(false);
                                                                     setTagSearch('');
                                                                     setCreatingTag(false);
                                                                     setNewTagParent(null);
@@ -959,32 +974,24 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                                 key={tag.id}
                                                 type="button"
                                                 onClick={() => {
-                                                    // Insert tag mention into NoteEditor
-                                                    if (noteEditorRef.current) {
-                                                        const editor = noteEditorRef.current;
-                                                        if (editor && editor.chain) {
-                                                            editor.chain().focus().insertContent([
-                                                                {
-                                                                    type: 'mention',
-                                                                    attrs: {
-                                                                        id: tag.id,
-                                                                        label: tag.name,
-                                                                    },
-                                                                },
-                                                                { type: 'text', text: ' ' },
-                                                            ]).run();
-                                                        }
+                                                    // Toggle tag selection in task's tags array
+                                                    const isSelected = selectedTags.includes(tag.id);
+                                                    if (isSelected) {
+                                                        setSelectedTags(prev => prev.filter(id => id !== tag.id));
+                                                    } else {
+                                                        setSelectedTags(prev => [...prev, tag.id]);
                                                     }
-                                                    setShowTagPicker(false);
-                                                    setTagSearch('');
                                                 }}
-                                                className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-xl transition-colors text-left"
+                                                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${selectedTags.includes(tag.id)
+                                                    ? 'bg-purple-50 border-2 border-purple-300'
+                                                    : 'hover:bg-gray-50 border-2 border-transparent'
+                                                    }`}
                                             >
                                                 <div
                                                     className="w-3 h-3 rounded-full flex-shrink-0"
                                                     style={{ backgroundColor: tag.color || '#6366f1' }}
                                                 />
-                                                <div className="flex flex-col">
+                                                <div className="flex flex-col flex-1">
                                                     <span className="text-sm font-medium text-gray-700">{tag.name}</span>
                                                     {tag.parent_id && (
                                                         <span className="text-[10px] text-gray-400">
@@ -992,6 +999,9 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                                         </span>
                                                     )}
                                                 </div>
+                                                {selectedTags.includes(tag.id) && (
+                                                    <Check size={18} className="text-purple-600 flex-shrink-0" />
+                                                )}
                                             </button>
                                         ))
                                     }
