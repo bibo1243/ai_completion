@@ -909,7 +909,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 start_time: minutesToTime(clickMin),
                 duration: 60,
                 end_time: minutesToTime(clickMin + 60),
-                start_date: d.toISOString(),
+                start_date: format(currentDate, 'yyyy-MM-dd'),
                 is_all_day: false,
                 tags: defaultTags
             };
