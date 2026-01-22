@@ -84,58 +84,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Timeline Scroll Ref
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [snapshotOwnerId, setSnapshotOwnerId] = useState<string | null>(null);
 
-    // Guest History State
-    const [guestHistory, setGuestHistory] = useState<{ past: any[], future: any[] }>({ past: [], future: [] });
-
-    const handleGuestUndo = async () => {
-        if (guestHistory.past.length === 0) return;
-        const action = guestHistory.past[guestHistory.past.length - 1];
-        const newPast = guestHistory.past.slice(0, -1);
-
-        try {
-            if (action.type === 'update') {
-                await supabase!.from('tasks').update(action.before).eq('id', action.id);
-                setUrlTasks(prev => prev.map(t => t.id === action.id ? { ...t, ...action.before } : t));
-            } else if (action.type === 'delete') {
-                await supabase!.from('tasks').update({ status: 'todo' }).eq('id', action.id);
-                // Ensure status is 'todo' when adding back to local state
-                setUrlTasks(prev => [...prev, { ...action.taskData, status: 'todo' }]);
-            } else if (action.type === 'add') {
-                await supabase!.from('tasks').update({ status: 'deleted' }).eq('id', action.id);
-                setUrlTasks(prev => prev.filter(t => t.id !== action.id));
-            }
-            setGuestHistory({ past: newPast, future: [action, ...guestHistory.future] });
-        } catch (e) {
-            console.error('Guest Undo Failed:', e);
-            alert('復原失敗');
-        }
-    };
-
-    const handleGuestRedo = async () => {
-        if (guestHistory.future.length === 0) return;
-        const action = guestHistory.future[0];
-        const newFuture = guestHistory.future.slice(1);
-
-        try {
-            if (action.type === 'update') {
-                await supabase!.from('tasks').update(action.after).eq('id', action.id);
-                setUrlTasks(prev => prev.map(t => t.id === action.id ? { ...t, ...action.after } : t));
-            } else if (action.type === 'delete') {
-                await supabase!.from('tasks').update({ status: 'deleted' }).eq('id', action.id);
-                setUrlTasks(prev => prev.filter(t => t.id !== action.id));
-            } else if (action.type === 'add') {
-                await supabase!.from('tasks').update({ status: 'todo' }).eq('id', action.id);
-                setUrlTasks(prev => [...prev, { ...action.taskData, status: 'todo' }]);
-            }
-            setGuestHistory({ past: [...guestHistory.past, action], future: newFuture });
-        } catch (e) {
-            console.error('Guest Redo Failed:', e);
-        }
-    };
-
-    // Initial Scroll to 8am
+    // Initial Scroll
     useEffect(() => {
         if (scrollRef.current) {
             const hour = 8;
@@ -239,9 +189,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 } else if (data) {
                     console.log('[GuestRealtime] Loaded initial data:', data.length, 'tasks');
                     setUrlTasks(data);
-                    if (data.length > 0 && data[0].user_id) {
-                        setSnapshotOwnerId(data[0].user_id);
-                    }
                 }
             } catch (err) {
                 console.error('[GuestRealtime] Error loading initial data:', err);
@@ -260,33 +207,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 },
                 (payload) => {
                     const { eventType, new: newRec, old: oldRec } = payload;
-                    console.log('[GuestRealtime] Event:', eventType, newRec?.id, newRec?.status);
                     setUrlTasks(prev => {
                         if (eventType === 'INSERT') {
-                            // Don't add deleted tasks
-                            if (newRec.status === 'deleted') return prev;
                             if (prev.some(t => t.id === newRec.id)) return prev;
                             return [...prev, newRec];
                         }
                         if (eventType === 'UPDATE') {
-                            const existsInList = prev.some(t => t.id === newRec.id);
-
-                            // If task was soft-deleted, remove from list
-                            if (newRec.status === 'deleted') {
-                                return prev.filter(t => t.id !== newRec.id);
-                            }
-
-                            // If task exists, update it
-                            if (existsInList) {
-                                return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
-                            }
-
-                            // If task doesn't exist but is now active (restored), add it
-                            if (!existsInList && newRec.status !== 'deleted') {
-                                return [...prev, newRec];
-                            }
-
-                            return prev;
+                            // If update, merge properties
+                            return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
                         }
                         if (eventType === 'DELETE') {
                             return prev.filter(t => t.id !== oldRec.id);
@@ -331,18 +259,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // Extract Owner ID for Guest Mode
     const ownerId = useMemo(() => {
         if (!isSnapshotMode) return null;
-        // Prefer resolved snapshot owner
-        if (snapshotOwnerId) return snapshotOwnerId;
-
         const pathParts = window.location.pathname.split('/');
         const shareIndex = pathParts.indexOf('heart');
         if (shareIndex !== -1 && pathParts[shareIndex + 1]) {
             const id = pathParts[shareIndex + 1];
-            // Exclude 'share' and 's' placeholders
-            return (id === 'share' || id === 's') ? null : id;
+            return id === 'share' ? null : id; // 'share' is a placeholder, not an actual ID
         }
         return null;
-    }, [isSnapshotMode, snapshotOwnerId]);
+    }, [isSnapshotMode]);
 
     // Intercepted Context for Guest Editing
     const interceptedContext = useMemo(() => {
@@ -370,13 +294,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             ...context,
             tasks: isSnapshotMode ? urlTasks : tasks, // Provide correct tasks list to prevent finding crashes in MobileTaskEditor
             tags: displayTags, // Allow TaskInput to see snapshot tags
-
-            // Override Undo/Redo for Guest
-            canUndo: isSnapshotMode ? guestHistory.past.length > 0 : context.canUndo,
-            canRedo: isSnapshotMode ? guestHistory.future.length > 0 : context.canRedo,
-            undo: isSnapshotMode ? handleGuestUndo : context.undo,
-            redo: isSnapshotMode ? handleGuestRedo : context.redo,
-
             // Intercept Update
             updateTask: async (id: string, data: any, childIds?: string[]) => {
                 // Prevent auto-save from crashing on 'new' id
@@ -389,18 +306,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 // 1. Call Update
                 if (isSnapshotMode && ownerId && supabase) {
-                    // Record History
-                    const currentTask = urlTasks.find(t => t.id === id);
-                    if (currentTask) {
-                        const before: any = {};
-                        Object.keys(enriched).forEach(k => { before[k] = currentTask[k]; });
-
-                        setGuestHistory(prev => ({
-                            past: [...prev.past, { type: 'update', id, before, after: enriched }],
-                            future: []
-                        }));
-                    }
-
                     console.log('[Guest] Updating task:', id, enriched);
                     const { error } = await supabase.from('tasks').update(enriched).eq('id', id);
                     if (error) {
@@ -473,17 +378,11 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             status: 'todo', // Default
                             tags: finalTags
                         };
-
-                        setGuestHistory(prev => ({
-                            past: [...prev.past, { type: 'add', id: newId, taskData: newTaskPayload }],
-                            future: []
-                        }));
-
                         console.log('[Guest] Inserting task for owner:', ownerId, newTaskPayload);
                         const { error } = await supabase.from('tasks').insert([newTaskPayload]).select();
                         if (error) throw error;
 
-                        setToast?.({ msg: '已新增並同步', type: 'info', undo: handleGuestUndo });
+                        setToast?.({ msg: '已新增並同步', type: 'info' });
                     } else {
                         // Owner Mode
                         newId = await addTask(enriched, childIds);
@@ -505,14 +404,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             // Intercept Delete
             deleteTask: async (id: string) => {
                 if (isSnapshotMode && ownerId && supabase) {
-                    const taskToDelete = urlTasks.find(t => t.id === id);
-                    if (taskToDelete) {
-                        setGuestHistory(prev => ({
-                            past: [...prev.past, { type: 'delete', id, taskData: taskToDelete }],
-                            future: []
-                        }));
-                    }
-
                     // Soft Delete (Move to Trash) for Guest
                     console.log('[Guest] Deleting task (soft):', id);
                     const { error } = await supabase.from('tasks').update({ status: 'deleted' }).eq('id', id);
@@ -520,7 +411,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         alert(`同步刪除失敗: ${error.message}`);
                         console.error('Guest Delete Error:', error);
                     } else {
-                        setToast?.({ msg: '已移至垃圾桶', type: 'info', undo: handleGuestUndo });
+                        setToast?.({ msg: '已移至垃圾桶', type: 'info' });
                     }
                 } else {
                     // Owner Mode - Call original
@@ -535,7 +426,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
             }
         };
-    }, [context, isSnapshotMode, urlTasks, displayTags, ownerId, supabase, selectedTaskId, setToast, guestHistory, handleGuestUndo, handleGuestRedo]);
+    }, [context, isSnapshotMode, urlTasks, displayTags, ownerId, supabase, selectedTaskId, setToast]);
 
     const toggleTagSelection = (tagId: string) => {
         setSelectedTagIds(prev => {
@@ -1012,7 +903,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 start_time: minutesToTime(clickMin),
                 duration: 60,
                 end_time: minutesToTime(clickMin + 60),
-                start_date: format(d, 'yyyy-MM-dd'), // Use Local Date String to prevent UTC shift
+                start_date: d.toISOString(),
                 is_all_day: false,
                 tags: defaultTags
             };
@@ -1676,9 +1567,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                     setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
                                                     return;
                                                 }
-                                                // Direct delete without confirm (user can Undo)
-                                                interceptedContext.deleteTask(task.id);
-                                                setSelectedTaskId(null);
+                                                if (window.confirm('確定刪除此行程？')) {
+                                                    interceptedContext.deleteTask(task.id);
+                                                    setSelectedTaskId(null);
+                                                }
                                             }}
                                         >
                                             <Trash2 size={14} />

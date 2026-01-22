@@ -23,23 +23,9 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
     const task = taskId ? tasks.find((t: any) => t.id === taskId) : null;
     const src = task || initialData || {};
 
-    // Helper to get local date string in YYYY-MM-DD format (fixes timezone issues)
-    const getLocalDateStr = (date: Date) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    const parseDateToLocalWrapper = (dStr: string) => {
-        if (!dStr) return '';
-        if (dStr.includes('T')) return getLocalDateStr(new Date(dStr));
-        return dStr;
-    };
-
     const [title, setTitle] = useState(src.title || '');
     const [description, setDescription] = useState(src.description || '');
-    const [startDate, setStartDate] = useState<string>(parseDateToLocalWrapper(src.start_date || ''));
+    const [startDate, setStartDate] = useState<string>(src.start_date || '');
     const [dueDate, setDueDate] = useState<string>(src.due_date || '');
     const [selectedTags, setSelectedTags] = useState<string[]>(src.tags || []);
     const [parentId, setParentId] = useState<string | null>(src.parent_id || null);
@@ -78,6 +64,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
     });
 
     const [activeSection, setActiveSection] = useState<'date' | 'tags' | 'parent' | 'importance' | 'repeat' | null>(null);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isReady, setIsReady] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
 
@@ -119,7 +106,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         if (task) {
             setTitle(task.title || '');
             setDescription(task?.description || '');
-            setStartDate(parseDateToLocalWrapper(task.start_date || ''));
+            setStartDate(task.start_date || '');
             setDueDate(task.due_date || '');
             setSelectedTags(task.tags || []);
             setParentId(task.parent_id || null);
@@ -132,7 +119,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
             // New task with initialData - preserve default tags from HeartScheduleView
             setTitle(initialData.title || '');
             setDescription(initialData.description || '');
-            setStartDate(parseDateToLocalWrapper(initialData.start_date || ''));
+            setStartDate(initialData.start_date || '');
             setDueDate(initialData.due_date || '');
             setSelectedTags(initialData.tags || []); // Preserve default tags!
             setParentId(initialData.parent_id || null);
@@ -269,11 +256,10 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         }
     };
 
-    const handleDelete = async () => {
-        console.log('[MobileTaskEditor] handleDelete called, taskId:', taskId);
+    const handleDelete = () => {
         if (taskId) {
-            await deleteTask(taskId);
-            // Toast is handled by interceptedContext.deleteTask (includes Undo button)
+            deleteTask(taskId);
+            setToast?.({ msg: '已刪除', type: 'info' });
         }
         onClose();
     };
@@ -291,7 +277,13 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
         return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric', weekday: 'short' });
     };
 
-
+    // Helper to get local date string in YYYY-MM-DD format (fixes timezone issues)
+    const getLocalDateStr = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
 
 
 
@@ -1051,7 +1043,14 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
 
                     {/* Delete */}
                     <div className="pt-4 border-t border-gray-100 pb-4">
-                        <button onClick={handleDelete} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
+                        {showDeleteConfirm ? (
+                            <div className="flex gap-3">
+                                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold">取消</button>
+                                <button onClick={handleDelete} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確認刪除</button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setShowDeleteConfirm(true)} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
+                        )}
                     </div>
                 </div>
 
