@@ -26,6 +26,7 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/share/heart/s/:snapshotId" element={<SharedHeartPage />} />
       <Route path="/share/heart/:userId" element={<SharedHeartPage />} />
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} />
       <Route path="/*" element={isAuthenticated ? <MainLayout /> : <Navigate to="/login" replace />} />

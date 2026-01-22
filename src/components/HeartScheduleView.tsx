@@ -89,12 +89,38 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         }
     }, [isStandalone]);
 
-    // Load Snapshot from URL
+    // Parse URL Params (Snapshot Mode)
     useEffect(() => {
+        const path = window.location.pathname;
         const params = new URLSearchParams(window.location.search);
-        const d = params.get('d');
+
+        // Scenario 1: Short URL Snapshot (/share/heart/s/ID)
+        if (path.includes('/share/heart/s/')) {
+            const parts = path.split('/s/');
+            const snapshotId = parts[1]?.split('/')[0];
+
+            if (snapshotId && supabase) {
+                // Fetch snapshot from DB
+                supabase.from('schedule_snapshots').select('data').eq('id', snapshotId).single()
+                    .then(({ data, error }) => {
+                        if (data?.data) {
+                            const { tasks: sTasks, tags: sTags, date: sDate } = data.data;
+                            if (sTasks) setUrlTasks(sTasks);
+                            if (sTags) setSnapshotTags(sTags);
+                            if (sDate) setCurrentDate(parseISO(sDate));
+                            setIsSnapshotMode(true);
+                        } else if (error) {
+                            console.error('Error loading snapshot:', error);
+                        }
+                    });
+                return; // Skip legacy param parsing
+            }
+        }
+
+        // Scenario 2: Legacy Long URL (Query Params)
         const dateStr = params.get('date');
         const tagsStr = params.get('tags');
+        const d = params.get('d');
 
         if (dateStr) {
             setCurrentDate(parseISO(dateStr));
@@ -141,7 +167,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         if (shareIndex === -1 || !pathParts[shareIndex + 1]) return;
         const ownerId = pathParts[shareIndex + 1];
 
-        if (ownerId === 'share') return;
+        if (ownerId === 'share' || ownerId === 's') return;
 
         // console.log("Guest View: Subscribing to Owner updates:", ownerId);
 
@@ -1115,7 +1141,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     };
 
 
-    const handleCopyLink = () => {
+    const handleCopyLink = async () => {
         const snapshotTasks = dailyTasks;
 
         if (snapshotTasks.length === 0) {
@@ -1146,6 +1172,35 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const tagsToShare = tags.filter(t => usedTagIds.has(t.id)).map(t => ({
             id: t.id, name: t.name, color: t.color
         }));
+
+        // Try to create Database Snapshot (Short URL)
+        if (user && supabase) {
+            try {
+                const dateStr = format(currentDate, 'yyyy-MM-dd');
+                const { data, error } = await supabase.from('schedule_snapshots').insert({
+                    data: {
+                        tasks: simpleTasks,
+                        tags: tagsToShare,
+                        date: dateStr
+                    },
+                    created_by: user.id,
+                    title: `Heart Schedule - ${dateStr}`
+                }).select('id').single();
+
+                if (data && !error) {
+                    const url = `${window.location.origin}/share/heart/s/${data.id}`;
+                    navigator.clipboard.writeText(url);
+                    alert(`短網址已生成並複製！`);
+                    setShowShareModal(false);
+                    return;
+                } else {
+                    console.error('Snapshot Creation Error:', error);
+                    // Fallback to long URL will occur below
+                }
+            } catch (err) {
+                console.error('Snapshot Exception:', err);
+            }
+        }
 
         const tagsJson = JSON.stringify(tagsToShare);
         const tagsParam = encodeURIComponent(tagsJson);
