@@ -166,86 +166,90 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     }, []);
 
     // Realtime Sync Subscription for Guest Mode
+    // Live Sync for Guest Mode (Uses snapshotOwnerId)
     useEffect(() => {
-        if (!isSnapshotMode || !supabase) return;
+        // Priority: Use snapshotOwnerId if available (Short URL mode/Guest Mode)
+        // Or if URL has explicit ID (Legacy)
+        let targetOwnerId = snapshotOwnerId;
 
-        // Extract Owner ID from path: /share/heart/USER_ID
-        const pathParts = window.location.pathname.split('/');
-        const shareIndex = pathParts.indexOf('heart');
-        if (shareIndex === -1 || !pathParts[shareIndex + 1]) return;
-        const ownerId = pathParts[shareIndex + 1];
+        if (!targetOwnerId && isSnapshotMode) {
+            const pathParts = window.location.pathname.split('/');
+            const shareIndex = pathParts.indexOf('heart');
+            const urlId = (shareIndex !== -1 && pathParts[shareIndex + 1]) ? pathParts[shareIndex + 1] : null;
+            if (urlId && urlId !== 'share' && urlId !== 's') {
+                targetOwnerId = urlId;
+            }
+        }
 
-        if (ownerId === 'share' || ownerId === 's') return;
+        if (!isSnapshotMode || !supabase || !targetOwnerId) return;
 
-        // console.log("Guest View: Subscribing to Owner updates:", ownerId);
+        console.log("[GuestRealtime] Initializing sync for Owner:", targetOwnerId);
 
-        // Load initial data from Supabase
+        // Load initial Tasks & Tags
         const loadInitialData = async () => {
             try {
-                const { data, error } = await supabase
+                // 1. Fetch Tasks
+                const { data: taskData, error: taskError } = await supabase
                     .from('tasks')
                     .select('*')
-                    .eq('user_id', ownerId)
+                    .eq('user_id', targetOwnerId)
                     .neq('status', 'deleted');
 
-                if (error) {
-                    console.error('[GuestRealtime] Failed to load initial data:', error);
-                } else if (data) {
-                    console.log('[GuestRealtime] Loaded initial data:', data.length, 'tasks');
-                    setUrlTasks(data);
+                if (taskData) {
+                    console.log('[GuestRealtime] Loaded tasks:', taskData.length);
+                    setUrlTasks(taskData);
                 }
+
+                // 2. Fetch Tags (Important for Wei tag)
+                const { data: tagData, error: tagError } = await supabase
+                    .from('tags')
+                    .select('*')
+                    .eq('user_id', targetOwnerId);
+
+                if (tagData) {
+                    setSnapshotTags(tagData);
+                }
+
             } catch (err) {
                 console.error('[GuestRealtime] Error loading initial data:', err);
             }
         };
 
-        const channel = supabase
-            .channel(`guest-sync-${ownerId}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'tasks',
-                    filter: `user_id=eq.${ownerId}`
-                },
-                (payload) => {
-                    const { eventType, new: newRec, old: oldRec } = payload;
-                    setUrlTasks(prev => {
-                        if (eventType === 'INSERT') {
-                            if (prev.some(t => t.id === newRec.id)) return prev;
-                            return [...prev, newRec];
-                        }
-                        if (eventType === 'UPDATE') {
-                            // If update, merge properties
-                            return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
-                        }
-                        if (eventType === 'DELETE') {
-                            return prev.filter(t => t.id !== oldRec.id);
-                        }
-                        return prev;
-                    });
-                }
-            )
-            .subscribe((status, err) => {
-                console.log(`[GuestRealtime] Status: ${status}`, err);
-                if (status === 'SUBSCRIBED') {
-                    // Load initial data after subscription is established
-                    loadInitialData();
-                }
-                if (status === 'CHANNEL_ERROR') {
-                    console.error('[GuestRealtime] Connection Error:', err);
-                    if (err?.message?.includes('401')) {
-                        // This usually confirms RLS policy missing for 'anon'
-                        console.error('RLS Policy likely blocking anon access. Please check supabase_guest_policy.sql');
-                    }
-                }
+        // Subscribe to Tasks
+        const taskChannel = supabase
+            .channel(`guest-tasks-${targetOwnerId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${targetOwnerId}` }, (payload) => {
+                const { eventType, new: newRec, old: oldRec } = payload;
+                setUrlTasks(prev => {
+                    if (eventType === 'INSERT') return prev.some(t => t.id === newRec.id) ? prev : [...prev, newRec];
+                    if (eventType === 'UPDATE') return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
+                    if (eventType === 'DELETE') return prev.filter(t => t.id !== oldRec.id);
+                    return prev;
+                });
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') loadInitialData();
             });
 
+        // Subscribe to Tags
+        const tagChannel = supabase
+            .channel(`guest-tags-${targetOwnerId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'tags', filter: `user_id=eq.${targetOwnerId}` }, (payload) => {
+                const { eventType, new: newRec, old: oldRec } = payload;
+                setSnapshotTags(prev => {
+                    if (eventType === 'INSERT') return prev.some(t => t.id === newRec.id) ? prev : [...prev, newRec];
+                    if (eventType === 'UPDATE') return prev.map(t => t.id === newRec.id ? { ...t, ...newRec } : t);
+                    if (eventType === 'DELETE') return prev.filter(t => t.id !== oldRec.id);
+                    return prev;
+                });
+            })
+            .subscribe();
+
         return () => {
-            supabase.removeChannel(channel);
+            supabase.removeChannel(taskChannel);
+            supabase.removeChannel(tagChannel);
         };
-    }, [isSnapshotMode]);
+    }, [isSnapshotMode, snapshotOwnerId]);
 
     // Sync Live Data to URL Snapshot View (Only if we have live data access - local owner)
     useEffect(() => {
@@ -1056,7 +1060,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         /*
         const touch = e.touches[0];
         touchStartPos.current = { x: touch.clientX, y: touch.clientY };
-
+ 
         longPressTimer.current = setTimeout(() => {
             handleLongPress(touch.clientX, touch.clientY);
         }, 500); // 500ms threshold
