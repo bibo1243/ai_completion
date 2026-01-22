@@ -566,8 +566,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     }
                 } else {
                     // Owner Mode - Call original
-                    // Note: context.deleteTask might have different signature (id, childIds?)
-                    // Checking AppContext usually it is (id).
                     await context.deleteTask(id);
                 }
 
@@ -578,6 +576,34 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             }
         };
     }, [context, isSnapshotMode, urlTasks, displayTags, ownerId, supabase, selectedTaskId, setToast]);
+
+    // Expose Undo/Redo for UI
+    const effectiveUndo = interceptedContext.undo;
+    const effectiveRedo = interceptedContext.redo;
+    const effectiveCanUndo = interceptedContext.canUndo;
+    const effectiveCanRedo = interceptedContext.canRedo;
+
+    // Guest Mode Keyboard Shortcuts (Undo/Redo)
+    useEffect(() => {
+        if (!isSnapshotMode) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Undo: Cmd+Z
+            if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+                e.preventDefault();
+                effectiveUndo();
+            }
+            // Redo: Cmd+Shift+Z or Cmd+Y
+            if (((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) ||
+                ((e.metaKey || e.ctrlKey) && e.key === 'y')) {
+                e.preventDefault();
+                effectiveRedo();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isSnapshotMode, effectiveUndo, effectiveRedo]);
 
     const toggleTagSelection = (tagId: string) => {
         setSelectedTagIds(prev => {
@@ -614,12 +640,10 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     }
                 }
 
-                if (window.confirm('確定要刪除此行程嗎？')) {
-                    const idToDelete = selectedTaskId;
-                    // Use interceptedContext to handle both guest and owner
-                    await interceptedContext.deleteTask(idToDelete);
-                    setSelectedTaskId(null);
-                }
+                // No confirm here either
+                const idToDelete = selectedTaskId;
+                await interceptedContext.deleteTask(idToDelete);
+                setSelectedTaskId(null);
             }
         };
 
@@ -1461,17 +1485,17 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     )}
                     {/* Undo/Redo Buttons */}
                     <button
-                        onClick={() => undo()}
-                        disabled={!canUndo}
-                        className={`p-1 md:p-2 rounded-full transition-colors ${canUndo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        onClick={() => effectiveUndo()}
+                        disabled={!effectiveCanUndo}
+                        className={`p-1 md:p-2 rounded-full transition-colors ${effectiveCanUndo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
                         title="復原 (Ctrl+Z)"
                     >
                         <Undo size={16} className="md:w-[18px] md:h-[18px]" />
                     </button>
                     <button
-                        onClick={() => redo()}
-                        disabled={!canRedo}
-                        className={`p-1 md:p-2 rounded-full transition-colors ${canRedo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        onClick={() => effectiveRedo()}
+                        disabled={!effectiveCanRedo}
+                        className={`p-1 md:p-2 rounded-full transition-colors ${effectiveCanRedo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
                         title="重作 (Ctrl+Shift+Z)"
                     >
                         <Redo size={16} className="md:w-[18px] md:h-[18px]" />
@@ -1731,10 +1755,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                     setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
                                                     return;
                                                 }
-                                                if (window.confirm('確定刪除此行程？')) {
-                                                    interceptedContext.deleteTask(task.id);
-                                                    setSelectedTaskId(null);
-                                                }
+                                                // Direct delete without confirm
+                                                interceptedContext.deleteTask(task.id);
+                                                setSelectedTaskId(null);
                                             }}
                                         >
                                             <Trash2 size={14} />
