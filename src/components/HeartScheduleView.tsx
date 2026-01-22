@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo } from 'lucide-react';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
@@ -34,6 +34,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const [creationDrag, setCreationDrag] = useState<{ startY: number, startMin: number, currentDuration: number } | null>(null);
     const [draftTaskForModal, setDraftTaskForModal] = useState<any>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [allDayExpanded, setAllDayExpanded] = useState(false); // 整日行程摺疊狀態，預設折疊
+
 
     // Tag Handling for Snapshot
     const [snapshotTags, setSnapshotTags] = useState<any[]>([]);
@@ -1164,16 +1166,16 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             </header>
 
             {/* Date Nav */}
-            <div className="flex items-center justify-between px-6 py-3 relative z-10 bg-white/30 backdrop-blur-sm border-b border-gray-100">
-                <button onClick={() => setCurrentDate(subDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronLeft /></button>
+            <div className="flex items-center justify-between px-6 py-2 relative z-10 bg-white/30 backdrop-blur-sm border-b border-gray-100">
+                <button onClick={() => setCurrentDate(subDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronLeft size={18} /></button>
                 <div className="text-center cursor-pointer" onClick={() => setCurrentDate(new Date())}>
-                    <div className="text-xl font-bold text-gray-800">{format(currentDate, 'M月 d日', { locale: zhTW })}</div>
-                    <div className="text-xs text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
+                    <div className="text-lg font-bold text-gray-800">{format(currentDate, 'M月 d日', { locale: zhTW })}</div>
+                    <div className="text-[10px] text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
                     {(() => {
                         const solarTerm = getSolarTerm(currentDate);
                         if (solarTerm) {
                             return (
-                                <div className="text-xs text-amber-600 font-bold mt-0.5 tracking-wide">
+                                <div className="text-[10px] text-amber-600 font-bold mt-0.5 tracking-wide">
                                     🌾 {solarTerm}
                                 </div>
                             );
@@ -1181,7 +1183,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         return null;
                     })()}
                 </div>
-                <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronRight /></button>
+                <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronRight size={18} /></button>
             </div>
 
             {/* Config Panel */}
@@ -1211,7 +1213,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 {/* All-Day Tasks Area */}
                 {allDayTasks.length > 0 && (
                     <div
-                        className="sticky top-0 z-30 bg-gradient-to-b from-pink-50/90 to-purple-50/90 backdrop-blur-md border-b-2 border-pink-200/50 px-6 py-3 mb-2"
+                        className="sticky top-0 z-30 bg-gradient-to-b from-pink-50/90 to-purple-50/90 backdrop-blur-md border-b-2 border-pink-200/50 px-6 py-2"
                         onDragOver={handleDragOver}
                         onDrop={handleAllDayDrop}
                         onDoubleClick={async () => {
@@ -1224,43 +1226,51 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             setEditingTaskId(newId);
                         }}
                     >
-                        <div className="text-[10px] font-bold text-pink-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <div
+                            className="text-[10px] font-bold text-pink-600 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer select-none"
+                            onClick={() => setAllDayExpanded(!allDayExpanded)}
+                        >
                             <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
                             整日行程
+                            <span className="text-pink-400 ml-auto">
+                                {allDayExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </span>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {allDayTasks.map(task => {
-                                const taskColor = tags.find(t => task.tags?.includes(t.id))?.color || '#ec4899';
-                                return (
-                                    <div
-                                        key={task.id}
-                                        draggable
-                                        onDragStart={(e) => handleAllDayDragStart(e, task)}
-                                        onClick={() => {
-                                            const editCheck = canEditTask(task);
-                                            if (!editCheck.canEdit) {
-                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
-                                                return;
-                                            }
-                                            setEditingTaskId(task.id);
-                                        }}
-                                        className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
-                                        style={{
-                                            backgroundColor: taskColor + '20',
-                                            borderColor: taskColor + '60',
-                                            color: taskColor
-                                        }}
-                                    >
-                                        <div className="flex items-center gap-1.5">
-                                            {task.status === 'completed' && (
-                                                <CheckCircle2 size={12} className="flex-shrink-0" />
-                                            )}
-                                            <span className="truncate max-w-[200px]">{task.title || '(無標題)'}</span>
+                        {allDayExpanded && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {allDayTasks.map(task => {
+                                    const taskColor = tags.find(t => task.tags?.includes(t.id))?.color || '#ec4899';
+                                    return (
+                                        <div
+                                            key={task.id}
+                                            draggable
+                                            onDragStart={(e) => handleAllDayDragStart(e, task)}
+                                            onClick={() => {
+                                                const editCheck = canEditTask(task);
+                                                if (!editCheck.canEdit) {
+                                                    setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                    return;
+                                                }
+                                                setEditingTaskId(task.id);
+                                            }}
+                                            className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
+                                            style={{
+                                                backgroundColor: taskColor + '20',
+                                                borderColor: taskColor + '60',
+                                                color: taskColor
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                {task.status === 'completed' && (
+                                                    <CheckCircle2 size={12} className="flex-shrink-0" />
+                                                )}
+                                                <span className="truncate max-w-[200px]">{task.title || '(無標題)'}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1428,8 +1438,26 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                                     <div
                                         className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/5"
-                                        onMouseDown={(e) => handleTaskMouseDown(e, task, 'resize')}
-                                        onTouchStart={(e) => handleTaskTouchStart(e, task, 'resize')}
+                                        onMouseDown={(e) => {
+                                            const editCheck = canEditTask(task);
+                                            if (!editCheck.canEdit) {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                return;
+                                            }
+                                            handleTaskMouseDown(e, task, 'resize');
+                                        }}
+                                        onTouchStart={(e) => {
+                                            const editCheck = canEditTask(task);
+                                            if (!editCheck.canEdit) {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                return;
+                                            }
+                                            handleTaskTouchStart(e, task, 'resize');
+                                        }}
                                     >
                                         <GripHorizontal size={12} className="text-gray-400" />
                                     </div>
