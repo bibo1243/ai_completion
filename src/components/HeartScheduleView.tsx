@@ -43,6 +43,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
     // Tag Handling for Snapshot
     const [snapshotTags, setSnapshotTags] = useState<any[]>([]);
+    const [snapshotOwnerId, setSnapshotOwnerId] = useState<string | null>(null);
     const displayTags = isSnapshotMode ? snapshotTags : tags;
 
     // Helper: Determine default tag based on mode
@@ -105,14 +106,17 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
             if (snapshotId && supabase) {
                 // Fetch snapshot from DB
-                supabase.from('schedule_snapshots').select('data').eq('id', snapshotId).single()
+                supabase.from('schedule_snapshots').select('data, created_by').eq('id', snapshotId).single()
                     .then(({ data, error }) => {
-                        if (data?.data) {
-                            const { tasks: sTasks, tags: sTags, date: sDate } = data.data;
-                            if (sTasks) setUrlTasks(sTasks);
-                            if (sTags) setSnapshotTags(sTags);
-                            if (sDate) setCurrentDate(parseISO(sDate));
-                            setIsSnapshotMode(true);
+                        if (data) {
+                            if (data.created_by) setSnapshotOwnerId(data.created_by);
+                            if (data.data) {
+                                const { tasks: sTasks, tags: sTags, date: sDate } = data.data;
+                                if (sTasks) setUrlTasks(sTasks);
+                                if (sTags) setSnapshotTags(sTags);
+                                if (sDate) setCurrentDate(parseISO(sDate));
+                                setIsSnapshotMode(true);
+                            }
                         } else if (error) {
                             console.error('Error loading snapshot:', error);
                         }
@@ -259,14 +263,16 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // Extract Owner ID for Guest Mode
     const ownerId = useMemo(() => {
         if (!isSnapshotMode) return null;
+        if (snapshotOwnerId) return snapshotOwnerId; // Priority: DB Snapshot Owner
+
         const pathParts = window.location.pathname.split('/');
         const shareIndex = pathParts.indexOf('heart');
         if (shareIndex !== -1 && pathParts[shareIndex + 1]) {
             const id = pathParts[shareIndex + 1];
-            return id === 'share' ? null : id; // 'share' is a placeholder, not an actual ID
+            return (id === 'share' || id === 's') ? null : id; // 'share' or 's' (short url) are placeholders
         }
         return null;
-    }, [isSnapshotMode]);
+    }, [isSnapshotMode, snapshotOwnerId]);
 
     // Intercepted Context for Guest Editing
     const interceptedContext = useMemo(() => {
