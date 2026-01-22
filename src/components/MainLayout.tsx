@@ -189,9 +189,9 @@ export const MainLayout = () => {
           {/* Right: Tools, User, Sync */}
           <div className="flex items-center gap-2 md:gap-4">
             {/* Version Indicator for Debugging */}
-            <span className="text-[10px] text-gray-300 font-mono">v1.8.2</span>
+            {/* <span className="text-[10px] text-gray-300 font-mono">v1.8.2</span> - Removed */}
 
-            <div className="flex items-center gap-1 border border-transparent hover:border-red-500/20 transition-colors">
+            <div className="flex items-center gap-1">
               {selectedTaskIds.length === 1 && (
                 <>
                   <button
@@ -219,13 +219,12 @@ export const MainLayout = () => {
               <button disabled={!canRedo} onClick={redo} className={`p-1 rounded hover:bg-theme-hover ${!canRedo ? 'opacity-30' : 'opacity-100'}`} title="重做 (Ctrl+Shift+Z)"><Redo size={14} /></button>
               <div className="w-px h-4 bg-theme-hover mx-1"></div>
 
-              {/* Heart Schedule Button - Temporarily FORCE SHOW for debugging */}
-              {/* Also added 'flex' to ensure div doesn't collapse */}
-              <div className={`flex items-center ${user?.email === 'bibo1243@gmail.com' ? '' : 'opacity-50'}`} title={`Our Time (User: ${user?.email || 'None'})`}>
+              {/* Heart Schedule Button */}
+              <div className={`flex items-center ${user?.email === 'bibo1243@gmail.com' ? '' : 'hidden'}`}>
                 <button
                   onClick={() => setShowHeartSchedule(true)}
                   className="p-1.5 rounded-full hover:bg-pink-50 text-pink-400 hover:text-pink-600 transition-colors"
-                  title={`我們的日程 (Shared Schedule) - Status: ${user?.email}`}
+                  title="我們的日程 (Shared Schedule)"
                 >
                   <Heart size={18} className={showHeartSchedule ? 'fill-pink-500 text-pink-500' : ''} />
                 </button>
