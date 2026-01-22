@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo } from 'lucide-react';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
@@ -18,7 +18,7 @@ const HOUR_HEIGHT = 64;
 export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, isStandalone = false }) => {
     // Get original context
     const context = useContext(AppContext);
-    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast } = context;
+    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast, undo, redo, canUndo, canRedo } = context;
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
@@ -50,6 +50,29 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 displayTags.find(t => t.name.includes('Google:冠葦行程')) || // Substring match
                 displayTags.find(t => t.name.includes('冠葦行程') && t.name.toLowerCase().includes('google')) || // Keyword match
                 displayTags.find(t => t.name.includes('冠葦行程')); // Fallback
+        }
+    };
+
+    // Helper: Check if task can be edited based on mode and tags
+    const canEditTask = (task: any): { canEdit: boolean; reason?: string } => {
+        const taskTags = task.tags || [];
+        const hasWeiTag = taskTags.some((tagId: string) => {
+            const tag = displayTags.find(t => t.id === tagId);
+            return tag && tag.name.includes('-Wei行程');
+        });
+
+        if (isSnapshotMode) {
+            // Guest Mode: Can ONLY edit tasks with -Wei行程 tag
+            if (!hasWeiTag) {
+                return { canEdit: false, reason: 'Guest 模式下只能編輯「-Wei行程」標籤的任務' };
+            }
+            return { canEdit: true };
+        } else {
+            // Owner Mode: CANNOT edit tasks with -Wei行程 tag
+            if (hasWeiTag) {
+                return { canEdit: false, reason: '此任務標記為「-Wei行程」，請在 Guest 端編輯' };
+            }
+            return { canEdit: true };
         }
     };
 
@@ -1118,6 +1141,23 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-medium"
                         >預覽模式 (點此退出)</button>
                     )}
+                    {/* Undo/Redo Buttons */}
+                    <button
+                        onClick={() => undo()}
+                        disabled={!canUndo}
+                        className={`p-2 rounded-full transition-colors ${canUndo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="復原 (Ctrl+Z)"
+                    >
+                        <Undo size={18} />
+                    </button>
+                    <button
+                        onClick={() => redo()}
+                        disabled={!canRedo}
+                        className={`p-2 rounded-full transition-colors ${canRedo ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="重作 (Ctrl+Shift+Z)"
+                    >
+                        <Redo size={18} />
+                    </button>
                     <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-pink-100 text-pink-600' : 'hover:bg-gray-100 text-gray-500'}`}><Settings size={20} /></button>
                     <button onClick={() => setShowShareModal(true)} className="p-2 rounded-full bg-pink-50 text-pink-500 hover:bg-pink-100"><Share2 size={20} /></button>
                 </div>
@@ -1196,7 +1236,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                         key={task.id}
                                         draggable
                                         onDragStart={(e) => handleAllDayDragStart(e, task)}
-                                        onClick={() => setEditingTaskId(task.id)}
+                                        onClick={() => {
+                                            const editCheck = canEditTask(task);
+                                            if (!editCheck.canEdit) {
+                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                return;
+                                            }
+                                            setEditingTaskId(task.id);
+                                        }}
                                         className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
                                         style={{
                                             backgroundColor: taskColor + '20',
@@ -1326,11 +1373,25 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                     onDoubleClick={(e) => {
                                         e.stopPropagation();
                                         if (!isDraft) {
+                                            const editCheck = canEditTask(task);
+                                            if (!editCheck.canEdit) {
+                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                return;
+                                            }
                                             setEditingTaskId(task.id);
                                             setDraftTaskForModal(null);
                                         }
                                     }}
-                                    onMouseDown={(e) => handleTaskMouseDown(e, task, 'move')}
+                                    onMouseDown={(e) => {
+                                        const editCheck = canEditTask(task);
+                                        if (!editCheck.canEdit) {
+                                            e.stopPropagation();
+                                            e.preventDefault();
+                                            setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                            return;
+                                        }
+                                        handleTaskMouseDown(e, task, 'move');
+                                    }}
                                     onTouchStart={(e) => handleTaskTouchStart(e, task, 'move')}
                                 >
                                     {/* Mobile Delete Button */}
