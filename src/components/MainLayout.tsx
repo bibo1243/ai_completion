@@ -304,7 +304,7 @@ export const MainLayout = () => {
             if (!isDraggingFab) setLocalQuickAdd(true);
           }}
           style={{ left: fabPosition.x, top: fabPosition.y }}
-          className={`fixed z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center group fab-mobile md:fab-desktop ${isDraggingFab ? 'cursor-grabbing scale-110' : 'cursor-grab hover:scale-105 active:scale-95'}`}
+          className={`fixed z-40 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 transition-all flex items-center justify-center group fab-mobile md:hidden ${isDraggingFab ? 'cursor-grabbing scale-110' : 'cursor-grab hover:scale-105 active:scale-95'}`}
           title="Create New Task (Drag to move)"
         >
           <Plus size={28} className="group-hover:rotate-90 transition-transform duration-200" />

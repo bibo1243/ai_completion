@@ -361,7 +361,12 @@ const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(({
 
     // --- Audio Recording State ---
     // --- Audio Recording State from Context ---
-    const { isRecording, recordingTime, addMarker, currentRecordingId } = useContext(RecordingContext);
+    const recordingContext = useContext(RecordingContext);
+    const isRecording = recordingContext?.isRecording || false;
+    const recordingTime = recordingContext?.recordingTime || 0;
+    const addMarker = recordingContext?.addMarker || (() => null);
+    const currentRecordingId = recordingContext?.currentRecordingId || null;
+
     const recordingTimeRef = useRef(recordingTime);
     const currentRecordingIdRef = useRef(currentRecordingId);
     const isRecordingRef = useRef(isRecording);

@@ -2,7 +2,8 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo, Book } from 'lucide-react';
+import { MomentsView } from './MomentsView';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
@@ -20,11 +21,33 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const context = useContext(AppContext);
     const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast, undo, redo, canUndo, canRedo } = context;
 
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const [viewMode, setViewMode] = useState<'schedule' | 'moments'>(() => {
+        return (localStorage.getItem('heart_view_mode') as 'schedule' | 'moments') || 'schedule';
+    });
+
+    const [currentDate, setCurrentDate] = useState(() => {
+        const saved = localStorage.getItem('heart_selected_date');
+        return saved ? parseISO(saved) : new Date();
+    });
+
+    // Moment Scroll Persistence
+    const lastMomentIdRef = useRef<string | null>(localStorage.getItem('heart_last_moment_id'));
+
+    useEffect(() => {
+        localStorage.setItem('heart_view_mode', viewMode);
+    }, [viewMode]);
+
+    useEffect(() => {
+        if (viewMode === 'schedule') {
+            localStorage.setItem('heart_selected_date', currentDate.toISOString());
+        }
+    }, [currentDate, viewMode]);
+
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
         const saved = localStorage.getItem('heart_schedule_tags');
         return saved ? JSON.parse(saved) : [];
     });
+
     const [showSettings, setShowSettings] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [urlTasks, setUrlTasks] = useState<any[]>([]);
@@ -39,7 +62,6 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     // Share State
     const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
     const [isGeneratingLink, setIsGeneratingLink] = useState(false);
-
 
     // Tag Handling for Snapshot
     const [snapshotTags, setSnapshotTags] = useState<any[]>([]);
@@ -582,6 +604,9 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const effectiveRedo = interceptedContext.redo;
     const effectiveCanUndo = interceptedContext.canUndo;
     const effectiveCanRedo = interceptedContext.canRedo;
+    const effectiveAddTask = interceptedContext.addTask;
+    const effectiveUpdateTask = interceptedContext.updateTask;
+    const effectiveDeleteTask = interceptedContext.deleteTask;
 
     // Guest Mode Keyboard Shortcuts (Undo/Redo)
     useEffect(() => {
@@ -1465,7 +1490,36 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     <button onClick={onClose} className="p-1 md:p-2 rounded-full hover:bg-gray-100 text-gray-500"><X size={18} className="md:w-5 md:h-5" /></button>
                 )}
                 {isStandalone && <div className="w-8 md:w-10"></div>}
-                <div className="flex items-center gap-1 md:gap-2">
+
+                {/* View Switcher Toggle */}
+                <div className="flex bg-gray-100/50 p-1 rounded-full items-center">
+                    <button
+                        onClick={() => setViewMode('schedule')}
+                        className={`
+                            flex items-center gap-1 md:gap-2 px-3 py-1.5 rounded-full transition-all text-sm font-bold
+                            ${viewMode === 'schedule'
+                                ? 'bg-white shadow-sm text-pink-500'
+                                : 'text-gray-400 hover:text-gray-600'}
+                        `}
+                    >
+                        <Heart size={16} className={viewMode === 'schedule' ? "fill-pink-500" : ""} />
+                        <span className={viewMode === 'schedule' ? "" : "hidden md:inline"}>日程</span>
+                    </button>
+                    <button
+                        onClick={() => setViewMode('moments')}
+                        className={`
+                            flex items-center gap-1 md:gap-2 px-3 py-1.5 rounded-full transition-all text-sm font-bold
+                            ${viewMode === 'moments'
+                                ? 'bg-white shadow-sm text-purple-600'
+                                : 'text-gray-400 hover:text-gray-600'}
+                        `}
+                    >
+                        <Book size={16} className={viewMode === 'moments' ? "fill-purple-200 text-purple-600" : ""} />
+                        <span className={viewMode === 'moments' ? "" : "hidden md:inline"}>回憶</span>
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-1 md:gap-2 hidden">
                     <Heart className="text-pink-500 fill-pink-500 animate-pulse md:w-6 md:h-6" size={20} />
                     <span className="hidden md:inline text-lg font-bold tracking-wide bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">Our Time</span>
                     <span className="md:hidden text-base font-bold text-pink-500">Our Time</span>
@@ -1505,349 +1559,368 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 </div>
             </header>
 
-            {/* Date Nav */}
-            <div className="flex items-center justify-between px-6 py-2 relative z-10 bg-white/30 backdrop-blur-sm border-b border-gray-100">
-                <button onClick={() => setCurrentDate(subDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronLeft size={18} /></button>
-                <div className="text-center cursor-pointer" onClick={() => setCurrentDate(new Date())}>
-                    <div className="text-lg font-bold text-gray-800">{format(currentDate, 'M月 d日', { locale: zhTW })}</div>
-                    <div className="text-[10px] text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
-                    {(() => {
-                        const solarTerm = getSolarTerm(currentDate);
-                        if (solarTerm) {
-                            return (
-                                <div className="text-[10px] text-amber-600 font-bold mt-0.5 tracking-wide">
-                                    🌾 {solarTerm}
+            {/* Content Body */}
+            {viewMode === 'schedule' ? (
+                <>
+                    {/* Date Nav */}
+                    <div className="flex items-center justify-between px-6 py-2 relative z-10 bg-white/30 backdrop-blur-sm border-b border-gray-100">
+                        <button onClick={() => setCurrentDate(subDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronLeft size={18} /></button>
+                        <div className="text-center cursor-pointer" onClick={() => setCurrentDate(new Date())}>
+                            <div className="text-lg font-bold text-gray-800">{format(currentDate, 'M月 d日', { locale: zhTW })}</div>
+                            <div className="text-[10px] text-pink-500 font-medium tracking-widest uppercase">{format(currentDate, 'EEEE', { locale: zhTW })}</div>
+                            {(() => {
+                                const solarTerm = getSolarTerm(currentDate);
+                                if (solarTerm) {
+                                    return (
+                                        <div className="text-[10px] text-amber-600 font-bold mt-0.5 tracking-wide">
+                                            🌾 {solarTerm}
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </div>
+                        <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronRight size={18} /></button>
+                    </div>
+
+                    {/* Config Panel */}
+                    <AnimatePresence>
+                        {showSettings && (
+                            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-b border-gray-100 bg-gray-50/80 backdrop-blur">
+                                <div className="p-4">
+                                    <div className="text-xs text-gray-500 mb-2 font-medium">同步標籤</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {displayTags.map(tag => (
+                                            <button
+                                                key={tag.id}
+                                                onClick={() => toggleTagSelection(tag.id)}
+                                                className={`px-3 py-1 rounded-full text-xs transition-all border ${selectedTagIds.includes(tag.id) ? 'bg-pink-500 text-white border-pink-500 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-200'}`}
+                                            >
+                                                {tag.name}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            );
-                        }
-                        return null;
-                    })()}
-                </div>
-                <button onClick={() => setCurrentDate(addDays(currentDate, 1))} className="p-1 text-gray-400 hover:text-pink-500"><ChevronRight size={18} /></button>
-            </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
-            {/* Config Panel */}
-            <AnimatePresence>
-                {showSettings && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-b border-gray-100 bg-gray-50/80 backdrop-blur">
-                        <div className="p-4">
-                            <div className="text-xs text-gray-500 mb-2 font-medium">同步標籤</div>
-                            <div className="flex flex-wrap gap-2">
-                                {displayTags.map(tag => (
-                                    <button
-                                        key={tag.id}
-                                        onClick={() => toggleTagSelection(tag.id)}
-                                        className={`px-3 py-1 rounded-full text-xs transition-all border ${selectedTagIds.includes(tag.id) ? 'bg-pink-500 text-white border-pink-500 shadow-md transform scale-105' : 'bg-white text-gray-600 border-gray-200'}`}
-                                    >
-                                        {tag.name}
-                                    </button>
-                                ))}
+                    {/* Timeline View */}
+                    <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth">
+                        {/* All-Day Tasks Area */}
+                        {allDayTasks.length > 0 && (
+                            <div
+                                className="sticky top-0 z-30 bg-gradient-to-b from-pink-50/90 to-purple-50/90 backdrop-blur-md border-b-2 border-pink-200/50 px-6 py-2"
+                                onDragOver={handleDragOver}
+                                onDrop={handleAllDayDrop}
+                                onDoubleClick={async () => {
+                                    const newId = await interceptedContext.addTask({
+                                        title: '',
+                                        start_date: currentDate.toISOString(),
+                                        is_all_day: true,
+                                        status: 'inbox'
+                                    });
+                                    setEditingTaskId(newId);
+                                }}
+                            >
+                                <div
+                                    className="text-[10px] font-bold text-pink-600 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer select-none"
+                                    onClick={() => setAllDayExpanded(!allDayExpanded)}
+                                >
+                                    <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
+                                    整日行程
+                                    <span className="text-pink-400 ml-auto">
+                                        {allDayExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    </span>
+                                </div>
+                                {allDayExpanded && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {allDayTasks.map(task => {
+                                            const taskColor = tags.find(t => task.tags?.includes(t.id))?.color || '#ec4899';
+                                            return (
+                                                <div
+                                                    key={task.id}
+                                                    draggable
+                                                    onDragStart={(e) => handleAllDayDragStart(e, task)}
+                                                    onClick={() => {
+                                                        const editCheck = canEditTask(task);
+                                                        if (!editCheck.canEdit) {
+                                                            setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                            return;
+                                                        }
+                                                        setEditingTaskId(task.id);
+                                                    }}
+                                                    className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
+                                                    style={{
+                                                        backgroundColor: taskColor + '20',
+                                                        borderColor: taskColor + '60',
+                                                        color: taskColor
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1.5">
+                                                        {task.status === 'completed' && (
+                                                            <CheckCircle2 size={12} className="flex-shrink-0" />
+                                                        )}
+                                                        <span className="truncate max-w-[200px]">{task.title || '(無標題)'}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        )}
 
-            {/* Timeline View */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto relative z-0 hide-scrollbar scroll-smooth">
-                {/* All-Day Tasks Area */}
-                {allDayTasks.length > 0 && (
-                    <div
-                        className="sticky top-0 z-30 bg-gradient-to-b from-pink-50/90 to-purple-50/90 backdrop-blur-md border-b-2 border-pink-200/50 px-6 py-2"
-                        onDragOver={handleDragOver}
-                        onDrop={handleAllDayDrop}
-                        onDoubleClick={async () => {
-                            const newId = await interceptedContext.addTask({
-                                title: '',
-                                start_date: currentDate.toISOString(),
-                                is_all_day: true,
-                                status: 'inbox'
-                            });
-                            setEditingTaskId(newId);
-                        }}
-                    >
+                        {/* Background Container for Click-and-Drag Creation */}
                         <div
-                            className="text-[10px] font-bold text-pink-600 uppercase tracking-wider flex items-center gap-1.5 cursor-pointer select-none"
-                            onClick={() => setAllDayExpanded(!allDayExpanded)}
+                            className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
+                            onMouseDown={handleBgMouseDown}
+                            onTouchStart={handleTouchStart}
+                            onTouchMove={handleTouchMove}
+                            onTouchEnd={handleTouchEnd}
+                            onDragOver={handleDragOver}
+                            onDrop={handleTimedDrop}
                         >
-                            <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
-                            整日行程
-                            <span className="text-pink-400 ml-auto">
-                                {allDayExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </span>
-                        </div>
-                        {allDayExpanded && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {allDayTasks.map(task => {
-                                    const taskColor = tags.find(t => task.tags?.includes(t.id))?.color || '#ec4899';
+                            {/* Grid Lines */}
+                            {Array.from({ length: 24 }).map((_, i) => (
+                                <div key={i} className="absolute w-full border-t border-gray-100 flex pointer-events-none" style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}>
+                                    <div className="w-14 text-[10px] text-gray-400 font-mono text-right pr-2 -mt-2 select-none">
+                                        {i.toString().padStart(2, '0')}:00
+                                    </div>
+                                    <div className="flex-1 border-l border-gray-50 h-full relative">
+                                        <div className="absolute top-1/2 w-full border-t border-gray-50 border-dashed"></div>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Current Time */}
+                            {isSameDay(new Date(), currentDate) && (
+                                <div
+                                    className="absolute left-14 right-0 border-t-2 border-red-400 z-20 pointer-events-none flex items-center"
+                                    style={{ top: (new Date().getHours() * 60 + new Date().getMinutes()) / 60 * HOUR_HEIGHT }}
+                                >
+                                    <div className="w-2 h-2 bg-red-400 rounded-full -ml-1"></div>
+                                </div>
+                            )}
+
+                            {/* Ghost Task for Creation */}
+                            {creationDrag && (
+                                <div
+                                    className="absolute left-16 right-2 bg-pink-100/50 border-2 border-pink-400 border-dashed rounded-xl z-30 pointer-events-none"
+                                    style={{
+                                        top: `${(creationDrag.startMin / 60) * HOUR_HEIGHT}px`,
+                                        height: `${(creationDrag.currentDuration / 60) * HOUR_HEIGHT}px`
+                                    }}
+                                >
+                                    <div className="p-2 text-xs font-bold text-pink-600">
+                                        {minutesToTime(creationDrag.startMin)} - {minutesToTime(creationDrag.startMin + creationDrag.currentDuration)} 新任務...
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tasks */}
+                            <div className="absolute top-0 right-2 left-16 bottom-0 pointer-events-none">
+                                {timedTasks.map(task => {
+                                    const isDraft = dragState?.taskId === task.id;
+                                    // Use the pre-calculated layout
+                                    const layoutInfo = dailyLayout[task.id];
+                                    const style = isDraft
+                                        ? {
+                                            top: `${(dragState!.currentStartMin / 60) * HOUR_HEIGHT}px`,
+                                            height: `${(dragState!.currentDuration / 60) * HOUR_HEIGHT}px`,
+                                            left: layoutInfo?.left || '0%',
+                                            width: layoutInfo?.width || '100%',
+                                            zIndex: 50
+                                        }
+                                        : {
+                                            ...getTaskStyle(task),
+                                            left: layoutInfo?.left || '0%',
+                                            width: layoutInfo?.width || '100%'
+                                        };
+
+                                    // Resolve Color
+                                    let taskColor = '#ec4899'; // default pink-500
+                                    if (task.tags && task.tags.length > 0) {
+                                        // Find all tag objects linked to this task
+                                        const taskTags = displayTags.filter(t => task.tags.includes(t.id));
+                                        // Priority: Google tags first, then others
+                                        const priorityTag = taskTags.find(t => t.name.toLowerCase().includes('google')) || taskTags[0];
+
+                                        if (priorityTag && priorityTag.color) {
+                                            taskColor = priorityTag.color;
+                                        }
+                                    }
+
+                                    // Dynamic Colors
+                                    // Use Hex Alpha if possible. Assuming hex colors.
+                                    const colorStyle = task.status === 'completed'
+                                        ? {}
+                                        : {
+                                            borderColor: taskColor,
+                                            backgroundColor: `${taskColor}1A`, // ~10% opacity
+                                            borderLeftWidth: '4px', // Add left accent
+                                            borderLeftColor: taskColor
+                                        };
+
                                     return (
                                         <div
                                             key={task.id}
-                                            draggable
-                                            onDragStart={(e) => handleAllDayDragStart(e, task)}
-                                            onClick={() => {
+                                            style={{ ...style, ...colorStyle }}
+                                            className={`absolute w-full rounded-r-xl rounded-l-md border p-2 text-xs flex flex-col overflow-hidden transition-all shadow-sm group pointer-events-auto
+                                        ${task.status === 'completed' ? 'bg-gray-50 border-gray-200 opacity-60' : 'hover:shadow-md'}
+                                        ${isDraft ? 'shadow-xl ring-2 ring-pink-400 opacity-90 cursor-grabbing' : 'cursor-grab'}
+                                        ${selectedTaskId === task.id ? 'ring-2 ring-pink-500 z-10 shadow-md' : ''}
+                                    `}
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent creation
+                                                if (!isDraft) {
+                                                    setSelectedTaskId(task.id);
+                                                }
+                                            }}
+                                            onDoubleClick={(e) => {
+                                                e.stopPropagation();
+                                                if (!isDraft) {
+                                                    const editCheck = canEditTask(task);
+                                                    if (!editCheck.canEdit) {
+                                                        setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                        return;
+                                                    }
+                                                    setEditingTaskId(task.id);
+                                                    setDraftTaskForModal(null);
+                                                }
+                                            }}
+                                            onMouseDown={(e) => {
                                                 const editCheck = canEditTask(task);
                                                 if (!editCheck.canEdit) {
+                                                    e.stopPropagation();
+                                                    e.preventDefault();
                                                     setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
                                                     return;
                                                 }
-                                                setEditingTaskId(task.id);
+                                                handleTaskMouseDown(e, task, 'move');
                                             }}
-                                            className="group relative px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-md hover:scale-105 border-2"
-                                            style={{
-                                                backgroundColor: taskColor + '20',
-                                                borderColor: taskColor + '60',
-                                                color: taskColor
-                                            }}
+                                            onTouchStart={(e) => handleTaskTouchStart(e, task, 'move')}
                                         >
-                                            <div className="flex items-center gap-1.5">
-                                                {task.status === 'completed' && (
-                                                    <CheckCircle2 size={12} className="flex-shrink-0" />
-                                                )}
-                                                <span className="truncate max-w-[200px]">{task.title || '(無標題)'}</span>
+                                            {/* Mobile Delete Button */}
+                                            {selectedTaskId === task.id && (
+                                                <div
+                                                    className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full shadow-lg z-50 cursor-pointer transform hover:scale-110 active:scale-95 transition-all"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const editCheck = canEditTask(task);
+                                                        if (!editCheck.canEdit) {
+                                                            setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
+                                                            return;
+                                                        }
+                                                        // Direct delete without confirm
+                                                        interceptedContext.deleteTask(task.id);
+                                                        setSelectedTaskId(null);
+                                                    }}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </div>
+                                            )}
+
+                                            <div className="flex items-start gap-1 font-bold text-gray-800 w-full">
+                                                {/* Dot is now redundant with left border, but let's keep it or remove it? -> User asked for "color property", left border is nice. But let's look at dot. */}
+                                                <div
+                                                    className={`w-2 h-2 rounded-full mt-1 shrink-0`}
+                                                    style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
+                                                ></div>
+                                                <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
+                                                {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono">
+                                                {isDraft
+                                                    ? `${minutesToTime(dragState.currentStartMin)} - ${minutesToTime(dragState.currentStartMin + dragState.currentDuration)}`
+                                                    : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
+                                                }
+                                            </div>
+
+                                            <div
+                                                className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/5"
+                                                onMouseDown={(e) => {
+                                                    const editCheck = canEditTask(task);
+                                                    if (!editCheck.canEdit) {
+                                                        e.stopPropagation();
+                                                        e.preventDefault();
+                                                        setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                        return;
+                                                    }
+                                                    handleTaskMouseDown(e, task, 'resize');
+                                                }}
+                                                onTouchStart={(e) => {
+                                                    const editCheck = canEditTask(task);
+                                                    if (!editCheck.canEdit) {
+                                                        e.stopPropagation();
+                                                        e.preventDefault();
+                                                        setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
+                                                        return;
+                                                    }
+                                                    e.stopPropagation(); // Prevent bubbling to parent move handler
+                                                    handleTaskTouchStart(e, task, 'resize');
+                                                }}
+                                            >
+                                                <GripHorizontal size={12} className="text-gray-400" />
                                             </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                        )}
-                    </div>
-                )}
 
-                {/* Background Container for Click-and-Drag Creation */}
-                <div
-                    className="relative min-h-[1536px] w-full bg-white/40 cursor-crosshair"
-                    onMouseDown={handleBgMouseDown}
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onDragOver={handleDragOver}
-                    onDrop={handleTimedDrop}
-                >
-                    {/* Grid Lines */}
-                    {Array.from({ length: 24 }).map((_, i) => (
-                        <div key={i} className="absolute w-full border-t border-gray-100 flex pointer-events-none" style={{ top: i * HOUR_HEIGHT, height: HOUR_HEIGHT }}>
-                            <div className="w-14 text-[10px] text-gray-400 font-mono text-right pr-2 -mt-2 select-none">
-                                {i.toString().padStart(2, '0')}:00
-                            </div>
-                            <div className="flex-1 border-l border-gray-50 h-full relative">
-                                <div className="absolute top-1/2 w-full border-t border-gray-50 border-dashed"></div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {/* Current Time */}
-                    {isSameDay(new Date(), currentDate) && (
-                        <div
-                            className="absolute left-14 right-0 border-t-2 border-red-400 z-20 pointer-events-none flex items-center"
-                            style={{ top: (new Date().getHours() * 60 + new Date().getMinutes()) / 60 * HOUR_HEIGHT }}
-                        >
-                            <div className="w-2 h-2 bg-red-400 rounded-full -ml-1"></div>
-                        </div>
-                    )}
-
-                    {/* Ghost Task for Creation */}
-                    {creationDrag && (
-                        <div
-                            className="absolute left-16 right-2 bg-pink-100/50 border-2 border-pink-400 border-dashed rounded-xl z-30 pointer-events-none"
-                            style={{
-                                top: `${(creationDrag.startMin / 60) * HOUR_HEIGHT}px`,
-                                height: `${(creationDrag.currentDuration / 60) * HOUR_HEIGHT}px`
-                            }}
-                        >
-                            <div className="p-2 text-xs font-bold text-pink-600">
-                                {minutesToTime(creationDrag.startMin)} - {minutesToTime(creationDrag.startMin + creationDrag.currentDuration)} 新任務...
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Tasks */}
-                    <div className="absolute top-0 right-2 left-16 bottom-0 pointer-events-none">
-                        {timedTasks.map(task => {
-                            const isDraft = dragState?.taskId === task.id;
-                            // Use the pre-calculated layout
-                            const layoutInfo = dailyLayout[task.id];
-                            const style = isDraft
-                                ? {
-                                    top: `${(dragState!.currentStartMin / 60) * HOUR_HEIGHT}px`,
-                                    height: `${(dragState!.currentDuration / 60) * HOUR_HEIGHT}px`,
-                                    left: layoutInfo?.left || '0%',
-                                    width: layoutInfo?.width || '100%',
-                                    zIndex: 50
-                                }
-                                : {
-                                    ...getTaskStyle(task),
-                                    left: layoutInfo?.left || '0%',
-                                    width: layoutInfo?.width || '100%'
-                                };
-
-                            // Resolve Color
-                            let taskColor = '#ec4899'; // default pink-500
-                            if (task.tags && task.tags.length > 0) {
-                                // Find all tag objects linked to this task
-                                const taskTags = displayTags.filter(t => task.tags.includes(t.id));
-                                // Priority: Google tags first, then others
-                                const priorityTag = taskTags.find(t => t.name.toLowerCase().includes('google')) || taskTags[0];
-
-                                if (priorityTag && priorityTag.color) {
-                                    taskColor = priorityTag.color;
-                                }
-                            }
-
-                            // Dynamic Colors
-                            // Use Hex Alpha if possible. Assuming hex colors.
-                            const colorStyle = task.status === 'completed'
-                                ? {}
-                                : {
-                                    borderColor: taskColor,
-                                    backgroundColor: `${taskColor}1A`, // ~10% opacity
-                                    borderLeftWidth: '4px', // Add left accent
-                                    borderLeftColor: taskColor
-                                };
-
-                            return (
-                                <div
-                                    key={task.id}
-                                    style={{ ...style, ...colorStyle }}
-                                    className={`absolute w-full rounded-r-xl rounded-l-md border p-2 text-xs flex flex-col overflow-hidden transition-all shadow-sm group pointer-events-auto
-                                        ${task.status === 'completed' ? 'bg-gray-50 border-gray-200 opacity-60' : 'hover:shadow-md'}
-                                        ${isDraft ? 'shadow-xl ring-2 ring-pink-400 opacity-90 cursor-grabbing' : 'cursor-grab'}
-                                        ${selectedTaskId === task.id ? 'ring-2 ring-pink-500 z-10 shadow-md' : ''}
-                                    `}
-                                    onClick={(e) => {
-                                        e.stopPropagation(); // Prevent creation
-                                        if (!isDraft) {
-                                            setSelectedTaskId(task.id);
-                                        }
-                                    }}
-                                    onDoubleClick={(e) => {
-                                        e.stopPropagation();
-                                        if (!isDraft) {
-                                            const editCheck = canEditTask(task);
-                                            if (!editCheck.canEdit) {
-                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
-                                                return;
-                                            }
-                                            setEditingTaskId(task.id);
-                                            setDraftTaskForModal(null);
-                                        }
-                                    }}
-                                    onMouseDown={(e) => {
-                                        const editCheck = canEditTask(task);
-                                        if (!editCheck.canEdit) {
-                                            e.stopPropagation();
-                                            e.preventDefault();
-                                            setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
-                                            return;
-                                        }
-                                        handleTaskMouseDown(e, task, 'move');
-                                    }}
-                                    onTouchStart={(e) => handleTaskTouchStart(e, task, 'move')}
-                                >
-                                    {/* Mobile Delete Button */}
-                                    {selectedTaskId === task.id && (
-                                        <div
-                                            className="absolute top-1 right-1 p-1.5 bg-red-500 text-white rounded-full shadow-lg z-50 cursor-pointer transform hover:scale-110 active:scale-95 transition-all"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const editCheck = canEditTask(task);
-                                                if (!editCheck.canEdit) {
-                                                    setToast?.({ msg: editCheck.reason || '無法刪除此任務', type: 'error' });
-                                                    return;
-                                                }
-                                                // Direct delete without confirm
-                                                interceptedContext.deleteTask(task.id);
-                                                setSelectedTaskId(null);
-                                            }}
-                                        >
-                                            <Trash2 size={14} />
-                                        </div>
-                                    )}
-
-                                    <div className="flex items-start gap-1 font-bold text-gray-800 w-full">
-                                        {/* Dot is now redundant with left border, but let's keep it or remove it? -> User asked for "color property", left border is nice. But let's look at dot. */}
-                                        <div
-                                            className={`w-2 h-2 rounded-full mt-1 shrink-0`}
-                                            style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
-                                        ></div>
-                                        <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
-                                        {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
-                                    </div>
-                                    <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono">
-                                        {isDraft
-                                            ? `${minutesToTime(dragState.currentStartMin)} - ${minutesToTime(dragState.currentStartMin + dragState.currentDuration)}`
-                                            : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
-                                        }
-                                    </div>
-
-                                    <div
-                                        className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/5"
-                                        onMouseDown={(e) => {
-                                            const editCheck = canEditTask(task);
-                                            if (!editCheck.canEdit) {
-                                                e.stopPropagation();
-                                                e.preventDefault();
-                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
-                                                return;
-                                            }
-                                            handleTaskMouseDown(e, task, 'resize');
-                                        }}
-                                        onTouchStart={(e) => {
-                                            const editCheck = canEditTask(task);
-                                            if (!editCheck.canEdit) {
-                                                e.stopPropagation();
-                                                e.preventDefault();
-                                                setToast?.({ msg: editCheck.reason || '無法編輯此任務', type: 'error' });
-                                                return;
-                                            }
-                                            e.stopPropagation(); // Prevent bubbling to parent move handler
-                                            handleTaskTouchStart(e, task, 'resize');
-                                        }}
-                                    >
-                                        <GripHorizontal size={12} className="text-gray-400" />
-                                    </div>
+                            {/* Empty State */}
+                            {allDayTasks.length === 0 && timedTasks.length === 0 && !creationDrag && (
+                                <div className="absolute top-1/3 left-0 right-0 text-center text-gray-400 pointer-events-none">
+                                    <Heart size={48} className="mx-auto mb-2 opacity-20" />
+                                    <p>沒有安排行程<br /><span className="text-xs opacity-50">點擊空白處新增</span></p>
                                 </div>
-                            );
-                        })}
+                            )}
+                        </div>
                     </div>
 
-                    {/* Empty State */}
-                    {allDayTasks.length === 0 && timedTasks.length === 0 && !creationDrag && (
-                        <div className="absolute top-1/3 left-0 right-0 text-center text-gray-400 pointer-events-none">
-                            <Heart size={48} className="mx-auto mb-2 opacity-20" />
-                            <p>沒有安排行程<br /><span className="text-xs opacity-50">點擊空白處新增</span></p>
-                        </div>
-                    )}
+                    {/* Mobile Add Button - FAB */}
+                    <div className="md:hidden fixed bottom-6 right-6 z-[900]">
+                        <button
+                            onClick={() => {
+                                const startStr = "08:00";
+                                const endStr = "09:00";
+
+                                // Auto-Tag Logic
+                                const targetTag = getDefaultTag();
+                                const defaultTags = targetTag ? [targetTag.id] : [];
+
+                                setDraftTaskForModal({
+                                    title: '',
+                                    start_time: startStr,
+                                    end_time: endStr,
+                                    start_date: format(currentDate, 'yyyy-MM-dd'),
+                                    duration: 60,
+                                    is_all_day: false,
+                                    tags: defaultTags,
+                                });
+                                setEditingTaskId('new');
+                            }}
+                            className="w-14 h-14 bg-pink-500 rounded-full shadow-lg flex items-center justify-center text-white active:scale-95 transition-transform"
+                        >
+                            <Plus size={28} />
+                        </button>
+                    </div>
+
+                    {/* End of Schedule FAB */}
+                </>
+            ) : (
+                <div className="flex-1 overflow-y-auto relative custom-scrollbar">
+                    <MomentsView
+                        tasks={interceptedContext.tasks}
+                        tags={interceptedContext.tags}
+                        isGuest={isSnapshotMode}
+                        onAddTask={effectiveAddTask}
+                        onUpdateTask={effectiveUpdateTask}
+                        onDeleteTask={effectiveDeleteTask}
+                        scrollRef={lastMomentIdRef}
+                    />
                 </div>
-            </div>
-
-            {/* Mobile Add Button - FAB */}
-            <div className="md:hidden fixed bottom-6 right-6 z-[900]">
-                <button
-                    onClick={() => {
-                        const startStr = "08:00";
-                        const endStr = "09:00";
-
-                        // Auto-Tag Logic
-                        const targetTag = getDefaultTag();
-                        const defaultTags = targetTag ? [targetTag.id] : [];
-
-                        setDraftTaskForModal({
-                            title: '',
-                            start_time: startStr,
-                            end_time: endStr,
-                            start_date: format(currentDate, 'yyyy-MM-dd'),
-                            duration: 60,
-                            is_all_day: false,
-                            tags: defaultTags,
-                        });
-                        setEditingTaskId('new');
-                    }}
-                    className="w-14 h-14 bg-pink-500 rounded-full shadow-lg flex items-center justify-center text-white active:scale-95 transition-transform"
-                >
-                    <Plus size={28} />
-                </button>
-            </div>
+            )}
 
             {/* Modals */}
             <AnimatePresence>
