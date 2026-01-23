@@ -98,14 +98,24 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
     const rightTag = useMemo(() => tags.find(t => t.name.includes('-Wei行程') || t.name === '-Wei行程'), [tags]);
 
     // Helper: Parse Date Robustly
+    // Helper: Parse Date Robustly
     const getMomentTime = (moment: any) => {
         try {
             let timestamp = 0;
+            // Prefer start_date/time
             if (moment.start_date) {
-                const dateStr = moment.start_date; // YYYY-MM-DD
+                // Ensure YYYY-MM-DD
+                const dateStr = moment.start_date.substring(0, 10);
                 const timeStr = moment.start_time || '00:00';
                 const cleanTime = timeStr.length > 5 ? timeStr.substring(0, 5) : timeStr;
-                const d = parseISO(`${dateStr}T${cleanTime}`);
+
+                // Try parseISO first
+                let d = parseISO(`${dateStr}T${cleanTime}`);
+                if (isNaN(d.getTime())) {
+                    // Fallback to simple Date constructor
+                    d = new Date(`${dateStr.replace(/-/g, '/')} ${cleanTime}`);
+                }
+
                 if (!isNaN(d.getTime())) {
                     timestamp = d.getTime();
                 }
@@ -446,8 +456,13 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                         date: (() => {
                             try {
                                 if (editingMoment.start_date) {
+                                    const dateStr = editingMoment.start_date.substring(0, 10);
                                     const time = editingMoment.start_time ? editingMoment.start_time.substring(0, 5) : '00:00';
-                                    const d = parseISO(`${editingMoment.start_date}T${time}`);
+
+                                    let d = parseISO(`${dateStr}T${time}`);
+                                    if (isNaN(d.getTime())) {
+                                        d = new Date(`${dateStr.replace(/-/g, '/')} ${time}`);
+                                    }
                                     if (!isNaN(d.getTime())) return d;
                                 }
                                 const d2 = new Date(editingMoment.created_at);
