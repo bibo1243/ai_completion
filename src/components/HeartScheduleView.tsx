@@ -1764,14 +1764,14 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                         </div>
                                     )}
 
-                                    <div className="flex items-center gap-1 font-bold text-gray-800 shrink-0">
+                                    <div className="flex items-start gap-1 font-bold text-gray-800 w-full">
                                         {/* Dot is now redundant with left border, but let's keep it or remove it? -> User asked for "color property", left border is nice. But let's look at dot. */}
                                         <div
-                                            className={`w-2 h-2 rounded-full mb-0.5`}
+                                            className={`w-2 h-2 rounded-full mt-1 shrink-0`}
                                             style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
                                         ></div>
-                                        <span className="truncate">{task.title}</span>
-                                        {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400" />}
+                                        <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
+                                        {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
                                     </div>
                                     <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono">
                                         {isDraft
