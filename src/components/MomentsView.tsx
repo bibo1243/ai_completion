@@ -386,11 +386,23 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
 
     const renderHorizontalLayout = () => {
         return (
-            <div className="relative w-full overflow-x-auto h-[calc(100vh-200px)] flex items-center p-8 custom-scrollbar">
-                {/* Central Line */}
-                <div className="absolute top-1/2 left-0 w-[max(100%,_var(--content-width))] h-1 bg-gradient-to-r from-indigo-200 via-pink-200 to-indigo-200 -translate-y-1/2 z-0" />
+            <div className="relative w-full overflow-x-auto h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
 
-                <div className="flex gap-8 relative z-10 min-w-max px-20" style={{ '--content-width': `${allMoments.length * 320}px` } as any}>
+                {/* Creative Timeline Background: Dashed Line with Gradient */}
+                <div className="absolute top-1/2 left-0 w-full h-1 z-0 pointer-events-none transform -translate-y-1/2">
+                    <div
+                        className="h-0.5 w-[max(100%,_var(--content-width))] bg-gradient-to-r from-indigo-300 via-pink-300 to-indigo-300"
+                        style={{
+                            backgroundImage: 'linear-gradient(90deg, transparent 50%, #ffffff 50%)',
+                            backgroundSize: '20px 100%',
+                            opacity: 0.6
+                        }}
+                    />
+                    {/* Glowing blur under the line */}
+                    <div className="absolute top-0 left-0 w-[max(100%,_var(--content-width))] h-1 bg-pink-400 blur-sm opacity-20" />
+                </div>
+
+                <div className="flex gap-12 relative z-10 px-20 items-center h-full" style={{ '--content-width': `${Math.max(window.innerWidth, (groupedRows.length * 350))}px` } as any}>
                     {groupedRows.map((row, idx) => {
                         const renderItem = (moment: any, isBottom: boolean) => {
                             const momentDate = moment.start_date ? parseISO(moment.start_date) : parseISO(moment.created_at);
@@ -400,26 +412,36 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                 <div
                                     key={moment.id}
                                     data-moment-id={moment.id}
-                                    className={`relative w-[280px] group transition-all duration-300 hover:scale-105 ${isBottom ? 'mt-8' : 'mb-8'}`}
+                                    className={`
+                                        relative w-[300px] flex-shrink-0 group transition-all duration-500 hover:scale-[1.02]
+                                        flex flex-col
+                                        ${isBottom ? 'mt-12 justify-start' : 'mb-12 justify-end'}
+                                        h-[40vh] md:h-[35vh] 
+                                    `}
                                 >
-                                    {/* Dot */}
+                                    {/* Connection Line to Central Axis */}
                                     <div className={`
-                                        absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full z-10 shadow-sm border-4 border-white
+                                        absolute left-1/2 -translate-x-1/2 w-0.5 bg-gray-300/50 group-hover:bg-pink-300 transition-colors
+                                        ${isBottom ? 'top-[-48px] h-[48px]' : 'bottom-[-48px] h-[48px]'}
+                                    `}></div>
+
+                                    {/* Central Dot on Axis */}
+                                    <div className={`
+                                        absolute left-1/2 -translate-x-1/2 w-5 h-5 rounded-full z-20 shadow-lg border-[3px] border-white transition-transform duration-300 group-hover:scale-125
                                         ${isBottom
-                                            ? 'top-[-24px] bg-pink-400 ring-2 ring-pink-100'
-                                            : 'bottom-[-24px] bg-indigo-400 ring-2 ring-indigo-100'}
-                                    `}></div>
+                                            ? 'top-[-56px] bg-gradient-to-br from-pink-400 to-rose-500'
+                                            : 'bottom-[-56px] bg-gradient-to-br from-indigo-400 to-blue-500'}
+                                    `}>
+                                        <div className="absolute inset-0 rounded-full bg-white opacity-30 animate-ping"></div>
+                                    </div>
 
-                                    {/* Line to Dot */}
-                                    <div className={`
-                                        absolute left-1/2 -translate-x-1/2 w-0.5 bg-gray-200
-                                        ${isBottom ? 'top-[-20px] h-[20px]' : 'bottom-[-20px] h-[20px]'}
-                                    `}></div>
-
+                                    {/* Card Bubble */}
                                     <div
                                         className={`
-                                            bg-white p-3 rounded-xl shadow-sm border cursor-pointer overflow-hidden
-                                            ${isBottom ? 'border-pink-50 hover:border-pink-200' : 'border-indigo-50 hover:border-indigo-200'}
+                                            flex flex-col h-full
+                                            bg-white p-4 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] 
+                                            border border-white hover:border-pink-200 transition-all cursor-pointer overflow-hidden
+                                            ${isBottom ? 'rounded-tl-none' : 'rounded-bl-none'}
                                         `}
                                         onDoubleClick={() => {
                                             const isRight = rightTag && moment.tags?.includes(rightTag.id);
@@ -432,19 +454,31 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                             }
                                         }}
                                     >
-                                        <div className="text-[10px] font-bold text-gray-400 mb-2 flex justify-between">
-                                            <span>{displayDate}</span>
-                                            {moment.images?.length > 0 && <span className="text-pink-400">📷 {moment.images.length}</span>}
+                                        <div className="text-xs font-bold text-gray-400 mb-3 flex justify-between items-center shrink-0">
+                                            <span className="bg-gray-100 px-2 py-0.5 rounded-full">{displayDate}</span>
+                                            {moment.images?.length > 0 && <span className="text-pink-400 text-[10px] bg-pink-50 px-2 py-0.5 rounded-full">📷 {moment.images.length}</span>}
                                         </div>
 
-                                        {moment.images && moment.images.length > 0 && (
-                                            <div className="mb-2 h-32 overflow-hidden rounded-lg bg-gray-100">
-                                                <img src={moment.images[0]} className="w-full h-full object-cover" />
+                                        {/* Adaptive Image Container - Fills available space but keeps aspect */}
+                                        {moment.images && moment.images.length > 0 ? (
+                                            <div className="flex-1 min-h-0 mb-3 overflow-hidden rounded-xl bg-gray-50 relative group/img">
+                                                <img
+                                                    src={moment.images[0]}
+                                                    className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110"
+                                                />
+                                                {moment.images.length > 1 && (
+                                                    <div className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm">
+                                                        +{moment.images.length - 1}
+                                                    </div>
+                                                )}
                                             </div>
+                                        ) : (
+                                            /* Placeholder if no image to keep height consistent-ish or just flex-1 text */
+                                            <div className="flex-1 min-h-[20%]"></div>
                                         )}
 
                                         <div
-                                            className="text-xs text-gray-600 font-newsreader line-clamp-3"
+                                            className="text-sm text-gray-600 font-newsreader line-clamp-4 shrink-0"
                                             dangerouslySetInnerHTML={{ __html: moment.description || '' }}
                                         />
                                     </div>
@@ -452,17 +486,11 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             );
                         };
 
+                        // Decide positioning based on row type
                         if (row.type === 'pair') {
-                            const itemTop = rightTag && row.items[0].tags?.includes(rightTag.id) ? row.items[1] : row.items[0]; // Logic: Left is Top, Right is Bottom
-                            const itemBottom = rightTag && row.items[0].tags?.includes(rightTag.id) ? row.items[0] : row.items[1];
-
-                            // Check if logic matches vertical: Left(Blue)=Top, Right(Pink)=Bottom
-                            // Vertical: Left is indigo (Top), Right is pink (Bottom)
-
-                            // Re-evaluate item assignment for "correct" sides
-                            // Let's stick to: Non-Wei (Left/Indigo) -> Top side. Wei (Right/Pink) -> Bottom side.
-
-                            // Find which is which
+                            // Re-evaluate side logic to ensure consistency
+                            // Left Tag (Indigo) -> Top
+                            // Right Tag (Wei/Pink) -> Bottom
                             const item1 = row.items[0];
                             const item2 = row.items[1];
                             const i1IsRight = rightTag && item1.tags?.includes(rightTag.id);
@@ -471,22 +499,28 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             const bottomItem = i1IsRight ? item1 : item2;
 
                             return (
-                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-[400px]">
+                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-full py-12">
+                                    {/* Top Item (Indigo/Left) */}
                                     {renderItem(topItem, false)}
+                                    {/* Bottom Item (Pink/Right) */}
                                     {renderItem(bottomItem, true)}
                                 </div>
                             );
                         } else {
                             const item = row.items[0];
                             const isRight = rightTag && item.tags?.includes(rightTag.id);
+                            // Right -> Bottom, Left -> Top
 
                             return (
-                                <div key={`single-${idx}`} className={`flex flex-col h-[400px] ${isRight ? 'justify-end' : 'justify-start'}`}>
+                                <div key={`single-${idx}`} className={`flex flex-col h-full py-12 ${isRight ? 'justify-end' : 'justify-start'}`}>
                                     {renderItem(item, isRight)}
                                 </div>
                             );
                         }
                     })}
+
+                    {/* End Cap */}
+                    <div className="w-20 shrink-0"></div>
                 </div>
             </div>
         );
