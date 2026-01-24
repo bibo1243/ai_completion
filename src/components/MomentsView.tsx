@@ -388,18 +388,41 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         return (
             <div className="relative w-full overflow-x-auto h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
 
-                {/* Creative Timeline Background: Dashed Line with Gradient - INCREASED VISIBILITY */}
-                <div className="absolute top-1/2 left-0 w-full h-2 z-0 pointer-events-none transform -translate-y-1/2">
+                {/* Creative Timeline Background: Intertwining Connection Theme */}
+                <div className="absolute top-1/2 left-0 h-12 z-0 pointer-events-none transform -translate-y-1/2 w-[max(100vw,var(--content-width))] overflow-hidden">
+                    {/* Glowing Aura */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-indigo-100/30 via-purple-100/30 to-pink-100/30 blur-xl" />
+
+                    {/* The Connection Line: SVG Pattern */}
+                    <svg className="absolute top-0 left-0 w-full h-full" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.4" />
+                                <stop offset="50%" stopColor="#c084fc" stopOpacity="0.6" />
+                                <stop offset="100%" stopColor="#f472b6" stopOpacity="0.4" />
+                            </linearGradient>
+                        </defs>
+                        {/* Central Axis Line */}
+                        <line x1="0" y1="50%" x2="100%" y2="50%" stroke="url(#lineGradient)" strokeWidth="2" strokeDasharray="6 6" />
+
+                        {/* Decorative Sine Waves (The "Connection") */}
+                        <path d={`M 0 24 Q 20 4, 40 24 T 80 24 T 120 24 T 160 24 T 200 24`} fill="none" stroke="#818cf8" strokeWidth="1" strokeOpacity="0.2" className="hidden" />
+                    </svg>
+
+                    {/* Double Helix Effect via CSS Borders (Simpler and more performant than massive SVG path calculation) */}
                     <div
-                        className="h-1.5 w-[max(100%,_var(--content-width))] bg-gradient-to-r from-indigo-300 via-pink-300 to-indigo-300 shadow-sm"
+                        className="absolute inset-0 w-full h-full opacity-30"
                         style={{
-                            backgroundImage: 'linear-gradient(90deg, transparent 50%, #ffffff 50%)',
-                            backgroundSize: '24px 100%',
-                            opacity: 0.8
+                            backgroundImage: `
+                                radial-gradient(circle at 10px 24px, #818cf8 2px, transparent 2.5px),
+                                radial-gradient(circle at 30px 24px, #f472b6 2px, transparent 2.5px)
+                            `,
+                            backgroundSize: '40px 100%'
                         }}
                     />
-                    {/* Glowing blur under the line */}
-                    <div className="absolute top-0 left-0 w-[max(100%,_var(--content-width))] h-2 bg-pink-400 blur-md opacity-30" />
+                    <div
+                        className="absolute top-[calc(50%-1px)] left-0 w-full h-0.5 bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 opacity-60"
+                    />
                 </div>
 
                 <div className="flex gap-12 relative z-10 px-20 items-center h-full" style={{ '--content-width': `${Math.max(window.innerWidth, (groupedRows.length * 350))}px` } as any}>
