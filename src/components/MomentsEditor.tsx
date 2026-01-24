@@ -1,7 +1,7 @@
 import React, { useState, useRef, useContext } from 'react';
 import { AppContext } from '../context/AppContext';
 import { supabase } from '../supabaseClient';
-import { Camera, Image as ImageIcon, X, Bold, Italic, List, ListOrdered, Heading1, Heading2, Check, Loader2, Send } from 'lucide-react';
+import { Image as ImageIcon, X, Bold, Italic, List, ListOrdered, Heading1, Heading2, Loader2 } from 'lucide-react';
 import NoteEditor from './NoteEditor';
 import { generateUUID } from '../utils';
 import { format } from 'date-fns';
@@ -10,9 +10,10 @@ interface MomentsEditorProps {
     onSave: (data: { description: string; images: string[]; date?: Date }) => Promise<void>;
     onCancel: () => void;
     initialData?: { description?: string; images?: string[]; date?: Date };
+    isReadOnly?: boolean;
 }
 
-export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, initialData }) => {
+export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, initialData, isReadOnly = false }) => {
     const { user, setToast } = useContext(AppContext);
     const [description, setDescription] = useState(initialData?.description || '');
 
@@ -96,6 +97,7 @@ export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, 
 
     // Handle File Upload
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (isReadOnly) return;
         const files = e.target.files;
         if (!files || files.length === 0) return;
         if (!user || !supabase) return;
@@ -141,6 +143,7 @@ export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, 
     };
 
     const handleSave = async () => {
+        if (isReadOnly) return;
         // Strip HTML to check for real text content
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = description;
@@ -198,16 +201,20 @@ export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, 
                         <X size={24} />
                     </button>
                     <div className="font-bold text-lg text-gray-800">
-                        {initialData ? '編輯回憶' : '新增回憶'}
+                        {isReadOnly ? '查看回憶' : (initialData ? '編輯回憶' : '新增回憶')}
                     </div>
-                    <button
-                        onClick={handleSave}
-                        disabled={isSaving || isUploading}
-                        className={`px-4 py-1.5 rounded-full font-bold text-sm text-white transition-all ${isSaving || isUploading ? 'bg-gray-300' : 'bg-pink-500 hover:bg-pink-600 active:scale-95'
-                            }`}
-                    >
-                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : '發佈'}
-                    </button>
+                    {/* Hide Save button in readOnly mode */}
+                    {!isReadOnly && (
+                        <button
+                            onClick={handleSave}
+                            disabled={isSaving || isUploading}
+                            className={`px-4 py-1.5 rounded-full font-bold text-sm text-white transition-all ${isSaving || isUploading ? 'bg-gray-300' : 'bg-pink-500 hover:bg-pink-600 active:scale-95'
+                                }`}
+                        >
+                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : '發佈'}
+                        </button>
+                    )}
+                    {isReadOnly && <div className="w-8" />} {/* Spacer to balance title */}
                 </div>
 
                 {/* Date/Time Pickers */}
@@ -215,14 +222,16 @@ export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, 
                     <input
                         type="date"
                         value={dateStr}
-                        onChange={(e) => setDateStr(e.target.value)}
-                        className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-pink-200"
+                        onChange={(e) => !isReadOnly && setDateStr(e.target.value)}
+                        disabled={isReadOnly}
+                        className={`bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 outline-none ${isReadOnly ? 'opacity-80 cursor-default' : 'focus:ring-2 focus:ring-pink-200'}`}
                     />
                     <input
                         type="time"
                         value={timeStr}
-                        onChange={(e) => setTimeStr(e.target.value)}
-                        className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-pink-200"
+                        onChange={(e) => !isReadOnly && setTimeStr(e.target.value)}
+                        disabled={isReadOnly}
+                        className={`bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-sm font-medium text-gray-700 outline-none ${isReadOnly ? 'opacity-80 cursor-default' : 'focus:ring-2 focus:ring-pink-200'}`}
                     />
                 </div>
             </div>
@@ -240,71 +249,76 @@ export const MomentsEditor: React.FC<MomentsEditorProps> = ({ onSave, onCancel, 
                                         {imgObj.sizeText}
                                     </div>
                                 )}
-                                <button
-                                    onClick={() => setLocalImages(prev => prev.filter((_, i) => i !== idx))}
-                                    className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                    <X size={14} />
-                                </button>
+                                {!isReadOnly && (
+                                    <button
+                                        onClick={() => setLocalImages(prev => prev.filter((_, i) => i !== idx))}
+                                        className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
                 )}
 
                 {/* Editor Container */}
-                <div className="min-h-[200px]" onClick={() => editorRef.current?.focus()}>
+                <div className="min-h-[200px]" onClick={() => !isReadOnly && editorRef.current?.focus()}>
                     <NoteEditor
                         ref={editorRef}
                         initialContent={description}
                         onChange={setDescription}
-                        placeholder="寫下這一刻的回憶..."
+                        placeholder={isReadOnly ? "沒有詳細內容..." : "寫下這一刻的回憶..."}
                         textSizeClass="text-lg"
-                        descFontClass="font-newsreader" // Use a serif/elegant font if available, or fall back
+                        descFontClass="font-newsreader"
                         className="moments-editor"
+                        editable={!isReadOnly}
                     />
                 </div>
             </div>
 
-            {/* Floating Toolbar (Above Keyboard) */}
-            <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-100 pb-safe pt-2 px-2 z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-                {/* Image Upload Button (Prominent) */}
-                <div className="flex items-center gap-2 mb-2 px-2">
-                    <label className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-full cursor-pointer active:scale-95 transition-transform select-none">
-                        <ImageIcon size={20} />
-                        <span className="text-sm font-bold">加入照片</span>
-                        <input
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                        />
-                    </label>
-                    {isUploading && <span className="text-xs text-gray-400 animate-pulse">上傳壓縮中...</span>}
+            {/* Floating Toolbar (Above Keyboard) - Only show if NOT readOnly */}
+            {!isReadOnly && (
+                <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-100 pb-safe pt-2 px-2 z-20 shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
+                    {/* Image Upload Button (Prominent) */}
+                    <div className="flex items-center gap-2 mb-2 px-2">
+                        <label className="flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-full cursor-pointer active:scale-95 transition-transform select-none">
+                            <ImageIcon size={20} />
+                            <span className="text-sm font-bold">加入照片</span>
+                            <input
+                                type="file"
+                                multiple
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                            />
+                        </label>
+                        {isUploading && <span className="text-xs text-gray-400 animate-pulse">上傳壓縮中...</span>}
+                    </div>
+
+                    {/* Text Formatting Toolbar */}
+                    <div className="flex items-center justify-between px-2 py-2 overflow-x-auto no-scrollbar">
+                        <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
+                            <FormatButton icon={<Bold size={18} />} onClick={() => toggleFormat('bold')} />
+                            <FormatButton icon={<Italic size={18} />} onClick={() => toggleFormat('italic')} />
+                        </div>
+
+                        <div className="w-px h-6 bg-gray-200 mx-2 shrink-0" />
+
+                        <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
+                            <FormatButton icon={<Heading1 size={18} />} onClick={() => toggleFormat('h1')} />
+                            <FormatButton icon={<Heading2 size={18} />} onClick={() => toggleFormat('h2')} />
+                        </div>
+
+                        <div className="w-px h-6 bg-gray-200 mx-2 shrink-0" />
+
+                        <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
+                            <FormatButton icon={<List size={18} />} onClick={() => toggleFormat('bulletList')} />
+                            <FormatButton icon={<ListOrdered size={18} />} onClick={() => toggleFormat('orderedList')} />
+                        </div>
+                    </div>
                 </div>
-
-                {/* Text Formatting Toolbar */}
-                <div className="flex items-center justify-between px-2 py-2 overflow-x-auto no-scrollbar">
-                    <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
-                        <FormatButton icon={<Bold size={18} />} onClick={() => toggleFormat('bold')} />
-                        <FormatButton icon={<Italic size={18} />} onClick={() => toggleFormat('italic')} />
-                    </div>
-
-                    <div className="w-px h-6 bg-gray-200 mx-2 shrink-0" />
-
-                    <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
-                        <FormatButton icon={<Heading1 size={18} />} onClick={() => toggleFormat('h1')} />
-                        <FormatButton icon={<Heading2 size={18} />} onClick={() => toggleFormat('h2')} />
-                    </div>
-
-                    <div className="w-px h-6 bg-gray-200 mx-2 shrink-0" />
-
-                    <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-xl">
-                        <FormatButton icon={<List size={18} />} onClick={() => toggleFormat('bulletList')} />
-                        <FormatButton icon={<ListOrdered size={18} />} onClick={() => toggleFormat('orderedList')} />
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 };

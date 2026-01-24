@@ -8,9 +8,10 @@ import { MobileTaskEditor } from './MobileTaskEditor';
 interface DraggableTaskModalProps {
     onClose: () => void;
     initialData?: any; // TaskData type would be better if imported, but any works for now to match TaskInput
+    isReadOnly?: boolean;
 }
 
-export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose, initialData }) => {
+export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose, initialData, isReadOnly = false }) => {
     const isEditMode = !!initialData;
     const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768);
 
@@ -57,6 +58,7 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
                 taskId={initialData?.id === 'new' ? undefined : initialData?.id} // Fix: 'new' ID causes MobileTaskEditor to return null
                 initialData={initialData} // Pass draft data for new tasks
                 onClose={onClose}
+                isReadOnly={isReadOnly}
             />
         );
     }
@@ -92,7 +94,7 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
                     <div className="flex items-center gap-2 text-gray-400">
                         <GripHorizontal size={14} className="text-gray-300 hidden md:block" />
                         <span className="text-xs md:text-[10px] font-bold uppercase tracking-widest text-theme-tertiary">
-                            {isEditMode ? 'Edit Task' : 'New Task'}
+                            {isReadOnly ? 'View Task' : (isEditMode ? 'Edit Task' : 'New Task')}
                         </span>
                     </div>
                     <button
@@ -110,8 +112,9 @@ export const DraggableTaskModal: React.FC<DraggableTaskModalProps> = ({ onClose,
                         initialData={initialData}
                         onClose={onClose}
                         isQuickAdd={!isEditMode}
-                        autoFocus={!isEditMode}
+                        autoFocus={!isEditMode && !isReadOnly}
                         isEmbedded={true}
+                        isReadOnly={isReadOnly}
                     />
                 </div>
             </motion.div>

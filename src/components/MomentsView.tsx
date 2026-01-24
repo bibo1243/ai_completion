@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { AppContext } from '../context/AppContext';
-import { Plus, Heart, Trash2, Edit2, X, Clock, Calendar } from 'lucide-react';
+import { Plus, Heart, Trash2, Clock, Calendar } from 'lucide-react';
 import { MomentsEditor } from './MomentsEditor';
 
 interface MomentsViewProps {
@@ -58,8 +58,6 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
 
             const elements = container.querySelectorAll('[data-moment-id]');
             elements.forEach((el) => {
-                const rect = (el as HTMLElement).getBoundingClientRect();
-                const elCenter = rect.top + rect.height / 2;
                 // Since getBoundingClientRect is relative to viewport, and container is scrollable...
                 // Simpler: Just rely on IntersectionObserver or simple offset check if container is relative.
                 // Wait, getBoundingClientRect is viewport relative.
@@ -318,13 +316,8 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             ${isRightSide ? 'border-pink-50 hover:border-pink-200 rounded-tl-none' : 'border-indigo-50 hover:border-indigo-200 rounded-tr-none'}
                         `}
                         onDoubleClick={() => {
-                            const canEdit = (isGuest && isRightSide) || (!isGuest && !isRightSide);
-                            if (canEdit) {
-                                setEditingMoment(moment);
-                                setIsEditing(true);
-                            } else {
-                                setToast?.({ msg: '您只能編輯自己的回憶', type: 'warning' });
-                            }
+                            setEditingMoment(moment);
+                            setIsEditing(true);
                         }}
                     >
                         {/* Photos */}
@@ -389,7 +382,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
             <div className="relative w-full overflow-x-auto overflow-y-hidden h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
 
                 <div className="flex gap-4 md:gap-12 relative z-10 px-4 md:px-20 items-center h-full min-w-max">
-                    {/* Creative Timeline Background: Intertwining Connection Theme (Moved Inside) */}
+                    {/* Creative Timeline Background: Intertwining Connection Theme */}
                     <div className="absolute top-1/2 left-0 right-0 h-12 z-0 pointer-events-none transform -translate-y-1/2 overflow-hidden">
                         {/* Glowing Aura */}
                         <div className="absolute inset-0 bg-gradient-to-r from-indigo-100/30 via-purple-100/30 to-pink-100/30 blur-xl" />
@@ -433,23 +426,22 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                     data-moment-id={moment.id}
                                     className={`
                                         relative w-[220px] md:w-[300px] flex-shrink-0 group transition-all duration-500 hover:scale-[1.02]
-                                        flex flex-col
-                                        ${isBottom ? 'mt-6 md:mt-12 justify-start' : 'mb-6 md:mb-12 justify-end'}
-                                        h-[32vh] md:h-[35vh] 
+                                        flex flex-col h-1/2
+                                        ${isBottom ? 'justify-start pt-8 md:pt-12' : 'justify-end pb-8 md:pb-12'}
                                     `}
                                 >
                                     {/* Connection Line to Central Axis */}
                                     <div className={`
                                         absolute left-1/2 -translate-x-1/2 w-0.5 bg-gray-300/50 group-hover:bg-pink-300 transition-colors
-                                        ${isBottom ? 'top-[-24px] md:top-[-48px] h-[24px] md:h-[48px]' : 'bottom-[-24px] md:bottom-[-48px] h-[24px] md:h-[48px]'}
+                                        ${isBottom ? 'top-0 h-8 md:h-12' : 'bottom-0 h-8 md:h-12'}
                                     `}></div>
 
                                     {/* Central Dot on Axis */}
                                     <div className={`
                                         absolute left-1/2 -translate-x-1/2 w-3 h-3 md:w-5 md:h-5 rounded-full z-20 shadow-lg border-[2px] md:border-[3px] border-white transition-transform duration-300 group-hover:scale-125
                                         ${isBottom
-                                            ? 'top-[-30px] md:top-[-56px] bg-gradient-to-br from-pink-400 to-rose-500'
-                                            : 'bottom-[-30px] md:bottom-[-56px] bg-gradient-to-br from-indigo-400 to-blue-500'}
+                                            ? 'top-0 -translate-y-1/2 bg-gradient-to-br from-pink-400 to-rose-500'
+                                            : 'bottom-0 translate-y-1/2 bg-gradient-to-br from-indigo-400 to-blue-500'}
                                     `}>
                                         <div className="absolute inset-0 rounded-full bg-white opacity-30 animate-ping"></div>
                                     </div>
@@ -457,20 +449,14 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                     {/* Card Bubble */}
                                     <div
                                         className={`
-                                            flex flex-col h-full
+                                            flex flex-col flex-1 min-h-0
                                             bg-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] 
                                             border border-white hover:border-pink-200 transition-all cursor-pointer overflow-hidden
                                             ${isBottom ? 'rounded-tl-none' : 'rounded-bl-none'}
                                         `}
                                         onDoubleClick={() => {
-                                            const isRight = rightTag && moment.tags?.includes(rightTag.id);
-                                            const canEdit = (isGuest && isRight) || (!isGuest && !isRight);
-                                            if (canEdit) {
-                                                setEditingMoment(moment);
-                                                setIsEditing(true);
-                                            } else {
-                                                setToast?.({ msg: '您只能編輯自己的回憶', type: 'warning' });
-                                            }
+                                            setEditingMoment(moment);
+                                            setIsEditing(true);
                                         }}
                                     >
                                         <div className="text-[10px] md:text-xs font-bold text-gray-400 mb-2 flex justify-between items-center shrink-0">
@@ -492,12 +478,11 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                                 )}
                                             </div>
                                         ) : (
-                                            /* Placeholder if no image to keep height consistent-ish or just flex-1 text */
-                                            <div className="flex-1 min-h-[15%]"></div>
+                                            <div className="flex-1 min-h-[10%]" />
                                         )}
 
                                         <div
-                                            className="text-xs md:text-sm text-gray-600 font-newsreader line-clamp-3 md:line-clamp-4 shrink-0 leading-relaxed"
+                                            className="text-xs md:text-sm text-gray-600 font-newsreader line-clamp-3 md:line-clamp-4 shrink-0 leading-relaxed overflow-hidden"
                                             dangerouslySetInnerHTML={{ __html: moment.description || '' }}
                                         />
                                     </div>
@@ -507,9 +492,6 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
 
                         // Decide positioning based on row type
                         if (row.type === 'pair') {
-                            // Re-evaluate side logic to ensure consistency
-                            // Left Tag (Indigo) -> Top
-                            // Right Tag (Wei/Pink) -> Bottom
                             const item1 = row.items[0];
                             const item2 = row.items[1];
                             const i1IsRight = rightTag && item1.tags?.includes(rightTag.id);
@@ -518,7 +500,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             const bottomItem = i1IsRight ? item1 : item2;
 
                             return (
-                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-full py-6 md:py-12">
+                                <div key={`pair-${idx}`} className="flex flex-col h-full">
                                     {/* Top Item (Indigo/Left) */}
                                     {renderItem(topItem, false)}
                                     {/* Bottom Item (Pink/Right) */}
@@ -528,11 +510,23 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                         } else {
                             const item = row.items[0];
                             const isRight = rightTag && item.tags?.includes(rightTag.id);
-                            // Right -> Bottom, Left -> Top
+
+                            // Spacer for alignment
+                            const Spacer = <div className="h-1/2 w-[220px] md:w-[300px] flex-shrink-0" />;
 
                             return (
-                                <div key={`single-${idx}`} className={`flex flex-col h-full py-6 md:py-12 ${isRight ? 'justify-end' : 'justify-start'}`}>
-                                    {renderItem(item, isRight)}
+                                <div key={`single-${idx}`} className="flex flex-col h-full">
+                                    {!isRight ? (
+                                        <>
+                                            {renderItem(item, false)}
+                                            {Spacer}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {Spacer}
+                                            {renderItem(item, true)}
+                                        </>
+                                    )}
                                 </div>
                             );
                         }
@@ -668,6 +662,11 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                         setIsEditing(false);
                         setEditingMoment(null);
                     }}
+                    isReadOnly={(() => {
+                        if (!editingMoment) return false;
+                        const isRight = rightTag && editingMoment.tags?.includes(rightTag.id);
+                        return isGuest ? !isRight : !!isRight;
+                    })()}
                 />
             )}
 

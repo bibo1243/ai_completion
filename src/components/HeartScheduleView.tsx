@@ -2,7 +2,7 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Circle, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo, Book } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo, Book } from 'lucide-react';
 import { MomentsView } from './MomentsView';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
@@ -19,7 +19,7 @@ const HOUR_HEIGHT = 64;
 export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, isStandalone = false }) => {
     // Get original context
     const context = useContext(AppContext);
-    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast, undo, redo, canUndo, canRedo } = context;
+    const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast } = context;
 
     const [viewMode, setViewMode] = useState<'schedule' | 'moments'>(() => {
         return (localStorage.getItem('heart_view_mode') as 'schedule' | 'moments') || 'schedule';
@@ -1988,6 +1988,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                         ? draftTaskForModal
                                         : (isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId))
                                 }
+                                isReadOnly={(() => {
+                                    if (editingTaskId === 'new') return false;
+                                    const t = isSnapshotMode ? urlTasks.find(t => t.id === editingTaskId) : tasks.find(t => t.id === editingTaskId);
+                                    if (!t) return false;
+                                    return !canEditTask(t).canEdit;
+                                })()}
                                 onClose={() => {
                                     setEditingTaskId(null);
                                     setDraftTaskForModal(null);

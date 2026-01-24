@@ -102,7 +102,7 @@ import { ReminderSetting } from './ReminderSetting';
 const STRICT_POLISH_PROMPT = "請僅提供潤飾後的文字（含錯字校對與標點符號修正），嚴禁任何開場白、結尾、說明或感想。輸出內容必須僅包含潤飾後的正文內容。";
 
 
-export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false }: any) => {
+export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded = false, isReadOnly = false }: any) => {
     const { addTask, updateTask, tags, tasks, addTag, deleteTag, setFocusedTaskId, themeSettings, toggleExpansion, setSelectedTaskIds, deleteTask, visibleTasks, user, setToast, t, navigateToTask } = useContext(AppContext);
     const [title, setTitle] = useState(initialData?.title || '');
     const [desc, setDesc] = useState(initialData?.description || '');
@@ -405,7 +405,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     // Auto-save: Update task in database as you type (debounced)
     useEffect(() => {
         const timer = setTimeout(() => {
-            if (initialData && !isQuickAdd) {
+            if (initialData && !isQuickAdd && !isReadOnly) {
                 const updates: any = {};
                 let hasChanges = false;
 
@@ -2243,8 +2243,9 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                             setTitle(val);
                                         }
                                     }}
-                                    placeholder="任務名稱..."
-                                    className={`flex-1 ${textSizeClass} ${titleFontClass} transition-all duration-300 placeholder:font-light placeholder-gray-300 border-none bg-transparent focus:ring-0 outline-none p-0 leading-tight ${isDone ? 'opacity-30' : (showDatePicker ? 'text-slate-400' : 'text-slate-800')}`}
+                                    readOnly={isReadOnly}
+                                    placeholder={isReadOnly ? "未命名任務" : "任務名稱..."}
+                                    className={`flex-1 ${textSizeClass} ${titleFontClass} transition-all duration-300 placeholder:font-light placeholder-gray-300 border-none bg-transparent focus:ring-0 outline-none p-0 leading-tight ${isDone ? 'opacity-30' : (showDatePicker ? 'text-slate-400' : 'text-slate-800')} ${isReadOnly ? 'cursor-default' : ''}`}
                                 />
                                 {/* Title Suggestions Dropdown */}
                                 {showTitleSuggestions && title.length > 0 && (() => {
@@ -2521,40 +2522,44 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             )}
 
                             <div className="flex justify-end mb-1 gap-2">
+                                {!isReadOnly && (
+                                    <>
 
-                                <button
-                                    type="button"
-                                    onClick={() => { handleAiAssistant(); setPolishPosition(null); }}
-                                    disabled={isAssistantLoading}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-500/20 text-indigo-400 font-bold shadow-sm ring-1 ring-indigo-500/30' : 'text-indigo-500 hover:text-indigo-400 hover:bg-indigo-500/10 font-medium'}`}
-                                    title="AI Assistant Brain"
-                                >
-                                    {isAssistantLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                                    <span>AI 助理</span>
-                                </button>
-                                {/* AI Generate Title Button */}
-                                <button
-                                    type="button"
-                                    onClick={handleGenerateTitle}
-                                    disabled={isGeneratingTitle}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingTitle ? 'bg-amber-500/20 text-amber-400 font-bold shadow-sm ring-1 ring-amber-500/30' : 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 font-medium'}`}
-                                    title="從備註內容生成 SEO 優化標題"
-                                >
-                                    {isGeneratingTitle ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                    <span>AI 標題</span>
-                                </button>
-                                {/* AI Generate Keywords Button */}
-                                <button
-                                    type="button"
-                                    onClick={() => { setShowKeywordModal(true); executeKeywordGeneration(); }}
-                                    disabled={isGeneratingKeywords}
-                                    className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingKeywords ? 'bg-emerald-500/20 text-emerald-400 font-bold shadow-sm ring-1 ring-emerald-500/30' : 'text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 font-medium'}`}
-                                    title="從備註內容生成 SEO 關鍵字"
-                                >
-                                    {isGeneratingKeywords ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />}
-                                    <span>AI 關鍵字</span>
-                                </button>
-                                {renderPromptModal()}
+                                        <button
+                                            type="button"
+                                            onClick={() => { handleAiAssistant(); setPolishPosition(null); }}
+                                            disabled={isAssistantLoading}
+                                            className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${showAnalysis ? 'bg-indigo-500/20 text-indigo-400 font-bold shadow-sm ring-1 ring-indigo-500/30' : 'text-indigo-500 hover:text-indigo-400 hover:bg-indigo-500/10 font-medium'}`}
+                                            title="AI Assistant Brain"
+                                        >
+                                            {isAssistantLoading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                            <span>AI 助理</span>
+                                        </button>
+                                        {/* AI Generate Title Button */}
+                                        <button
+                                            type="button"
+                                            onClick={handleGenerateTitle}
+                                            disabled={isGeneratingTitle}
+                                            className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingTitle ? 'bg-amber-500/20 text-amber-400 font-bold shadow-sm ring-1 ring-amber-500/30' : 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10 font-medium'}`}
+                                            title="從備註內容生成 SEO 優化標題"
+                                        >
+                                            {isGeneratingTitle ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                            <span>AI 標題</span>
+                                        </button>
+                                        {/* AI Generate Keywords Button */}
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowKeywordModal(true); executeKeywordGeneration(); }}
+                                            disabled={isGeneratingKeywords}
+                                            className={`flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50 px-2 py-0.5 rounded-full ${isGeneratingKeywords ? 'bg-emerald-500/20 text-emerald-400 font-bold shadow-sm ring-1 ring-emerald-500/30' : 'text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 font-medium'}`}
+                                            title="從備註內容生成 SEO 關鍵字"
+                                        >
+                                            {isGeneratingKeywords ? <Loader2 size={12} className="animate-spin" /> : <Tag size={12} />}
+                                            <span>AI 關鍵字</span>
+                                        </button>
+                                        {renderPromptModal()}
+                                    </>
+                                )}
                             </div>
 
                             <div className="flex flex-col md:flex-row gap-4 transition-all duration-300 items-stretch h-full">
@@ -2590,6 +2595,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                         onExit={() => startDateRef.current?.focus()}
                                         textSizeClass={textSizeClass}
                                         descFontClass={descFontClass}
+                                        editable={!isReadOnly}
+                                        placeholder={isReadOnly ? "沒有詳細內容..." : "輸入詳細內容..."}
                                         className="h-full"
                                         onSaveAudio={handleSaveAudio}
                                         onAudioMarkerClick={(time, recordingId) => {
@@ -2994,13 +3001,15 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     </div>
                                                 )}
                                                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); handleRemoveImage(url); }}
-                                                    className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 z-10"
-                                                >
-                                                    <X size={10} />
-                                                </button>
+                                                {!isReadOnly && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); handleRemoveImage(url); }}
+                                                        className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 z-10"
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -3123,13 +3132,15 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                     <span className="text-[9px] text-gray-400 flex-shrink-0">
                                                         {formatFileSize(file.size)}
                                                     </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleRemoveAttachment(file.url)}
-                                                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-50 rounded transition-all"
-                                                    >
-                                                        <X size={10} className="text-gray-400 hover:text-red-500" />
-                                                    </button>
+                                                    {!isReadOnly && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveAttachment(file.url)}
+                                                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-red-50 rounded transition-all"
+                                                        >
+                                                            <X size={10} className="text-gray-400 hover:text-red-500" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -3176,13 +3187,15 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                                                         className="flex items-center gap-1 h-5 px-2 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
                                                     >
                                                         <span>{t.name}</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setSelectedTags(prev => prev.filter(x => x !== tid))}
-                                                            className="hover:text-red-500 transition-colors"
-                                                        >
-                                                            <X size={10} />
-                                                        </button>
+                                                        {!isReadOnly && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSelectedTags(prev => prev.filter(x => x !== tid))}
+                                                                className="hover:text-red-500 transition-colors"
+                                                            >
+                                                                <X size={10} />
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 ) : null;
                                             })}
@@ -3194,7 +3207,7 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
 
 
                         {/* Bottom Section: Metadata and Actions */}
-                        <div className="flex flex-col gap-3 w-full border-t border-gray-100 pt-3 mt-1">
+                        <div className={`flex flex-col gap-3 w-full border-t border-gray-100 pt-3 mt-1 ${isReadOnly ? 'pointer-events-none opacity-80' : ''}`}>
                             {/* Row 1: Date, Time, Tags */}
                             <div className="flex flex-wrap gap-2 items-center">
                                 {!startDate && (
@@ -3553,163 +3566,165 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
                             </AnimatePresence>
 
                             {/* Row 2: Actions (Image, Parent, Color) */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    {/* Image Upload */}
-                                    <input
-                                        type="file"
-                                        ref={fileInputRef}
-                                        className="hidden"
-                                        multiple
-                                        accept="image/*"
-                                        onChange={handleFileSelect}
-                                    />
-                                    <button
-                                        type="button"
-                                        tabIndex={-1}
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
-                                    >
-                                        {isUploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-                                        <span>圖片</span>
-                                    </button>
-
-                                    {/* File Attachment Upload */}
-                                    <input
-                                        ref={attachmentInputRef}
-                                        type="file"
-                                        multiple
-                                        className="hidden"
-                                        onChange={handleAttachmentSelect}
-                                    />
-                                    <button
-                                        ref={attachmentBtnRef}
-                                        type="button"
-                                        tabIndex={-1}
-                                        onClick={() => attachmentInputRef.current?.click()}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
-                                    >
-                                        {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
-                                        <span>{t('attachFiles')}</span>
-                                    </button>
-
-                                    {/* Voice Note Button */}
-                                    {/* Voice Note Button */}
-                                    {/* Voice Note Button */}
-                                    <button
-                                        type="button"
-                                        tabIndex={-1}
-                                        onMouseDown={(e) => e.preventDefault()}
-                                        onClick={() => {
-                                            if (isRecording) {
-                                                if (recordingTaskId === initialData?.id) {
-                                                    stopRecording();
-                                                } else {
-                                                    setToast?.({ msg: "正在其他任務中錄音，請先結束該錄音", type: "warning" });
-                                                }
-                                            } else {
-                                                // Start recording associated with this task
-                                                // Use initialData.id if available, else a temp usage (though global recording needs an ID ideally)
-                                                // If create mode, we can't easily associate yet.
-                                                if (initialData?.id) {
-                                                    startRecording(initialData.id);
-                                                } else {
-                                                    setToast?.({ msg: "請先儲存任務後再使用錄音功能", type: "warning" });
-                                                }
-                                            }
-                                        }}
-                                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-theme-card focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'} ${isRecording && recordingTaskId === initialData?.id ? 'text-red-500 animate-pulse' : ''}`}
-                                        title={isRecording ? "停止錄音" : "開始錄音"}
-                                    >
-                                        <Mic size={13} strokeWidth={isRecording && recordingTaskId === initialData?.id ? 3 : 2} />
-                                        <span>{isRecording && recordingTaskId === initialData?.id ? formatDuration(recordingTime) : '語音'}</span>
-                                    </button>
-
-                                    {/* Parent/Project Selection */}
-                                    <DropdownSelect
-                                        tabIndex={-1}
-                                        icon={ChevronUp}
-                                        label="移動"
-                                        items={eligibleParents}
-                                        allowAdd={true}
-                                        selectedIds={parentId ? [parentId] : []}
-                                        placeholder="搜尋母任務..."
-                                        theme={theme}
-                                        onSelect={async (id: string | null, newName?: string) => {
-                                            let targetId = id;
-                                            if (!targetId && newName) {
-                                                targetId = await addTask({ title: newName, is_project: true, status: 'inbox' });
-                                            }
-                                            if (!targetId && !id) return;
-                                            const newPid = targetId === parentId ? null : targetId;
-                                            setParentId(newPid);
-                                            if (initialData) {
-                                                if (newPid) {
-                                                    toggleExpansion(newPid, true);
-                                                }
-                                                await updateTask(initialData.id, { parent_id: newPid }, []);
-                                            }
-                                        }}
-                                    />
-                                </div>
-
-                                {/* Color Picker (Dropdown) */}
-                                {!parentId && (
-                                    <div className="relative">
+                            {!isReadOnly && (
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        {/* Image Upload */}
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            multiple
+                                            accept="image/*"
+                                            onChange={handleFileSelect}
+                                        />
                                         <button
                                             type="button"
-                                            onClick={() => setShowColorPicker(!showColorPicker)}
-                                            className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-transparent hover:border-theme hover:bg-theme-hover transition-all group"
-                                            title="選擇顏色"
+                                            tabIndex={-1}
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
                                         >
-                                            <div className={`w-3 h-3 rounded-full ${COLOR_THEMES[color]?.dot || 'bg-gray-400'} group-hover:scale-110 transition-transform`} />
-                                            <span className="text-xs text-theme-tertiary group-hover:text-theme-secondary">顏色</span>
+                                            {isUploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                                            <span>圖片</span>
                                         </button>
 
-                                        {showColorPicker && (
-                                            <>
-                                                <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
-                                                <div className="absolute bottom-full left-0 mb-2 p-3 bg-white rounded-xl shadow-xl border border-gray-200 z-50 min-w-[200px] animate-in zoom-in-95 duration-100">
-                                                    <div className="text-xs font-semibold text-gray-500 mb-2 px-1 flex items-center gap-2">
-                                                        <Palette size={12} />
-                                                        選擇主題顏色
-                                                    </div>
-                                                    <div className="grid grid-cols-6 gap-2">
-                                                        {(Object.keys(COLOR_THEMES) as TaskColor[]).map(c => (
-                                                            <button
-                                                                key={c}
-                                                                type="button"
-                                                                onClick={() => { setColor(c); setShowColorPicker(false); }}
-                                                                className={`w-5 h-5 rounded-full ${COLOR_THEMES[c].dot} ${color === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : 'hover:scale-125 opacity-80 hover:opacity-100'} transition-all shadow-sm`}
-                                                                title={c}
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* Importance Picker */}
-                                <div className="flex gap-1 p-1 bg-theme-hover rounded-lg border border-theme" title="重要性">
-                                    {[
-                                        { level: 'urgent' as ImportanceLevel, color: 'bg-red-500', label: '立刻去做', icon: '🔴' },
-                                        { level: 'planned' as ImportanceLevel, color: 'bg-yellow-400', label: '計畫去做', icon: '🟡' },
-                                        { level: 'delegated' as ImportanceLevel, color: 'bg-green-500', label: '授權去做', icon: '🟢' },
-                                        { level: 'optional' as ImportanceLevel, color: 'bg-gray-400', label: '有空再做', icon: '⚪' },
-                                    ].map(({ level, color: bgColor, label }) => (
-                                        <button
-                                            key={level}
-                                            tabIndex={-1}
-                                            type="button"
-                                            onClick={() => setImportance(importance === level ? undefined : level)}
-                                            title={label}
-                                            className={`w-4 h-4 rounded-full ${bgColor} ${importance === level ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'opacity-50 hover:opacity-100 hover:scale-105'} transition-all`}
+                                        {/* File Attachment Upload */}
+                                        <input
+                                            ref={attachmentInputRef}
+                                            type="file"
+                                            multiple
+                                            className="hidden"
+                                            onChange={handleAttachmentSelect}
                                         />
-                                    ))}
+                                        <button
+                                            ref={attachmentBtnRef}
+                                            type="button"
+                                            tabIndex={-1}
+                                            onClick={() => attachmentInputRef.current?.click()}
+                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-white focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'}`}
+                                        >
+                                            {isUploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+                                            <span>{t('attachFiles')}</span>
+                                        </button>
+
+                                        {/* Voice Note Button */}
+                                        {/* Voice Note Button */}
+                                        {/* Voice Note Button */}
+                                        <button
+                                            type="button"
+                                            tabIndex={-1}
+                                            onMouseDown={(e) => e.preventDefault()}
+                                            onClick={() => {
+                                                if (isRecording) {
+                                                    if (recordingTaskId === initialData?.id) {
+                                                        stopRecording();
+                                                    } else {
+                                                        setToast?.({ msg: "正在其他任務中錄音，請先結束該錄音", type: "warning" });
+                                                    }
+                                                } else {
+                                                    // Start recording associated with this task
+                                                    // Use initialData.id if available, else a temp usage (though global recording needs an ID ideally)
+                                                    // If create mode, we can't easily associate yet.
+                                                    if (initialData?.id) {
+                                                        startRecording(initialData.id);
+                                                    } else {
+                                                        setToast?.({ msg: "請先儲存任務後再使用錄音功能", type: "warning" });
+                                                    }
+                                                }
+                                            }}
+                                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-all border border-transparent hover:border-theme hover:bg-theme-hover text-theme-tertiary hover:text-theme-secondary focus:outline-none focus:bg-theme-card focus:ring-1 ${theme?.buttonRing || 'focus:ring-indigo-300'} focus:border-theme text-xs ${themeSettings.fontWeight === 'thin' ? 'font-light' : 'font-medium'} ${isRecording && recordingTaskId === initialData?.id ? 'text-red-500 animate-pulse' : ''}`}
+                                            title={isRecording ? "停止錄音" : "開始錄音"}
+                                        >
+                                            <Mic size={13} strokeWidth={isRecording && recordingTaskId === initialData?.id ? 3 : 2} />
+                                            <span>{isRecording && recordingTaskId === initialData?.id ? formatDuration(recordingTime) : '語音'}</span>
+                                        </button>
+
+                                        {/* Parent/Project Selection */}
+                                        <DropdownSelect
+                                            tabIndex={-1}
+                                            icon={ChevronUp}
+                                            label="移動"
+                                            items={eligibleParents}
+                                            allowAdd={true}
+                                            selectedIds={parentId ? [parentId] : []}
+                                            placeholder="搜尋母任務..."
+                                            theme={theme}
+                                            onSelect={async (id: string | null, newName?: string) => {
+                                                let targetId = id;
+                                                if (!targetId && newName) {
+                                                    targetId = await addTask({ title: newName, is_project: true, status: 'inbox' });
+                                                }
+                                                if (!targetId && !id) return;
+                                                const newPid = targetId === parentId ? null : targetId;
+                                                setParentId(newPid);
+                                                if (initialData) {
+                                                    if (newPid) {
+                                                        toggleExpansion(newPid, true);
+                                                    }
+                                                    await updateTask(initialData.id, { parent_id: newPid }, []);
+                                                }
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Color Picker (Dropdown) */}
+                                    {!parentId && (
+                                        <div className="relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowColorPicker(!showColorPicker)}
+                                                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-transparent hover:border-theme hover:bg-theme-hover transition-all group"
+                                                title="選擇顏色"
+                                            >
+                                                <div className={`w-3 h-3 rounded-full ${COLOR_THEMES[color]?.dot || 'bg-gray-400'} group-hover:scale-110 transition-transform`} />
+                                                <span className="text-xs text-theme-tertiary group-hover:text-theme-secondary">顏色</span>
+                                            </button>
+
+                                            {showColorPicker && (
+                                                <>
+                                                    <div className="fixed inset-0 z-40" onClick={() => setShowColorPicker(false)} />
+                                                    <div className="absolute bottom-full left-0 mb-2 p-3 bg-white rounded-xl shadow-xl border border-gray-200 z-50 min-w-[200px] animate-in zoom-in-95 duration-100">
+                                                        <div className="text-xs font-semibold text-gray-500 mb-2 px-1 flex items-center gap-2">
+                                                            <Palette size={12} />
+                                                            選擇主題顏色
+                                                        </div>
+                                                        <div className="grid grid-cols-6 gap-2">
+                                                            {(Object.keys(COLOR_THEMES) as TaskColor[]).map(c => (
+                                                                <button
+                                                                    key={c}
+                                                                    type="button"
+                                                                    onClick={() => { setColor(c); setShowColorPicker(false); }}
+                                                                    className={`w-5 h-5 rounded-full ${COLOR_THEMES[c].dot} ${color === c ? 'ring-2 ring-offset-2 ring-gray-400 scale-110' : 'hover:scale-125 opacity-80 hover:opacity-100'} transition-all shadow-sm`}
+                                                                    title={c}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Importance Picker */}
+                                    <div className="flex gap-1 p-1 bg-theme-hover rounded-lg border border-theme" title="重要性">
+                                        {[
+                                            { level: 'urgent' as ImportanceLevel, color: 'bg-red-500', label: '立刻去做', icon: '🔴' },
+                                            { level: 'planned' as ImportanceLevel, color: 'bg-yellow-400', label: '計畫去做', icon: '🟡' },
+                                            { level: 'delegated' as ImportanceLevel, color: 'bg-green-500', label: '授權去做', icon: '🟢' },
+                                            { level: 'optional' as ImportanceLevel, color: 'bg-gray-400', label: '有空再做', icon: '⚪' },
+                                        ].map(({ level, color: bgColor, label }) => (
+                                            <button
+                                                key={level}
+                                                tabIndex={-1}
+                                                type="button"
+                                                onClick={() => setImportance(importance === level ? undefined : level)}
+                                                title={label}
+                                                className={`w-4 h-4 rounded-full ${bgColor} ${importance === level ? 'ring-2 ring-offset-1 ring-gray-500 scale-110' : 'opacity-50 hover:opacity-100 hover:scale-105'} transition-all`}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </div>

@@ -14,9 +14,10 @@ interface MobileTaskEditorProps {
     taskId?: string;
     initialData?: any; // Allow passing draft/initial data
     onClose: () => void;
+    isReadOnly?: boolean;
 }
 
-export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, initialData, onClose }) => {
+export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, initialData, onClose, isReadOnly = false }) => {
     const { tasks, tags, updateTask, addTask, addTag, deleteTask, toggleExpansion, setToast, user } = useContext(AppContext);
     const { isRecording, startRecording, stopRecording, recordingTaskId } = useContext(RecordingContext);
 
@@ -430,11 +431,13 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                             正在錄音...
                         </div>
                     ) : (
-                        <h2 className="text-lg font-bold text-gray-800">{taskId ? '編輯任務' : '新增任務'}</h2>
+                        <h2 className="text-lg font-bold text-gray-800">{isReadOnly ? '查看任務' : (taskId ? '編輯任務' : '新增任務')}</h2>
                     )}
-                    <button type="button" onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-full font-bold text-sm active:bg-indigo-700">
-                        儲存
-                    </button>
+                    {!isReadOnly && (
+                        <button type="button" onClick={handleSave} className="px-4 py-2 bg-indigo-600 text-white rounded-full font-bold text-sm active:bg-indigo-700">
+                            儲存
+                        </button>
+                    )}
                 </div>
 
                 {/* Content */}
@@ -444,7 +447,8 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                         <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">標題</span>
                         <textarea
                             ref={titleRef}
-                            autoFocus={!taskId}
+                            readOnly={isReadOnly}
+                            autoFocus={!taskId && !isReadOnly}
                             rows={1}
                             name={`task_title_no_autofill_${Math.random()}`}
                             autoComplete="off"
@@ -509,13 +513,13 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
 
                     {/* Quick Action Cards */}
                     <div className="grid grid-cols-2 gap-2 mb-6">
-                        <button type="button" onClick={() => setActiveSection(activeSection === 'date' ? null : 'date')}
-                            className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${activeSection === 'date' || startDate ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+                        <button type="button" onClick={() => !isReadOnly && setActiveSection(activeSection === 'date' ? null : 'date')}
+                            className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${activeSection === 'date' || startDate ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 bg-white'} ${isReadOnly ? 'opacity-80' : ''}`}>
                             <Calendar size={20} className={startDate ? 'text-indigo-600' : 'text-gray-400'} />
                             <span className={`text-[10px] mt-1.5 font-bold truncate w-full ${startDate ? 'text-indigo-600' : 'text-gray-500'}`}>{startDate ? formatDateForDisplay(startDate) : '日期'}</span>
                         </button>
-                        <button type="button" onClick={() => setShowTagPicker(true)}
-                            className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${showTagPicker || selectedTags.length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'}`}>
+                        <button type="button" onClick={() => !isReadOnly && setShowTagPicker(true)}
+                            className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${showTagPicker || selectedTags.length > 0 ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white'} ${isReadOnly ? 'opacity-80' : ''}`}>
                             <AtSign size={20} className={selectedTags.length > 0 ? 'text-purple-600' : 'text-gray-400'} />
                             <span className={`text-[10px] mt-1.5 font-bold truncate w-full ${selectedTags.length > 0 ? 'text-purple-600' : 'text-gray-500'}`}>{selectedTags.length > 0 ? `${selectedTags.length} 標籤` : '標籤'}</span>
                         </button>
@@ -823,7 +827,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                 {images.map((url: string, idx: number) => (
                                     <div key={url + idx} className="relative group rounded-xl overflow-hidden border border-gray-200">
                                         <img src={url} alt="Attachment" className="w-full h-32 object-cover" />
-                                        <button onClick={() => handleRemoveAttachment(url, true)} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full"><X size={14} /></button>
+                                        {!isReadOnly && <button onClick={() => handleRemoveAttachment(url, true)} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full"><X size={14} /></button>}
                                     </div>
                                 ))}
                                 {/* Files & Audio */}
@@ -844,7 +848,7 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <a href={file.url} download target="_blank" rel="noreferrer" className="p-2 text-gray-400 hover:text-indigo-600"><Download size={16} /></a>
-                                            <button onClick={() => handleRemoveAttachment(file.url, false)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                                            {!isReadOnly && <button onClick={() => handleRemoveAttachment(file.url, false)} className="p-2 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>}
                                         </div>
                                     </div>
                                 ))}
@@ -862,10 +866,11 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
                                 ref={noteEditorRef}
                                 initialContent={description || ''}
                                 onChange={setDescription}
-                                placeholder="新增備註..."
+                                placeholder={isReadOnly ? "沒有備註..." : "新增備註..."}
                                 className="min-h-[120px]"
                                 availableTags={tags.map((t: any) => ({ ...t, parent_id: t.parent_id || undefined }))}
                                 onTagClick={() => { }}
+                                editable={!isReadOnly}
                             />
                         </div>
                     </div>
@@ -1049,70 +1054,74 @@ export const MobileTaskEditor: React.FC<MobileTaskEditorProps> = ({ taskId, init
 
                     {/* Delete */}
                     <div className="pt-4 border-t border-gray-100 pb-4">
-                        {showDeleteConfirm ? (
-                            <div className="flex gap-3">
-                                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold">取消</button>
-                                <button onClick={handleDelete} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確認刪除</button>
-                            </div>
-                        ) : (
-                            <button onClick={() => setShowDeleteConfirm(true)} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
+                        {!isReadOnly && (
+                            showDeleteConfirm ? (
+                                <div className="flex gap-3">
+                                    <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-bold">取消</button>
+                                    <button onClick={handleDelete} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold">確認刪除</button>
+                                </div>
+                            ) : (
+                                <button onClick={() => setShowDeleteConfirm(true)} className="w-full py-3 text-red-500 font-bold bg-red-50 rounded-xl">刪除任務</button>
+                            )
                         )}
                     </div>
                 </div>
 
                 {/* Bottom Toolbar */}
-                <div className="flex-shrink-0 border-t border-gray-100 p-3 bg-white/80 backdrop-blur-md pb-6 flex items-center justify-around">
-                    {/* Hidden Inputs */}
-                    <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} />
-                    <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileUpload(e, false)} />
+                {!isReadOnly && (
+                    <div className="flex-shrink-0 border-t border-gray-100 p-3 bg-white/80 backdrop-blur-md pb-6 flex items-center justify-around">
+                        {/* Hidden Inputs */}
+                        <input type="file" ref={imageInputRef} accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, true)} />
+                        <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => handleFileUpload(e, false)} />
 
-                    <button onClick={() => imageInputRef.current?.click()} disabled={isUploading} className="p-3 text-gray-500 active:bg-gray-100 rounded-full flex flex-col items-center gap-1">
-                        <ImageIcon size={24} />
-                        <span className="text-[10px]">圖片</span>
-                    </button>
-                    <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-3 text-gray-500 active:bg-gray-100 rounded-full flex flex-col items-center gap-1">
-                        <Paperclip size={24} />
-                        <span className="text-[10px]">檔案</span>
-                    </button>
+                        <button onClick={() => imageInputRef.current?.click()} disabled={isUploading} className="p-3 text-gray-500 active:bg-gray-100 rounded-full flex flex-col items-center gap-1">
+                            <ImageIcon size={24} />
+                            <span className="text-[10px]">圖片</span>
+                        </button>
+                        <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="p-3 text-gray-500 active:bg-gray-100 rounded-full flex flex-col items-center gap-1">
+                            <Paperclip size={24} />
+                            <span className="text-[10px]">檔案</span>
+                        </button>
 
 
-                    {/* Recording Button */}
-                    <button
-                        onClick={async () => {
-                            if (isRecording) {
-                                if (recordingTaskId === taskId || (!taskId && !recordingTaskId)) {
-                                    stopRecording();
+                        {/* Recording Button */}
+                        <button
+                            onClick={async () => {
+                                if (isRecording) {
+                                    if (recordingTaskId === taskId || (!taskId && !recordingTaskId)) {
+                                        stopRecording();
+                                    } else {
+                                        setToast?.({ msg: '其他任務正在錄音中', type: 'error' });
+                                    }
                                 } else {
-                                    setToast?.({ msg: '其他任務正在錄音中', type: 'error' });
+                                    if (!taskId) {
+                                        setToast?.({ msg: '請先儲存任務後再錄音', type: 'error' });
+                                        return;
+                                    }
+                                    try {
+                                        await startRecording(taskId);
+                                        setToast?.({ msg: '開始錄音', type: 'info' });
+                                    } catch (err) {
+                                        console.error('[MobileTaskEditor] Recording error:', err);
+                                        setToast?.({ msg: '無法啟動錄音，請檢查麥克風權限', type: 'error' });
+                                    }
                                 }
-                            } else {
-                                if (!taskId) {
-                                    setToast?.({ msg: '請先儲存任務後再錄音', type: 'error' });
-                                    return;
-                                }
-                                try {
-                                    await startRecording(taskId);
-                                    setToast?.({ msg: '開始錄音', type: 'info' });
-                                } catch (err) {
-                                    console.error('[MobileTaskEditor] Recording error:', err);
-                                    setToast?.({ msg: '無法啟動錄音，請檢查麥克風權限', type: 'error' });
-                                }
-                            }
-                        }}
-                        className={`p-4 rounded-full transition-all flex items-center justify-center -mt-8 shadow-lg ${isRecording && recordingTaskId === taskId ? 'bg-red-500 text-white scale-110' : 'bg-indigo-600 text-white active:scale-95'}`}
-                    >
-                        {isRecording && recordingTaskId === taskId ? <div className="w-6 h-6 bg-white rounded-sm" /> : <Mic size={24} />}
-                    </button>
+                            }}
+                            className={`p-4 rounded-full transition-all flex items-center justify-center -mt-8 shadow-lg ${isRecording && recordingTaskId === taskId ? 'bg-red-500 text-white scale-110' : 'bg-indigo-600 text-white active:scale-95'}`}
+                        >
+                            {isRecording && recordingTaskId === taskId ? <div className="w-6 h-6 bg-white rounded-sm" /> : <Mic size={24} />}
+                        </button>
 
-                    <button onClick={() => setActiveSection(activeSection === 'importance' ? null : 'importance')} className={`p-3 rounded-full flex flex-col items-center gap-1 ${importance !== 'unplanned' ? 'text-rose-600' : 'text-gray-500 active:bg-gray-100'}`}>
-                        <AlertCircle size={24} />
-                        <span className="text-[10px]">{IMPORTS[importance as keyof typeof IMPORTS].label}</span>
-                    </button>
-                    <button onClick={() => setActiveSection(activeSection === 'repeat' ? null : 'repeat')} className={`p-3 rounded-full flex flex-col items-center gap-1 ${repeatRule ? 'text-blue-600' : 'text-gray-500 active:bg-gray-100'}`}>
-                        <Repeat size={24} />
-                        <span className="text-[10px]">重複</span>
-                    </button>
-                </div>
+                        <button onClick={() => setActiveSection(activeSection === 'importance' ? null : 'importance')} className={`p-3 rounded-full flex flex-col items-center gap-1 ${importance !== 'unplanned' ? 'text-rose-600' : 'text-gray-500 active:bg-gray-100'}`}>
+                            <AlertCircle size={24} />
+                            <span className="text-[10px]">{IMPORTS[importance as keyof typeof IMPORTS].label}</span>
+                        </button>
+                        <button onClick={() => setActiveSection(activeSection === 'repeat' ? null : 'repeat')} className={`p-3 rounded-full flex flex-col items-center gap-1 ${repeatRule ? 'text-blue-600' : 'text-gray-500 active:bg-gray-100'}`}>
+                            <Repeat size={24} />
+                            <span className="text-[10px]">重複</span>
+                        </button>
+                    </div>
+                )}
             </motion.div>
         </div>
     );
