@@ -382,69 +382,196 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         );
     };
 
-    return (
-        <div className="relative min-h-full bg-slate-50 pb-20">
-            <div className="max-w-4xl mx-auto px-2 md:px-4 py-8">
-                {/* Empty State */}
-                {allMoments.length === 0 && (
-                    <div className="text-center py-20 opacity-50">
-                        <Heart size={48} className="mx-auto text-pink-300 mb-4 animate-pulse" />
-                        <p className="text-gray-500 text-lg font-newsreader">還沒有任何回憶...</p>
-                    </div>
-                )}
+    const [layoutMode, setLayoutMode] = useState<'vertical' | 'horizontal'>('vertical');
 
-                <div className="relative space-y-0">
-                    {/* Central Line */}
-                    {allMoments.length > 0 && (
-                        <div className="absolute left-1/2 top-4 bottom-4 w-0.5 bg-gradient-to-b from-indigo-200 via-pink-200 to-transparent -translate-x-1/2 z-0" />
-                    )}
+    const renderHorizontalLayout = () => {
+        return (
+            <div className="relative w-full overflow-x-auto h-[calc(100vh-200px)] flex items-center p-8 custom-scrollbar">
+                {/* Central Line */}
+                <div className="absolute top-1/2 left-0 w-[max(100%,_var(--content-width))] h-1 bg-gradient-to-r from-indigo-200 via-pink-200 to-indigo-200 -translate-y-1/2 z-0" />
 
+                <div className="flex gap-8 relative z-10 min-w-max px-20" style={{ '--content-width': `${allMoments.length * 320}px` } as any}>
                     {groupedRows.map((row, idx) => {
-                        if (row.type === 'pair') {
-                            // Render Pair in a 2-Col Grid
-                            const itemA = row.items[0]; // Newer (Top) -> No top margin
-                            const itemB = row.items[1]; // Older (Bottom) -> Add top margin to stagger
-
-                            const aIsRight = rightTag && itemA.tags?.includes(rightTag.id);
-                            const bIsRight = rightTag && itemB.tags?.includes(rightTag.id);
+                        const renderItem = (moment: any, isBottom: boolean) => {
+                            const momentDate = moment.start_date ? parseISO(moment.start_date) : parseISO(moment.created_at);
+                            const displayDate = format(momentDate, 'MM/dd');
 
                             return (
-                                <div key={`pair-${idx}`} className="grid grid-cols-2 w-full relative z-10">
-                                    {/* Left Slot */}
-                                    <div className="w-full">
-                                        {!aIsRight ? renderMomentCard(itemA, false, false) : (!bIsRight ? renderMomentCard(itemB, false, true) : null)}
-                                    </div>
-                                    {/* Right Slot */}
-                                    <div className="w-full">
-                                        {aIsRight ? renderMomentCard(itemA, true, false) : (bIsRight ? renderMomentCard(itemB, true, true) : null)}
+                                <div
+                                    key={moment.id}
+                                    data-moment-id={moment.id}
+                                    className={`relative w-[280px] group transition-all duration-300 hover:scale-105 ${isBottom ? 'mt-8' : 'mb-8'}`}
+                                >
+                                    {/* Dot */}
+                                    <div className={`
+                                        absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full z-10 shadow-sm border-4 border-white
+                                        ${isBottom
+                                            ? 'top-[-24px] bg-pink-400 ring-2 ring-pink-100'
+                                            : 'bottom-[-24px] bg-indigo-400 ring-2 ring-indigo-100'}
+                                    `}></div>
+
+                                    {/* Line to Dot */}
+                                    <div className={`
+                                        absolute left-1/2 -translate-x-1/2 w-0.5 bg-gray-200
+                                        ${isBottom ? 'top-[-20px] h-[20px]' : 'bottom-[-20px] h-[20px]'}
+                                    `}></div>
+
+                                    <div
+                                        className={`
+                                            bg-white p-3 rounded-xl shadow-sm border cursor-pointer overflow-hidden
+                                            ${isBottom ? 'border-pink-50 hover:border-pink-200' : 'border-indigo-50 hover:border-indigo-200'}
+                                        `}
+                                        onDoubleClick={() => {
+                                            const isRight = rightTag && moment.tags?.includes(rightTag.id);
+                                            const canEdit = (isGuest && isRight) || (!isGuest && !isRight);
+                                            if (canEdit) {
+                                                setEditingMoment(moment);
+                                                setIsEditing(true);
+                                            } else {
+                                                setToast?.({ msg: '您只能編輯自己的回憶', type: 'warning' });
+                                            }
+                                        }}
+                                    >
+                                        <div className="text-[10px] font-bold text-gray-400 mb-2 flex justify-between">
+                                            <span>{displayDate}</span>
+                                            {moment.images?.length > 0 && <span className="text-pink-400">📷 {moment.images.length}</span>}
+                                        </div>
+
+                                        {moment.images && moment.images.length > 0 && (
+                                            <div className="mb-2 h-32 overflow-hidden rounded-lg bg-gray-100">
+                                                <img src={moment.images[0]} className="w-full h-full object-cover" />
+                                            </div>
+                                        )}
+
+                                        <div
+                                            className="text-xs text-gray-600 font-newsreader line-clamp-3"
+                                            dangerouslySetInnerHTML={{ __html: moment.description || '' }}
+                                        />
                                     </div>
                                 </div>
                             );
+                        };
+
+                        if (row.type === 'pair') {
+                            const itemTop = rightTag && row.items[0].tags?.includes(rightTag.id) ? row.items[1] : row.items[0]; // Logic: Left is Top, Right is Bottom
+                            const itemBottom = rightTag && row.items[0].tags?.includes(rightTag.id) ? row.items[0] : row.items[1];
+
+                            // Check if logic matches vertical: Left(Blue)=Top, Right(Pink)=Bottom
+                            // Vertical: Left is indigo (Top), Right is pink (Bottom)
+
+                            // Re-evaluate item assignment for "correct" sides
+                            // Let's stick to: Non-Wei (Left/Indigo) -> Top side. Wei (Right/Pink) -> Bottom side.
+
+                            // Find which is which
+                            const item1 = row.items[0];
+                            const item2 = row.items[1];
+                            const i1IsRight = rightTag && item1.tags?.includes(rightTag.id);
+
+                            const topItem = !i1IsRight ? item1 : item2;
+                            const bottomItem = i1IsRight ? item1 : item2;
+
+                            return (
+                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-[400px]">
+                                    {renderItem(topItem, false)}
+                                    {renderItem(bottomItem, true)}
+                                </div>
+                            );
                         } else {
-                            // Single Item
                             const item = row.items[0];
                             const isRight = rightTag && item.tags?.includes(rightTag.id);
+
                             return (
-                                <div key={`single-${idx}`} className="grid grid-cols-2 w-full relative z-10">
-                                    <div className="w-full">
-                                        {!isRight && renderMomentCard(item, false, false)}
-                                    </div>
-                                    <div className="w-full">
-                                        {isRight && renderMomentCard(item, true, false)}
-                                    </div>
+                                <div key={`single-${idx}`} className={`flex flex-col h-[400px] ${isRight ? 'justify-end' : 'justify-start'}`}>
+                                    {renderItem(item, isRight)}
                                 </div>
                             );
                         }
                     })}
-
-                    {/* Loader */}
-                    {allMoments.length > visibleCount && (
-                        <div ref={loaderRef} className="py-8 flex justify-center">
-                            <div className="w-8 h-8 border-4 border-pink-200 rounded-full animate-spin border-t-transparent"></div>
-                        </div>
-                    )}
                 </div>
             </div>
+        );
+    };
+
+    return (
+        <div className="relative min-h-full bg-slate-50 pb-20 flex flex-col">
+            <div className="flex justify-end px-4 py-2 gap-2">
+                <button
+                    onClick={() => setLayoutMode('vertical')}
+                    className={`text-xs px-3 py-1 rounded-full border ${layoutMode === 'vertical' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-gray-500 border-gray-200'}`}
+                >
+                    直式
+                </button>
+                <button
+                    onClick={() => setLayoutMode('horizontal')}
+                    className={`text-xs px-3 py-1 rounded-full border ${layoutMode === 'horizontal' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-gray-500 border-gray-200'}`}
+                >
+                    橫式
+                </button>
+            </div>
+
+            {layoutMode === 'horizontal' ? renderHorizontalLayout() : (
+                <div className="max-w-4xl mx-auto px-2 md:px-4 py-8 flex-1 w-full">
+                    {/* Empty State */}
+                    {allMoments.length === 0 && (
+                        <div className="text-center py-20 opacity-50">
+                            <Heart size={48} className="mx-auto text-pink-300 mb-4 animate-pulse" />
+                            <p className="text-gray-500 text-lg font-newsreader">還沒有任何回憶...</p>
+                        </div>
+                    )}
+
+                    <div className="relative space-y-0">
+                        {/* Central Line */}
+                        {allMoments.length > 0 && (
+                            <div className="absolute left-1/2 top-4 bottom-4 w-0.5 bg-gradient-to-b from-indigo-200 via-pink-200 to-transparent -translate-x-1/2 z-0" />
+                        )}
+
+                        {groupedRows.map((row, idx) => {
+                            if (row.type === 'pair') {
+                                // Render Pair in a 2-Col Grid
+                                const itemA = row.items[0]; // Newer (Top) -> No top margin
+                                const itemB = row.items[1]; // Older (Bottom) -> Add top margin to stagger
+
+                                const aIsRight = rightTag && itemA.tags?.includes(rightTag.id);
+                                const bIsRight = rightTag && itemB.tags?.includes(rightTag.id);
+
+                                return (
+                                    <div key={`pair-${idx}`} className="grid grid-cols-2 w-full relative z-10">
+                                        {/* Left Slot */}
+                                        <div className="w-full">
+                                            {!aIsRight ? renderMomentCard(itemA, false, false) : (!bIsRight ? renderMomentCard(itemB, false, true) : null)}
+                                        </div>
+                                        {/* Right Slot */}
+                                        <div className="w-full">
+                                            {aIsRight ? renderMomentCard(itemA, true, false) : (bIsRight ? renderMomentCard(itemB, true, true) : null)}
+                                        </div>
+                                    </div>
+                                );
+                            } else {
+                                // Single Item
+                                const item = row.items[0];
+                                const isRight = rightTag && item.tags?.includes(rightTag.id);
+                                return (
+                                    <div key={`single-${idx}`} className="grid grid-cols-2 w-full relative z-10">
+                                        <div className="w-full">
+                                            {!isRight && renderMomentCard(item, false, false)}
+                                        </div>
+                                        <div className="w-full">
+                                            {isRight && renderMomentCard(item, true, false)}
+                                        </div>
+                                    </div>
+                                );
+                            }
+                        })}
+
+                        {/* Loader */}
+                        {allMoments.length > visibleCount && (
+                            <div ref={loaderRef} className="py-8 flex justify-center">
+                                <div className="w-8 h-8 border-4 border-pink-200 rounded-full animate-spin border-t-transparent"></div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* FAB */}
             <button

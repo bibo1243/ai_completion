@@ -1525,18 +1525,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     <span className="md:hidden text-base font-bold text-pink-500">Our Time</span>
                 </div>
                 <div className="flex gap-1 md:gap-2 items-center">
-                    {isSnapshotMode && (
-                        <button
-                            onClick={() => {
-                                setIsSnapshotMode(false);
-                                window.history.replaceState({}, '', window.location.pathname);
-                            }}
-                            className="text-[10px] md:text-xs bg-amber-100 text-amber-700 px-2 py-0.5 md:px-3 md:py-1 rounded-full font-medium whitespace-nowrap"
-                        >
-                            <span className="md:hidden">退出</span>
-                            <span className="hidden md:inline">預覽模式 (點此退出)</span>
-                        </button>
-                    )}
+
                     {/* Undo/Redo Buttons */}
                     <button
                         onClick={() => effectiveUndo()}
