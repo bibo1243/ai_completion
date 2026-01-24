@@ -348,7 +348,20 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                         {/* Content */}
                         <div
                             className={`prose prose-sm max-w-none font-newsreader text-gray-600 leading-snug ${isRightSide ? 'prose-pink text-right' : 'prose-indigo text-left'}`}
-                            dangerouslySetInnerHTML={{ __html: moment.description || '' }}
+                            dangerouslySetInnerHTML={{
+                                __html: (() => {
+                                    const content = moment.description || '';
+                                    if (!content) return '';
+                                    // Strip HTML to count characters
+                                    const temp = document.createElement('div');
+                                    temp.innerHTML = content;
+                                    const text = temp.textContent || temp.innerText || '';
+                                    if (text.length > 100) {
+                                        return text.substring(0, 100) + '...';
+                                    }
+                                    return content;
+                                })()
+                            }}
                         />
 
                         {/* Actions */}
