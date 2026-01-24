@@ -388,18 +388,18 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         return (
             <div className="relative w-full overflow-x-auto h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
 
-                {/* Creative Timeline Background: Dashed Line with Gradient */}
-                <div className="absolute top-1/2 left-0 w-full h-1 z-0 pointer-events-none transform -translate-y-1/2">
+                {/* Creative Timeline Background: Dashed Line with Gradient - INCREASED VISIBILITY */}
+                <div className="absolute top-1/2 left-0 w-full h-2 z-0 pointer-events-none transform -translate-y-1/2">
                     <div
-                        className="h-0.5 w-[max(100%,_var(--content-width))] bg-gradient-to-r from-indigo-300 via-pink-300 to-indigo-300"
+                        className="h-1.5 w-[max(100%,_var(--content-width))] bg-gradient-to-r from-indigo-300 via-pink-300 to-indigo-300 shadow-sm"
                         style={{
                             backgroundImage: 'linear-gradient(90deg, transparent 50%, #ffffff 50%)',
-                            backgroundSize: '20px 100%',
-                            opacity: 0.6
+                            backgroundSize: '24px 100%',
+                            opacity: 0.8
                         }}
                     />
                     {/* Glowing blur under the line */}
-                    <div className="absolute top-0 left-0 w-[max(100%,_var(--content-width))] h-1 bg-pink-400 blur-sm opacity-20" />
+                    <div className="absolute top-0 left-0 w-[max(100%,_var(--content-width))] h-2 bg-pink-400 blur-md opacity-30" />
                 </div>
 
                 <div className="flex gap-12 relative z-10 px-20 items-center h-full" style={{ '--content-width': `${Math.max(window.innerWidth, (groupedRows.length * 350))}px` } as any}>
