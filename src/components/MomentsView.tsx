@@ -386,9 +386,9 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
 
     const renderHorizontalLayout = () => {
         return (
-            <div className="relative w-full overflow-x-auto h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
+            <div className="relative w-full overflow-x-auto overflow-y-hidden h-[calc(100vh-140px)] flex flex-col justify-center custom-scrollbar bg-slate-50">
 
-                <div className="flex gap-12 relative z-10 px-20 items-center h-full min-w-max">
+                <div className="flex gap-4 md:gap-12 relative z-10 px-4 md:px-20 items-center h-full min-w-max">
                     {/* Creative Timeline Background: Intertwining Connection Theme (Moved Inside) */}
                     <div className="absolute top-1/2 left-0 right-0 h-12 z-0 pointer-events-none transform -translate-y-1/2 overflow-hidden">
                         {/* Glowing Aura */}
@@ -432,24 +432,24 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                     key={moment.id}
                                     data-moment-id={moment.id}
                                     className={`
-                                        relative w-[300px] flex-shrink-0 group transition-all duration-500 hover:scale-[1.02]
+                                        relative w-[220px] md:w-[300px] flex-shrink-0 group transition-all duration-500 hover:scale-[1.02]
                                         flex flex-col
-                                        ${isBottom ? 'mt-12 justify-start' : 'mb-12 justify-end'}
-                                        h-[40vh] md:h-[35vh] 
+                                        ${isBottom ? 'mt-6 md:mt-12 justify-start' : 'mb-6 md:mb-12 justify-end'}
+                                        h-[32vh] md:h-[35vh] 
                                     `}
                                 >
                                     {/* Connection Line to Central Axis */}
                                     <div className={`
                                         absolute left-1/2 -translate-x-1/2 w-0.5 bg-gray-300/50 group-hover:bg-pink-300 transition-colors
-                                        ${isBottom ? 'top-[-48px] h-[48px]' : 'bottom-[-48px] h-[48px]'}
+                                        ${isBottom ? 'top-[-24px] md:top-[-48px] h-[24px] md:h-[48px]' : 'bottom-[-24px] md:bottom-[-48px] h-[24px] md:h-[48px]'}
                                     `}></div>
 
                                     {/* Central Dot on Axis */}
                                     <div className={`
-                                        absolute left-1/2 -translate-x-1/2 w-5 h-5 rounded-full z-20 shadow-lg border-[3px] border-white transition-transform duration-300 group-hover:scale-125
+                                        absolute left-1/2 -translate-x-1/2 w-3 h-3 md:w-5 md:h-5 rounded-full z-20 shadow-lg border-[2px] md:border-[3px] border-white transition-transform duration-300 group-hover:scale-125
                                         ${isBottom
-                                            ? 'top-[-56px] bg-gradient-to-br from-pink-400 to-rose-500'
-                                            : 'bottom-[-56px] bg-gradient-to-br from-indigo-400 to-blue-500'}
+                                            ? 'top-[-30px] md:top-[-56px] bg-gradient-to-br from-pink-400 to-rose-500'
+                                            : 'bottom-[-30px] md:bottom-[-56px] bg-gradient-to-br from-indigo-400 to-blue-500'}
                                     `}>
                                         <div className="absolute inset-0 rounded-full bg-white opacity-30 animate-ping"></div>
                                     </div>
@@ -458,7 +458,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                     <div
                                         className={`
                                             flex flex-col h-full
-                                            bg-white p-4 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] 
+                                            bg-white p-3 md:p-4 rounded-xl md:rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.04)] 
                                             border border-white hover:border-pink-200 transition-all cursor-pointer overflow-hidden
                                             ${isBottom ? 'rounded-tl-none' : 'rounded-bl-none'}
                                         `}
@@ -473,14 +473,14 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                             }
                                         }}
                                     >
-                                        <div className="text-xs font-bold text-gray-400 mb-3 flex justify-between items-center shrink-0">
+                                        <div className="text-[10px] md:text-xs font-bold text-gray-400 mb-2 flex justify-between items-center shrink-0">
                                             <span className="bg-gray-100 px-2 py-0.5 rounded-full">{displayDate}</span>
-                                            {moment.images?.length > 0 && <span className="text-pink-400 text-[10px] bg-pink-50 px-2 py-0.5 rounded-full">📷 {moment.images.length}</span>}
+                                            {moment.images?.length > 0 && <span className="text-pink-400 text-[9px] bg-pink-50 px-1.5 py-0.5 rounded-full">📷 {moment.images.length}</span>}
                                         </div>
 
-                                        {/* Adaptive Image Container - Fills available space but keeps aspect */}
+                                        {/* Adaptive Image Container */}
                                         {moment.images && moment.images.length > 0 ? (
-                                            <div className="flex-1 min-h-0 mb-3 overflow-hidden rounded-xl bg-gray-50 relative group/img">
+                                            <div className="flex-1 min-h-0 mb-2 overflow-hidden rounded-lg bg-gray-50 relative group/img">
                                                 <img
                                                     src={moment.images[0]}
                                                     className="w-full h-full object-cover transition-transform duration-700 group-hover/img:scale-110"
@@ -493,11 +493,11 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                             </div>
                                         ) : (
                                             /* Placeholder if no image to keep height consistent-ish or just flex-1 text */
-                                            <div className="flex-1 min-h-[20%]"></div>
+                                            <div className="flex-1 min-h-[15%]"></div>
                                         )}
 
                                         <div
-                                            className="text-sm text-gray-600 font-newsreader line-clamp-4 shrink-0"
+                                            className="text-xs md:text-sm text-gray-600 font-newsreader line-clamp-3 md:line-clamp-4 shrink-0 leading-relaxed"
                                             dangerouslySetInnerHTML={{ __html: moment.description || '' }}
                                         />
                                     </div>
@@ -518,7 +518,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             const bottomItem = i1IsRight ? item1 : item2;
 
                             return (
-                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-full py-12">
+                                <div key={`pair-${idx}`} className="flex flex-col justify-between h-full py-6 md:py-12">
                                     {/* Top Item (Indigo/Left) */}
                                     {renderItem(topItem, false)}
                                     {/* Bottom Item (Pink/Right) */}
@@ -531,7 +531,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             // Right -> Bottom, Left -> Top
 
                             return (
-                                <div key={`single-${idx}`} className={`flex flex-col h-full py-12 ${isRight ? 'justify-end' : 'justify-start'}`}>
+                                <div key={`single-${idx}`} className={`flex flex-col h-full py-6 md:py-12 ${isRight ? 'justify-end' : 'justify-start'}`}>
                                     {renderItem(item, isRight)}
                                 </div>
                             );
