@@ -22,7 +22,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const { tasks, tags, updateTask, addTask, user, setEditingTaskId, editingTaskId, setToast } = context;
 
     const [viewMode, setViewMode] = useState<'schedule' | 'moments'>(() => {
-        return (localStorage.getItem('heart_view_mode') as 'schedule' | 'moments') || 'schedule';
+        return (localStorage.getItem('heart_view_mode') as 'schedule' | 'moments') || 'moments';
     });
 
     const [currentDate, setCurrentDate] = useState(() => {

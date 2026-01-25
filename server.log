@@ -1,10 +1,10 @@
 
 > things4-clone@0.0.0 dev
-> vite --host
+> vite
 
+Port 5176 is in use, trying another one...
 
-  VITE v4.5.14  ready in 98 ms
+  VITE v4.5.14  ready in 408 ms
 
-  ➜  Local:   http://localhost:5176/
-  ➜  Network: http://192.168.3.35:5176/
-  ➜  press h to show help
+  ➜  Local:   http://localhost:5177/
+  ➜  Network: use --host to expose
