@@ -375,7 +375,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         );
     };
 
-    const [layoutMode, setLayoutMode] = useState<'vertical' | 'horizontal'>('vertical');
+    const [layoutMode, setLayoutMode] = useState<'vertical' | 'horizontal'>('horizontal');
 
     const renderHorizontalLayout = () => {
         return (

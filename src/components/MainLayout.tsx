@@ -29,8 +29,14 @@ export const MainLayout = () => {
   const [showMission72, setShowMission72] = useState(false);
   const [showGTDCoach, setShowGTDCoach] = useState(false);
   const [showMoveTaskModal, setShowMoveTaskModal] = useState(false);
-  const [showHeartSchedule, setShowHeartSchedule] = useState(false);
+  const [showHeartSchedule, setShowHeartSchedule] = useState(() => {
+    return localStorage.getItem('heart_schedule_open') === 'true';
+  });
   // const [showGTDGuide, setShowGTDGuide] = useState(false); // Temporarily disabled
+
+  useEffect(() => {
+    localStorage.setItem('heart_schedule_open', String(showHeartSchedule));
+  }, [showHeartSchedule]);
 
   // Detect mobile
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
