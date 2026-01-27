@@ -8,6 +8,7 @@ import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
 import { getSolarTerm } from '../utils/calendar';
+import { loadPreference, savePreference, PREFERENCE_KEYS } from '../services/userPreferences';
 
 interface HeartScheduleViewProps {
     onClose?: () => void;
@@ -25,23 +26,76 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         return (localStorage.getItem('heart_view_mode') as 'schedule' | 'moments') || 'schedule';
     });
 
-    const [currentDate, setCurrentDate] = useState(() => {
-        const saved = localStorage.getItem('heart_selected_date');
-        return saved ? parseISO(saved) : new Date();
-    });
+    const [currentDate, setCurrentDate] = useState(() => new Date());
 
     // Moment Scroll Persistence
     const lastMomentIdRef = useRef<string | null>(localStorage.getItem('heart_last_moment_id'));
 
+    // Load heart view state from database on mount
+    useEffect(() => {
+        const loadHeartViewState = async () => {
+            if (user?.id && !isSnapshotMode) {
+                const dbState = await loadPreference<{
+                    viewMode: 'schedule' | 'moments';
+                    selectedDate?: string;
+                    selectedTagIds?: string[];
+                }>(user.id, PREFERENCE_KEYS.HEART_VIEW_STATE);
+
+                if (dbState) {
+                    if (dbState.viewMode) {
+                        setViewMode(dbState.viewMode);
+                        localStorage.setItem('heart_view_mode', dbState.viewMode);
+                    }
+                    /* 
+                    if (dbState.selectedDate) {
+                        try {
+                            const date = parseISO(dbState.selectedDate);
+                            if (!isNaN(date.getTime())) {
+                                setCurrentDate(date);
+                                localStorage.setItem('heart_selected_date', dbState.selectedDate);
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse heart selected date:', e);
+                        }
+                    } 
+                    */
+                    if (dbState.selectedTagIds) {
+                        setSelectedTagIds(dbState.selectedTagIds);
+                        localStorage.setItem('heart_schedule_tags', JSON.stringify(dbState.selectedTagIds));
+                    }
+                }
+            }
+        };
+        loadHeartViewState();
+    }, [user?.id]);
+
+    // Save heart view state to database on change
     useEffect(() => {
         localStorage.setItem('heart_view_mode', viewMode);
-    }, [viewMode]);
+        // Sync to database (debounced)
+        if (user?.id && !isSnapshotMode) {
+            const currentState = {
+                viewMode,
+                selectedTagIds
+            };
+            savePreference(user.id, PREFERENCE_KEYS.HEART_VIEW_STATE, currentState);
+        }
+    }, [viewMode, user?.id]);
 
     useEffect(() => {
         if (viewMode === 'schedule') {
-            localStorage.setItem('heart_selected_date', currentDate.toISOString());
+            // localStorage.setItem('heart_selected_date', currentDate.toISOString());
+            // Sync to database
+            if (user?.id && !isSnapshotMode) {
+                const currentState = {
+                    viewMode,
+                    // selectedDate: currentDate.toISOString(),
+                    selectedTagIds
+                };
+                savePreference(user.id, PREFERENCE_KEYS.HEART_VIEW_STATE, currentState);
+            }
         }
-    }, [currentDate, viewMode]);
+    }, [currentDate, viewMode, user?.id]);
 
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>(() => {
         const saved = localStorage.getItem('heart_schedule_tags');
@@ -636,6 +690,15 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 ? prev.filter(id => id !== tagId)
                 : [...prev, tagId];
             localStorage.setItem('heart_schedule_tags', JSON.stringify(next));
+            // Sync to database
+            if (user?.id && !isSnapshotMode) {
+                const currentState = {
+                    viewMode,
+                    selectedDate: currentDate.toISOString(),
+                    selectedTagIds: next
+                };
+                savePreference(user.id, PREFERENCE_KEYS.HEART_VIEW_STATE, currentState);
+            }
             return next;
         });
     };
@@ -752,7 +815,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const height = (duration / 60) * HOUR_HEIGHT;
         return {
             top: `${top}px`,
-            height: `${Math.max(24, height)}px`,
+            height: `${Math.max(28, height)}px`,
         };
     };
 
@@ -1711,6 +1774,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                             <div className="absolute top-0 right-2 left-16 bottom-0 pointer-events-none">
                                 {timedTasks.map(task => {
                                     const isDraft = dragState?.taskId === task.id;
+                                    const isShort = (task.duration || 60) < 45;
                                     // Use the pre-calculated layout
                                     const layoutInfo = dailyLayout[task.id];
                                     const style = isDraft
@@ -1755,7 +1819,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                         <div
                                             key={task.id}
                                             style={{ ...style, ...colorStyle }}
-                                            className={`absolute w-full rounded-r-xl rounded-l-md border p-2 text-xs flex flex-col overflow-hidden transition-all shadow-sm group pointer-events-auto
+                                            className={`absolute w-full rounded-r-xl rounded-l-md border ${isShort ? 'p-1' : 'p-2'} text-xs flex flex-col overflow-hidden transition-all shadow-sm group pointer-events-auto
                                         ${task.status === 'completed' ? 'bg-gray-50 border-gray-200 opacity-60' : 'hover:shadow-md'}
                                         ${isDraft ? 'shadow-xl ring-2 ring-pink-400 opacity-90 cursor-grabbing' : 'cursor-grab'}
                                         ${selectedTaskId === task.id ? 'ring-2 ring-pink-500 z-10 shadow-md' : ''}
@@ -1810,21 +1874,39 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                 </div>
                                             )}
 
-                                            <div className="flex items-start gap-1 font-bold text-gray-800 w-full">
-                                                {/* Dot is now redundant with left border, but let's keep it or remove it? -> User asked for "color property", left border is nice. But let's look at dot. */}
-                                                <div
-                                                    className={`w-2 h-2 rounded-full mt-1 shrink-0`}
-                                                    style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
-                                                ></div>
-                                                <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
-                                                {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
-                                            </div>
-                                            <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono">
-                                                {isDraft
-                                                    ? `${minutesToTime(dragState.currentStartMin)} - ${minutesToTime(dragState.currentStartMin + dragState.currentDuration)}`
-                                                    : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
-                                                }
-                                            </div>
+                                            {isShort ? (
+                                                <div className="flex items-center gap-1 w-full overflow-hidden h-full">
+                                                    <div
+                                                        className={`w-1.5 h-1.5 rounded-full shrink-0`}
+                                                        style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
+                                                    ></div>
+                                                    <span className="font-bold text-gray-800 truncate flex-1 min-w-0">{task.title}</span>
+                                                    <span className="text-[9px] text-gray-500 font-mono shrink-0">
+                                                        {(isDraft && dragState)
+                                                            ? minutesToTime(dragState.currentStartMin)
+                                                            : task.start_time
+                                                        }
+                                                    </span>
+                                                    {task.status === 'completed' && <CheckCircle2 size={10} className="text-gray-400 shrink-0" />}
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex items-start gap-1 font-bold text-gray-800 w-full">
+                                                        <div
+                                                            className={`w-2 h-2 rounded-full mt-1 shrink-0`}
+                                                            style={{ backgroundColor: task.status === 'completed' ? '#9ca3af' : taskColor }}
+                                                        ></div>
+                                                        <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
+                                                        {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono mt-0.5">
+                                                        {(isDraft && dragState)
+                                                            ? `${minutesToTime(dragState.currentStartMin)} - ${minutesToTime(dragState.currentStartMin + dragState.currentDuration)}`
+                                                            : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
+                                                        }
+                                                    </div>
+                                                </>
+                                            )}
 
                                             <div
                                                 className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-black/5"
