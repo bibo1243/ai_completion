@@ -265,7 +265,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         const loadInitialData = async () => {
             try {
                 // 1. Fetch Tasks
-                const { data: taskData, error: taskError } = await supabase
+                const { data: taskData, error: _taskError } = await supabase!
                     .from('tasks')
                     .select('*')
                     .eq('user_id', targetOwnerId)
@@ -277,7 +277,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 }
 
                 // 2. Fetch Tags (Important for Wei tag)
-                const { data: tagData, error: tagError } = await supabase
+                const { data: tagData, error: _tagError } = await supabase!
                     .from('tags')
                     .select('*')
                     .eq('user_id', targetOwnerId);
@@ -322,8 +322,8 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
             .subscribe();
 
         return () => {
-            supabase.removeChannel(taskChannel);
-            supabase.removeChannel(tagChannel);
+            supabase!.removeChannel(taskChannel);
+            supabase!.removeChannel(tagChannel);
         };
     }, [isSnapshotMode, snapshotOwnerId]);
 
@@ -386,7 +386,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
 
                 // Try soft undelete first.
                 console.log('[GuestUndo] Restoring task:', task.id);
-                const { error } = await supabase.from('tasks').update({ status: 'inbox' }).eq('id', task.id);
+                const { error: _error } = await supabase.from('tasks').update({ status: 'inbox' }).eq('id', task.id);
                 // If row doesn't exist (hard deleted?), we might need to insert.
             } else {
                 // Case: Update
@@ -1108,7 +1108,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const handleTimedDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         const taskId = e.dataTransfer.getData('text/plain');
-        const fromAllDay = e.dataTransfer.getData('from-allday') === 'true';
+        // e.dataTransfer.getData('from-allday') === 'true';
 
         if (!taskId) return;
 
@@ -1316,7 +1316,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const longPressStartMin = useRef(0);
     const currentDragDuration = useRef(60);
 
-    const handleTouchStart = (e: React.TouchEvent) => {
+    const handleTouchStart = (_e: React.TouchEvent) => {
         // SAFETY: Force cleanup of any zombie listeners + state
         cleanupTouchListeners();
         if (dragState) setDragState(null);
@@ -1404,47 +1404,48 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
         }
     };
 
-    const handleLongPress = (clientX: number, clientY: number) => {
+    /*
+    const _handleLongPress = (_clientX: number, clientY: number) => {
         if (!scrollRef.current) return;
 
         // Haptic feedback
         if (navigator.vibrate) navigator.vibrate(50);
 
         const rect = scrollRef.current.getBoundingClientRect();
-        // Calculate relative Y inside the scroll container
-        // Note: The click is on the viewport. Container might be scrolled.
-        // We need the Y relative to the top of the 24h content div.
-        // The content div is `relative`. 
-        // The scrollContainer has `scrollTop`. 
-        // Y relative to container visible top = clientY - rect.top.
-        // Y absolute in content = Y relative + scrollTop.
-        const scrollTop = scrollRef.current.scrollTop;
-        const offsetY = clientY - rect.top + scrollTop;
-
-        // Calculate time
-        // HOUR_HEIGHT is usually 60 or derived.
-        // Let's assume HOUR_HEIGHT is defined in scope (it is constant 64 in this file? Line 13)
-        // Step 15752: `const HOUR_HEIGHT = 64;`
-
-        const totalMinutes = (offsetY / HOUR_HEIGHT) * 60;
-        // Snap to 15 min
-        const snappedMinutes = Math.round(totalMinutes / 15) * 15;
-
-        // Start Drag Creation Mode
-        setCreationDrag({
-            startY: offsetY,
-            startMin: snappedMinutes,
-            currentDuration: 60
-        });
-
-        isLongPressCreation.current = true;
-        longPressStartMin.current = snappedMinutes;
-        currentDragDuration.current = 60;
-
-        // Clear timer
-        longPressTimer.current = null;
-    };
-
+                // Calculate relative Y inside the scroll container
+                // Note: The click is on the viewport. Container might be scrolled.
+                // We need the Y relative to the top of the 24h content div.
+                // The content div is `relative`.
+                // The scrollContainer has `scrollTop`.
+                // Y relative to container visible top = clientY - rect.top.
+                // Y absolute in content = Y relative + scrollTop.
+                const scrollTop = scrollRef.current.scrollTop;
+                const offsetY = clientY - rect.top + scrollTop;
+        
+                // Calculate time
+                // HOUR_HEIGHT is usually 60 or derived.
+                // Let's assume HOUR_HEIGHT is defined in scope (it is constant 64 in this file? Line 13)
+                // Step 15752: `const HOUR_HEIGHT = 64;`
+        
+                const totalMinutes = (offsetY / HOUR_HEIGHT) * 60;
+                // Snap to 15 min
+                const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+        
+                // Start Drag Creation Mode
+                setCreationDrag({
+                    startY: offsetY,
+                    startMin: snappedMinutes,
+                    currentDuration: 60
+                });
+        
+                isLongPressCreation.current = true;
+                longPressStartMin.current = snappedMinutes;
+                currentDragDuration.current = 60;
+        
+                // Clear timer
+                longPressTimer.current = null;
+            };
+            */
 
     const handleCopyLink = async () => {
         setIsGeneratingLink(true);
@@ -1883,7 +1884,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                     <span className="font-bold text-gray-800 truncate flex-1 min-w-0">{task.title}</span>
                                                     <span className="text-[9px] text-gray-500 font-mono shrink-0">
                                                         {(isDraft && dragState)
-                                                            ? minutesToTime(dragState.currentStartMin)
+                                                            ? minutesToTime(dragState!.currentStartMin)
                                                             : task.start_time
                                                         }
                                                     </span>
@@ -1901,7 +1902,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                     </div>
                                                     <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono mt-0.5">
                                                         {(isDraft && dragState)
-                                                            ? `${minutesToTime(dragState.currentStartMin)} - ${minutesToTime(dragState.currentStartMin + dragState.currentDuration)}`
+                                                            ? `${minutesToTime(dragState!.currentStartMin)} - ${minutesToTime(dragState!.currentStartMin + dragState!.currentDuration)}`
                                                             : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
                                                         }
                                                     </div>
