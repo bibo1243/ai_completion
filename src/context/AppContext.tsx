@@ -6,6 +6,7 @@ import { calculateNextOccurrence, formatRepeatRule } from '../utils/repeat';
 import { updateGoogleEvent, deleteGoogleEvent, createGoogleEvent, fetchCalendarList, fetchUpdatedGoogleEvents, GoogleEvent } from '../utils/googleCalendar';
 import { DRAG_GHOST_IMG } from '../constants';
 import { translations } from '../translations';
+import { loadPreference, savePreference, PREFERENCE_KEYS } from '../services/userPreferences';
 
 // UUID polyfill for browsers that don't support crypto.randomUUID()
 const generateUUID = (): string => {
@@ -242,30 +243,69 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
         return false;
     }, [lockedGoogleTagIds, tags]);
 
-    // Load viewTagFilters
+    // Load viewTagFilters from database (with localStorage fallback)
     useEffect(() => {
-        const stored = localStorage.getItem('viewTagFilters');
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored);
-                // Migration logic: convert array to object
-                const migrated: Record<string, { include: string[], exclude: string[] }> = {};
-                Object.keys(parsed).forEach(key => {
-                    if (Array.isArray(parsed[key])) {
-                        migrated[key] = { include: parsed[key], exclude: [] };
-                    } else {
-                        migrated[key] = parsed[key];
+        const loadViewTagFilters = async () => {
+            if (user?.id) {
+                // Try loading from database first
+                const dbFilters = await loadPreference<Record<string, { include: string[], exclude: string[] }>>(
+                    user.id,
+                    PREFERENCE_KEYS.VIEW_TAG_FILTERS
+                );
+
+                if (dbFilters) {
+                    // Migrate array format to object format if needed
+                    const migrated: Record<string, { include: string[], exclude: string[] }> = {};
+                    Object.keys(dbFilters).forEach(key => {
+                        if (Array.isArray(dbFilters[key])) {
+                            migrated[key] = { include: dbFilters[key] as unknown as string[], exclude: [] };
+                        } else {
+                            migrated[key] = dbFilters[key];
+                        }
+                    });
+                    setViewTagFilters(migrated);
+                    // Also sync to localStorage
+                    localStorage.setItem('viewTagFilters', JSON.stringify(migrated));
+                    return;
+                }
+            }
+
+            // Fallback to localStorage
+            const stored = localStorage.getItem('viewTagFilters');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    // Migration logic: convert array to object
+                    const migrated: Record<string, { include: string[], exclude: string[] }> = {};
+                    Object.keys(parsed).forEach(key => {
+                        if (Array.isArray(parsed[key])) {
+                            migrated[key] = { include: parsed[key], exclude: [] };
+                        } else {
+                            migrated[key] = parsed[key];
+                        }
+                    });
+                    setViewTagFilters(migrated);
+
+                    // If user is logged in, sync localStorage to database
+                    if (user?.id) {
+                        savePreference(user.id, PREFERENCE_KEYS.VIEW_TAG_FILTERS, migrated);
                     }
-                });
-                setViewTagFilters(migrated);
-            } catch (e) { console.error('Failed to parse viewTagFilters', e); }
-        }
-    }, []);
+                } catch (e) { console.error('Failed to parse viewTagFilters', e); }
+            }
+        };
+
+        loadViewTagFilters();
+    }, [user?.id]);
 
     const updateViewTagFilter = (view: string, filter: { include: string[], exclude: string[] }) => {
         setViewTagFilters(prev => {
             const next = { ...prev, [view]: filter };
+            // Save to localStorage immediately
             localStorage.setItem('viewTagFilters', JSON.stringify(next));
+            // Sync to database (debounced)
+            if (user?.id) {
+                savePreference(user.id, PREFERENCE_KEYS.VIEW_TAG_FILTERS, next);
+            }
             return next;
         });
     };
@@ -386,14 +426,36 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }, [calendarDate]);
 
     useEffect(() => {
-        if (user?.id) {
-            const savedWidth = localStorage.getItem(`focus_split_width_${user.id}`);
-            if (savedWidth) setFocusSplitWidth(parseInt(savedWidth));
-        }
+        const loadSplitWidths = async () => {
+            if (user?.id) {
+                // Try to load from database first
+                const dbFocusWidth = await loadPreference<number>(user.id, 'focusSplitWidth');
+                if (dbFocusWidth) {
+                    setFocusSplitWidth(dbFocusWidth);
+                    localStorage.setItem(`focus_split_width_${user.id}`, dbFocusWidth.toString());
+                } else {
+                    // Fallback to localStorage
+                    const savedWidth = localStorage.getItem(`focus_split_width_${user.id}`);
+                    if (savedWidth) setFocusSplitWidth(parseInt(savedWidth));
+                }
+
+                // Also load sidebarWidth from database
+                const dbSidebarWidth = await loadPreference<number>(user.id, 'sidebarWidth');
+                if (dbSidebarWidth) {
+                    setSidebarWidth(dbSidebarWidth);
+                    localStorage.setItem(`sidebar_width_${user.id}`, dbSidebarWidth.toString());
+                }
+            }
+        };
+        loadSplitWidths();
     }, [user?.id]);
 
     useEffect(() => {
-        if (user?.id) localStorage.setItem(`focus_split_width_${user.id}`, focusSplitWidth.toString());
+        if (user?.id) {
+            localStorage.setItem(`focus_split_width_${user.id}`, focusSplitWidth.toString());
+            // Sync to database
+            savePreference(user.id, 'focusSplitWidth', focusSplitWidth);
+        }
     }, [focusSplitWidth, user?.id]);
 
     useEffect(() => {

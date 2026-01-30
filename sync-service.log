@@ -28148,3 +28148,6 @@ Found 32 tasks in Things 3.
 [Skip] Task "隨時讓自己覺察處於舒適圈邊緣，就是刻意讓自己進到時間裂縫" already imported (things_id: FJG49KEw3ENZjGKmyk13i6)
 [Skip] Task "2023.06.14（三）" already imported (things_id: 7SDMmCdegU52h19iTCi7cC)
 Sync Complete. No new tasks to import.
+[Sat Jan 24 22:25:49 CST 2026] Starting Things 3 Sync Service...
+Starting Things 3 Sync in Watch Mode (Polling every 300s)...
+Tip: Use --interval=<seconds> to customize (minimum 30s)

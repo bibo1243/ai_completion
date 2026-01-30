@@ -30,6 +30,9 @@ export const FocusView = () => {
     // Selected date for navigation from calendar to schedule
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
+    // Scroll to specific time in schedule view (HH:MM format)
+    const [scrollToTime, setScrollToTime] = useState<string | null>(null);
+
     // --- Filter State (with localStorage persistence) ---
     const [filterTagsInclude, setFilterTagsInclude] = useState<string[]>(() => {
         try {
@@ -406,11 +409,27 @@ export const FocusView = () => {
             </div>
 
             {/* Resizer */}
+            {/* Resizer */}
             <div
                 onMouseDown={() => setIsResizing(true)}
-                className={`w-1 cursor-col-resize hover:bg-indigo-400 group relative z-30 transition-colors flex items-center justify-center ${isResizing ? 'bg-indigo-400' : 'bg-transparent'}`}
+                onTouchStart={() => setIsResizing(true)} // Support touch for mobile
+                className={`
+                    w-1 hover:w-2 active:w-2 cursor-col-resize hover:bg-indigo-400 
+                    group relative z-30 transition-all duration-150 flex items-center justify-center 
+                    touch-none highlight-none select-none
+                    ${isResizing ? 'bg-indigo-400 w-2' : 'bg-transparent'}
+                `}
             >
-                <div className={`absolute opacity-0 group-hover:opacity-100 transition-opacity p-0.5 bg-white border border-gray-200 rounded-md shadow-sm text-gray-400 ${isResizing ? 'opacity-100' : ''}`}>
+                {/* Touch Hit Area (Invisible but wider) */}
+                <div className="absolute inset-y-0 -left-2 -right-2 z-30 bg-transparent active:bg-indigo-400/20" />
+                
+                {/* Handle Icon */}
+                <div className={`
+                    absolute opacity-0 group-hover:opacity-100 transition-opacity 
+                    p-0.5 bg-white border border-gray-200 rounded-md shadow-sm text-gray-400 
+                    ${isResizing ? 'opacity-100' : ''}
+                    pointer-events-none transform scale-90
+                `}>
                     <GripVertical size={10} />
                 </div>
             </div>
@@ -588,9 +607,10 @@ export const FocusView = () => {
                 <div className="flex-1 relative z-10 h-full overflow-hidden">
                     {calendarMode === 'calendar' && !selectedDate ? (
                         <ContinuousWeekCalendar
-                            onDateClick={(date) => {
+                            onDateClick={(date, targetTime) => {
                                 setSelectedDate(date);
                                 setCalendarDate(date);
+                                setScrollToTime(targetTime || null);
                             }}
                             filterTags={filterTagsInclude}
                             filterTagsExclude={filterTagsExclude}
@@ -603,6 +623,8 @@ export const FocusView = () => {
                             filterTagsExclude={filterTagsExclude}
                             filterColors={filterColors}
                             filterProjects={filterProjects}
+                            initialScrollToTime={scrollToTime}
+                            onScrollComplete={() => setScrollToTime(null)}
                         />
                     )}
                 </div>

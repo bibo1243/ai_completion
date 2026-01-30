@@ -18,9 +18,18 @@ interface ScheduleViewProps {
     filterTagsExclude?: string[];
     filterColors?: string[];
     filterProjects?: string[];
+    initialScrollToTime?: string | null;  // HH:MM format
+    onScrollComplete?: () => void;
 }
 
-export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterColors = [], filterProjects = [] }: ScheduleViewProps) => {
+export const ScheduleView = ({
+    filterTags = [],
+    filterTagsExclude = [],
+    filterColors = [],
+    filterProjects = [],
+    initialScrollToTime,
+    onScrollComplete
+}: ScheduleViewProps) => {
     const {
         tasks,
         tags,
@@ -235,7 +244,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     };
 
-    // Initial Date Generation
+    // Initial Date Generation - also reacts to calendarDate changes
     useEffect(() => {
         const center = new Date(calendarDate);
         center.setHours(0, 0, 0, 0);
@@ -248,11 +257,12 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
         setDays(initialDays);
         setTimeout(() => {
             if (scrollContainerRef.current) {
+                // Scroll to center the selected date
                 const centerOffset = (initialDays.length * columnWidth) / 2 - (scrollContainerRef.current.clientWidth / 2);
                 scrollContainerRef.current.scrollLeft = centerOffset;
             }
         }, 0);
-    }, []);
+    }, [calendarDate, columnWidth]);
 
     // Update time
     useEffect(() => {
@@ -344,11 +354,55 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
         }
     };
 
-    // Initial Scroll to Today
+    // Initial Scroll: 如果有 initialScrollToTime，滾動到 calendarDate 的日期欄位並垂直滾動到指定時間
+    // 否則保持當前位置（不自動滾動到今天）
     useEffect(() => {
-        // Short delay to ensure layout is ready
-        setTimeout(() => scrollToToday(), 100);
-    }, []);
+        // 只有在有指定時間時才滾動（從月曆視圖點擊日期跳轉過來）
+        if (initialScrollToTime) {
+            // 有指定時間，說明是從月曆視圖跳轉過來的
+            // 水平滾動到 calendarDate 指定的日期，垂直滾動到 initialScrollToTime
+            setTimeout(() => {
+                if (!scrollContainerRef.current) return;
+
+                // 1. 水平滾動：找到 calendarDate 對應的欄位位置
+                const targetDate = new Date(calendarDate);
+                targetDate.setHours(0, 0, 0, 0);
+
+                // 找到目標日期在 days 數組中的索引
+                const targetIndex = days.findIndex(d => {
+                    const dayDate = new Date(d);
+                    dayDate.setHours(0, 0, 0, 0);
+                    return dayDate.getTime() === targetDate.getTime();
+                });
+
+                if (targetIndex !== -1) {
+                    // 水平滾動到該日期欄位（置中）
+                    const targetScrollX = (targetIndex * columnWidth) - (scrollContainerRef.current.clientWidth / 2) + (columnWidth / 2);
+                    scrollContainerRef.current.scrollLeft = targetScrollX;
+                }
+
+                // 2. 垂直滾動：滾動到指定時間
+                const [h, m] = initialScrollToTime.split(':').map(Number);
+                if (!isNaN(h) && !isNaN(m)) {
+                    const targetMinutes = h * 60 + m;
+                    const yOffset = getYFromMinutes(targetMinutes);
+                    const headerHeight = DATE_HEADER_HEIGHT + allDayHeight + 4;
+                    const targetScrollY = Math.max(0, yOffset + headerHeight - scrollContainerRef.current.clientHeight / 4);
+
+                    scrollContainerRef.current.scrollTo({
+                        top: targetScrollY,
+                        behavior: 'smooth'
+                    });
+                }
+
+                // 滾動完成後清除
+                setTimeout(() => {
+                    onScrollComplete?.();
+                }, 500);
+            }, 150);
+        }
+        // 沒有指定時間時，不做任何自動滾動，保持前一次的位置
+    }, [initialScrollToTime]);
 
     // Scroll Handler
     const handleScroll = () => {
@@ -1035,6 +1089,8 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                 {/* Grid */}
                 {days.map((day, columnIndex) => {
                     const isToday = isSameDay(day, now);
+                    // 判斷是否為選中的日期（從月曆點擊進來的日期）
+                    const isSelected = isSameDay(day, calendarDate) && !isToday;
                     const dayKey = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
                     const rawDayTasks = tasksByDate.get(dayKey) || [];
 
@@ -1050,12 +1106,14 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                         <div
                             key={day.toISOString()}
                             data-date={day.toISOString()}
-                            className="flex-shrink-0 flex flex-col border-r border-theme bg-theme-main relative group h-min"
+                            className={`flex-shrink-0 flex flex-col border-r border-theme relative group h-min
+                                ${isSelected ? 'bg-purple-500/5' : 'bg-theme-main'}
+                            `}
                             style={{ minWidth: columnWidth, width: columnWidth }}
                         >
                             {/* Sticky Header (Date + All Day) */}
                             <div className={`sticky top-0 z-20 border-b border-theme px-1 py-0.5 text-center flex flex-col justify-start select-none shadow-sm relative
-                                ${isToday ? 'bg-indigo-500/10 backdrop-blur-sm' : 'bg-theme-header backdrop-blur-sm'}
+                                ${isToday ? 'bg-indigo-500/10 backdrop-blur-sm' : (isSelected ? 'bg-purple-500/15 backdrop-blur-sm' : 'bg-theme-header backdrop-blur-sm')}
                             `} style={{ height: DATE_HEADER_HEIGHT + allDayHeight + 4 }}>
                                 {/* Resize Handle (only in header area) */}
                                 <div
@@ -1067,7 +1125,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                         週{WEEKDAY_ZH[day.getDay()]}
                                     </span>
                                     <span className={`text-lg font-extralight ${isToday ? 'text-indigo-500' : 'text-theme-primary'}`}>
-                                        {day.getDate()}
+                                        {day.getMonth() + 1}/{day.getDate()}
                                     </span>
                                 </div>
 
@@ -1210,9 +1268,9 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                                 ...(isScheduleTask ? { fontWeight: 'bold' } : {})
                                             } as React.CSSProperties}
                                         >
-                                            <div className="font-extralight text-[11px] truncate leading-normal pointer-events-none">{task.title || '無標題'}</div>
+                                            <div className="font-medium text-[11px] truncate leading-normal pointer-events-none">{task.title || '無標題'}</div>
                                             {(dur > 30) && (
-                                                <div className="text-[9px] opacity-80 font-extralight mt-0.5 leading-normal pointer-events-none">
+                                                <div className="text-[9px] font-normal mt-0.5 leading-normal pointer-events-none">
                                                     {task.start_time} - {task.end_time}
                                                 </div>
                                             )}
@@ -1310,7 +1368,7 @@ export const ScheduleView = ({ filterTags = [], filterTagsExclude = [], filterCo
                                     opacity: 0.95
                                 }}
                             >
-                                <div className="font-extralight text-[11px] truncate leading-normal">{dragState.task.title || '無標題'}</div>
+                                <div className="font-medium text-[11px] truncate leading-normal">{dragState.task.title || '無標題'}</div>
                                 <div className="text-[9px] font-extralight mt-0.5 opacity-80 leading-normal">
                                     {minutesToTimeRaw(dragState.currentStartMin)} - {minutesToTimeRaw(dragState.currentStartMin + dragState.currentDuration)}
                                 </div>

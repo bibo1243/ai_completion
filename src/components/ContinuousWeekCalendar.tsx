@@ -24,7 +24,7 @@ interface WeekData {
 }
 
 interface ContinuousWeekCalendarProps {
-    onDateClick?: (date: Date) => void;
+    onDateClick?: (date: Date, scrollToTime?: string) => void;  // scrollToTime is HH:MM format
     filterTags?: string[];
     filterTagsExclude?: string[];
     filterColors?: string[];
@@ -102,7 +102,6 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
     const [placedDateFlash, setPlacedDateFlash] = useState<string | null>(null);
     const [dragOverDate, setDragOverDate] = useState<string | null>(null);
     const [currentViewDate, setCurrentViewDate] = useState<Date>(new Date());
-    const [internalSelectedDate, setInternalSelectedDate] = useState<Date | null>(null);
     const [draftTask, setDraftTask] = useState<{ date: Date; title: string } | null>(null);
     // Virtualization state: start with large range to ensure initial render is visible
     const [visibleRange, setVisibleRange] = useState({ start: 0, end: 200 });
@@ -340,8 +339,10 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
             setPlacedDateFlash(dateKey);
             setTimeout(() => setPlacedDateFlash(null), 600);
         } else {
-            // 單擊：僅選中
-            setInternalSelectedDate(date);
+            // 單擊空白處：直接新增任務
+            setDraftTask({ date, title: '' });
+            // 聚焦輸入框
+            setTimeout(() => draftInputRef.current?.focus(), 50);
         }
     };
 
@@ -349,6 +350,28 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
     const handleHeaderDoubleClick = (date: Date, e: React.MouseEvent) => {
         e.stopPropagation();
         if (onDateClick) onDateClick(date);
+    };
+
+    // 點擊日期數字進入日程視圖
+    const handleDateNumberClick = (date: Date, e: React.MouseEvent) => {
+        e.stopPropagation();
+        e.preventDefault();
+        // 傳遞預設時間 9:00，讓日程視圖能正確滾動到該時間
+        if (onDateClick) onDateClick(date, '09:00');
+    };
+
+    // 點擊日程項目跳轉到日程表的該時間位置
+    const handleTaskClickJumpToSchedule = (date: Date, task: any, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDateClick) {
+            // 如果是有時間的任務，傳遞時間信息
+            if (!task.is_all_day && task.start_time) {
+                onDateClick(date, task.start_time);
+            } else {
+                // 整日任務，跳轉到日程表但不滾動到特定時間
+                onDateClick(date);
+            }
+        }
     };
 
     const toggleScheduleTag = async () => {
@@ -376,14 +399,6 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
         if (updates.length > 0) {
             await batchUpdateTasks(updates as any);
         }
-    };
-
-    // 雙擊日期格創建新任務（內嵌輸入）
-    const handleDateDoubleClick = (date: Date, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setDraftTask({ date, title: '' });
-        // 聚焦輸入框
-        setTimeout(() => draftInputRef.current?.focus(), 50);
     };
 
     // 確認新增任務
@@ -485,7 +500,6 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                     const dayTasks = getTasksForDate(day.date);
                                     const isFlashing = placedDateFlash === day.date.toDateString();
                                     const isHovered = constructionModeEnabled && selectedTaskIds.length > 0;
-                                    const isSelectedDay = internalSelectedDate && isSameDay(day.date, internalSelectedDate);
 
                                     // 節假日資訊
                                     const holiday = getTaiwanHoliday(day.date);
@@ -500,18 +514,17 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                             key={dIndex}
                                             className={`
                                                 flex-1 min-w-0 h-full border-r border-theme relative group
-                                                ${isSelectedDay ? 'bg-indigo-500/10' : ''}
-                                                ${day.isToday && !isSelectedDay
+                                                ${day.isToday
                                                     ? 'bg-indigo-500/5'
-                                                    : (isWeekend && !isSelectedDay
+                                                    : (isWeekend
                                                         ? 'bg-theme-sidebar'
-                                                        : (day.date.getMonth() % 2 === 0 && !isSelectedDay ? 'bg-theme-main' : (!isSelectedDay ? 'bg-theme-hover/30' : ''))
+                                                        : (day.date.getMonth() % 2 === 0 ? 'bg-theme-main' : 'bg-theme-hover/30')
                                                     )
                                                 }
                                                 ${isFlashing ? 'ring-4 ring-green-400 bg-green-50 animate-pulse z-20' : ''}
                                                 ${dragOverDate === day.date.toDateString() ? 'bg-indigo-500/20 ring-inset ring-2 ring-indigo-400 z-10 transition-colors duration-150' : ''}
                                                 ${isHovered ? 'cursor-pointer hover:ring-[1.5px] hover:ring-indigo-500 hover:shadow-sm hover:z-30 z-10' : ''}
-                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() && !isSelectedDay ? 'hover:bg-theme-hover' : ''}
+                                                ${!day.isToday && !isFlashing && dragOverDate !== day.date.toDateString() ? 'hover:bg-theme-hover' : ''}
                                             `}
                                             onDragEnter={() => setDragOverDate(day.date.toDateString())}
                                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
@@ -550,7 +563,6 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                 }
                                             }}
                                             onClick={(e) => handleDateClick(day.date, e)}
-                                            onDoubleClick={(e) => handleDateDoubleClick(day.date, e)}
                                         >
                                             {/* 月份分隔線 (如果這一天是1號) */}
                                             {isMonthStart && (
@@ -569,9 +581,9 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                 className="p-1 h-full flex flex-col gap-0.5 overflow-hidden"
                                                 onDoubleClick={(e) => handleHeaderDoubleClick(day.date, e)}
                                             >
-                                                <div className="flex items-start justify-between min-w-0 pointer-events-none">
+                                                <div className="flex items-start justify-between min-w-0">
                                                     {/* 農曆與節假日顯示 */}
-                                                    <div className="flex flex-col leading-none pt-0.5 pl-0.5 max-w-[70%] text-left">
+                                                    <div className="flex flex-col leading-none pt-0.5 pl-0.5 max-w-[70%] text-left pointer-events-none">
                                                         {themeSettings.showTaiwanHolidays && holiday && (
                                                             <span className="text-[9px] font-bold truncate text-red-500">
                                                                 {holiday}
@@ -589,13 +601,19 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                         )}
                                                     </div>
 
-                                                    <div className={`
-                                                        text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full ml-auto flex-shrink-0
-                                                        ${day.isToday
-                                                            ? 'bg-indigo-600 text-white'
-                                                            : (isSunday ? 'text-red-500' : (isSaturday ? 'text-green-600' : 'text-theme-tertiary group-hover:text-theme-secondary'))
-                                                        }
-                                                    `}>
+                                                    {/* 日期數字 - 可點擊跳轉到日程表 */}
+                                                    <div
+                                                        onClick={(e) => handleDateNumberClick(day.date, e)}
+                                                        className={`
+                                                            text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full ml-auto flex-shrink-0
+                                                            cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all
+                                                            ${day.isToday
+                                                                ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                                                                : (isSunday ? 'text-red-500 hover:bg-red-50' : (isSaturday ? 'text-green-600 hover:bg-green-50' : 'text-theme-tertiary group-hover:text-theme-secondary hover:bg-indigo-50'))
+                                                            }
+                                                        `}
+                                                        title="點擊查看該日日程"
+                                                    >
                                                         {day.date.getDate()}
                                                     </div>
                                                 </div>
@@ -672,6 +690,11 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                                 onDragEnd={() => setDragOverDate(null)}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
+                                                                    // Alt/Option+點擊：跳轉到日程表的該時間位置
+                                                                    if (e.altKey) {
+                                                                        handleTaskClickJumpToSchedule(day.date, task, e);
+                                                                        return;
+                                                                    }
                                                                     // 支援多選與單選
                                                                     if (e.metaKey || e.ctrlKey || e.shiftKey) {
                                                                         if (selectedTaskIds.includes(task.id)) {
@@ -680,8 +703,8 @@ export const ContinuousWeekCalendar = ({ onDateClick, filterTags = [], filterTag
                                                                             setSelectedTaskIds(prev => [...prev, task.id]);
                                                                         }
                                                                     } else {
-                                                                        // 單擊直接選中
-                                                                        setSelectedTaskIds([task.id]);
+                                                                        // 單擊跳轉到日程表
+                                                                        handleTaskClickJumpToSchedule(day.date, task, e);
                                                                     }
                                                                 }}
                                                                 onDoubleClick={(e) => {

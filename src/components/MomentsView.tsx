@@ -3,6 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { AppContext } from '../context/AppContext';
 import { Plus, Heart, Trash2, Clock, Calendar } from 'lucide-react';
 import { MomentsEditor } from './MomentsEditor';
+import { loadPreference, savePreference } from '../services/userPreferences';
 
 interface MomentsViewProps {
     tasks: any[];
@@ -23,7 +24,7 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
     onDeleteTask,
     scrollRef
 }) => {
-    const { setToast } = useContext(AppContext);
+    const { setToast, user } = useContext(AppContext);
     const [isEditing, setIsEditing] = useState(false);
     const [editingMoment, setEditingMoment] = useState<any>(null);
     const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -375,7 +376,37 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         );
     };
 
-    const [layoutMode, setLayoutMode] = useState<'vertical' | 'horizontal'>('vertical');
+    const [layoutMode, setLayoutMode] = useState<'vertical' | 'horizontal'>(() => {
+        // Load from localStorage for initial render
+        return (localStorage.getItem('moments_layout_mode') as 'vertical' | 'horizontal') || 'vertical';
+    });
+
+    // Load layout mode from database
+    useEffect(() => {
+        const loadLayoutMode = async () => {
+            if (user?.id && !isGuest) {
+                const dbValue = await loadPreference<'vertical' | 'horizontal'>(
+                    user.id,
+                    'momentsLayoutMode'
+                );
+                if (dbValue) {
+                    setLayoutMode(dbValue);
+                    localStorage.setItem('moments_layout_mode', dbValue);
+                }
+            }
+        };
+        loadLayoutMode();
+    }, [user?.id, isGuest]);
+
+    // Save layout mode when changed
+    const handleSetLayoutMode = (mode: 'vertical' | 'horizontal') => {
+        setLayoutMode(mode);
+        localStorage.setItem('moments_layout_mode', mode);
+        // Sync to database
+        if (user?.id && !isGuest) {
+            savePreference(user.id, 'momentsLayoutMode', mode);
+        }
+    };
 
     const renderHorizontalLayout = () => {
         return (
@@ -543,13 +574,13 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
         <div className="relative min-h-full bg-slate-50 pb-20 flex flex-col">
             <div className="flex justify-end px-4 py-2 gap-2">
                 <button
-                    onClick={() => setLayoutMode('vertical')}
+                    onClick={() => handleSetLayoutMode('vertical')}
                     className={`text-xs px-3 py-1 rounded-full border ${layoutMode === 'vertical' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-gray-500 border-gray-200'}`}
                 >
                     直式
                 </button>
                 <button
-                    onClick={() => setLayoutMode('horizontal')}
+                    onClick={() => handleSetLayoutMode('horizontal')}
                     className={`text-xs px-3 py-1 rounded-full border ${layoutMode === 'horizontal' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white text-gray-500 border-gray-200'}`}
                 >
                     橫式
