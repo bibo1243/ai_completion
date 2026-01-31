@@ -2,13 +2,16 @@ import React, { useState, useContext, useMemo, useEffect, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { DraggableTaskModal } from './DraggableTaskModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo, Book } from 'lucide-react';
+import { Heart, Share2, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, CheckCircle2, Settings, Link as LinkIcon, GripHorizontal, Trash2, Plus, Undo, Redo, Book, MessageCircle } from 'lucide-react';
 import { MomentsView } from './MomentsView';
 import { format, addDays, subDays, isSameDay, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { supabase } from '../supabaseClient'; // Import supabase
 import { getSolarTerm } from '../utils/calendar';
 import { loadPreference, savePreference, PREFERENCE_KEYS } from '../services/userPreferences';
+import { TaskInteractions } from './TaskInteractions';
+import { getReactionsBatch, getCommentsBatch, subscribeToAllInteractions } from '../services/taskInteractions';
+import { TaskReaction, TaskComment } from '../types';
 
 interface HeartScheduleViewProps {
     onClose?: () => void;
@@ -112,6 +115,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const [draftTaskForModal, setDraftTaskForModal] = useState<any>(null);
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
     const [allDayExpanded, setAllDayExpanded] = useState(false); // 整日行程摺疊狀態，預設折疊
+
+    // Task Interactions State
+    const [interactionTaskId, setInteractionTaskId] = useState<string | null>(null);
+    const [interactionTaskTitle, setInteractionTaskTitle] = useState<string>('');
+    const [taskReactions, setTaskReactions] = useState<Record<string, TaskReaction[]>>({});
+    const [taskComments, setTaskComments] = useState<Record<string, TaskComment[]>>({});
 
     // Share State
     const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
@@ -794,6 +803,49 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
     const timedTasks = useMemo(() => {
         return dailyTasks.filter(t => !t.is_all_day && t.start_time);
     }, [dailyTasks]);
+
+    // Load interactions (reactions & comments) for current day's tasks or all moments
+    useEffect(() => {
+        const loadInteractions = async () => {
+            const taskIds = viewMode === 'moments'
+                ? tasks.filter(t => t.tags?.some((tid: any) => tags.find(tag => tag.id === tid)?.name === 'OurTimeMoment')).map(t => t.id)
+                : dailyTasks.map(t => t.id);
+
+            if (taskIds.length === 0) {
+                setTaskReactions({});
+                setTaskComments({});
+                return;
+            }
+            const [reactions, comments] = await Promise.all([
+                getReactionsBatch(taskIds),
+                getCommentsBatch(taskIds)
+            ]);
+            setTaskReactions(reactions);
+            setTaskComments(comments);
+        };
+        loadInteractions();
+    }, [dailyTasks, viewMode, tasks, tags]);
+
+    // Subscribe to all interaction changes to keep previews updated
+    useEffect(() => {
+        const unsubscribe = subscribeToAllInteractions(() => {
+            // Re-load data when any interaction changes
+            const taskIds = viewMode === 'moments'
+                ? tasks.filter(t => t.tags?.some((tid: any) => tags.find(tag => tag.id === tid)?.name === 'OurTimeMoment')).map(t => t.id)
+                : dailyTasks.map(t => t.id);
+
+            if (taskIds.length === 0) return;
+
+            Promise.all([
+                getReactionsBatch(taskIds),
+                getCommentsBatch(taskIds)
+            ]).then(([reactions, comments]) => {
+                setTaskReactions(reactions);
+                setTaskComments(comments);
+            });
+        });
+        return () => unsubscribe();
+    }, [dailyTasks, viewMode, tasks, tags]);
 
     // --- Timeline Helpers ---
     const timeToMinutes = (time?: string | null) => {
@@ -1900,11 +1952,33 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                                                         <span className="whitespace-normal break-words leading-tight w-full">{task.title}</span>
                                                         {task.status === 'completed' && <CheckCircle2 size={12} className="text-gray-400 shrink-0 mt-0.5" />}
                                                     </div>
-                                                    <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono mt-0.5">
-                                                        {(isDraft && dragState)
-                                                            ? `${minutesToTime(dragState!.currentStartMin)} - ${minutesToTime(dragState!.currentStartMin + dragState!.currentDuration)}`
-                                                            : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
-                                                        }
+                                                    <div className="text-[10px] text-gray-500 truncate shrink-0 font-mono mt-0.5 flex items-center gap-1">
+                                                        <span>
+                                                            {(isDraft && dragState)
+                                                                ? `${minutesToTime(dragState!.currentStartMin)} - ${minutesToTime(dragState!.currentStartMin + dragState!.currentDuration)}`
+                                                                : `${task.start_time} - ${task.end_time || minutesToTime(timeToMinutes(task.start_time) + (task.duration || 60))}`
+                                                            }
+                                                        </span>
+                                                        {/* Comment/Reaction Button */}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setInteractionTaskId(task.id);
+                                                                setInteractionTaskTitle(task.title || '無標題');
+                                                            }}
+                                                            className="p-0.5 rounded hover:bg-white/50 transition-colors flex items-center gap-0.5"
+                                                        >
+                                                            {taskReactions[task.id]?.length > 0 ? (
+                                                                <span className="text-[9px]">
+                                                                    {Object.entries(taskReactions[task.id].reduce((acc, r) => {
+                                                                        acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                                                        return acc;
+                                                                    }, {} as Record<string, number>)).slice(0, 2).map(([emoji]) => emoji).join('')}
+                                                                </span>
+                                                            ) : (
+                                                                <MessageCircle size={10} className="text-gray-400" />
+                                                            )}
+                                                        </button>
                                                     </div>
                                                 </>
                                             )}
@@ -1990,6 +2064,12 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                         onUpdateTask={effectiveUpdateTask}
                         onDeleteTask={effectiveDeleteTask}
                         scrollRef={lastMomentIdRef}
+                        onOpenInteractions={(id, title) => {
+                            setInteractionTaskId(id);
+                            setInteractionTaskTitle(title);
+                        }}
+                        taskReactions={taskReactions}
+                        taskComments={taskComments}
                     />
                 </div>
             )}
@@ -2064,7 +2144,7 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                 editingTaskId && (
                     // Wrap in Intercepted Context for Guest Editing!
                     <AppContext.Provider value={interceptedContext}>
-                        <div className="absolute inset-0 z-[1200]">
+                        <div className="absolute inset-0 z-[1200]" onClick={(e) => e.stopPropagation()}>
                             <DraggableTaskModal
                                 initialData={
                                     editingTaskId === 'new'
@@ -2086,6 +2166,27 @@ export const HeartScheduleView: React.FC<HeartScheduleViewProps> = ({ onClose, i
                     </AppContext.Provider>
                 )
             }
-        </div >
+
+            {/* Task Interactions Modal */}
+            <TaskInteractions
+                taskId={interactionTaskId || ''}
+                taskTitle={interactionTaskTitle}
+                authorType={isSnapshotMode ? 'guest' : 'host'}
+                isOpen={!!interactionTaskId}
+                onClose={() => {
+                    setInteractionTaskId(null);
+                    setInteractionTaskTitle('');
+                    // Reload reactions after closing
+                    const loadReactions = async () => {
+                        const taskIds = dailyTasks.map(t => t.id);
+                        if (taskIds.length > 0) {
+                            const reactions = await getReactionsBatch(taskIds);
+                            setTaskReactions(reactions);
+                        }
+                    };
+                    loadReactions();
+                }}
+            />
+        </div>
     );
 };

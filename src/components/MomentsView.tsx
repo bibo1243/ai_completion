@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useContext, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { AppContext } from '../context/AppContext';
-import { Plus, Heart, Trash2, Clock, Calendar } from 'lucide-react';
+import { Plus, Heart, Trash2, Clock, Calendar, MessageCircle } from 'lucide-react';
 import { MomentsEditor } from './MomentsEditor';
 import { loadPreference, savePreference } from '../services/userPreferences';
 
@@ -13,6 +13,9 @@ interface MomentsViewProps {
     onUpdateTask: (id: string, data: any) => Promise<void>;
     onDeleteTask: (id: string) => Promise<void>;
     scrollRef?: React.MutableRefObject<string | null>;
+    onOpenInteractions?: (id: string, title: string) => void;
+    taskReactions?: Record<string, any[]>;
+    taskComments?: Record<string, any[]>;
 }
 
 export const MomentsView: React.FC<MomentsViewProps> = ({
@@ -22,7 +25,10 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
     onAddTask,
     onUpdateTask,
     onDeleteTask,
-    scrollRef
+    scrollRef,
+    onOpenInteractions,
+    taskReactions = {},
+    taskComments = {}
 }) => {
     const { setToast, user } = useContext(AppContext);
     const [isEditing, setIsEditing] = useState(false);
@@ -358,6 +364,51 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                             }}
                         />
 
+                        {/* Interactions (Comments & Reactions) */}
+                        <div className={`mt-3 pt-2 border-t border-gray-50 flex items-center gap-3 ${isRightSide ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenInteractions?.(moment.id, moment.title || moment.description?.substring(0, 20) || '無標題');
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-gray-50 transition-colors group/btn"
+                            >
+                                <div className={`p-1 rounded-full ${isRightSide ? 'bg-pink-50 text-pink-500' : 'bg-indigo-50 text-indigo-500'}`}>
+                                    <MessageCircle size={12} />
+                                </div>
+                                {taskReactions[moment.id]?.length > 0 && (
+                                    <div className="flex items-center -space-x-1 overflow-hidden">
+                                        {Object.entries(taskReactions[moment.id].reduce((acc, r) => {
+                                            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                            return acc;
+                                        }, {} as Record<string, number>)).slice(0, 3).map(([emoji]) => (
+                                            <span key={emoji} className="text-xs">{emoji}</span>
+                                        ))}
+                                    </div>
+                                )}
+                                <span className="text-[10px] text-gray-400 group-hover/btn:text-gray-600">互動</span>
+                            </button>
+                        </div>
+
+                        {/* Comments Preview */}
+                        {taskComments[moment.id]?.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                                {taskComments[moment.id].slice(-2).map((comment, idx) => (
+                                    <div
+                                        key={comment.id}
+                                        className={`flex items-start gap-2 p-2 rounded-xl text-[11px] leading-tight ${comment.author_type === 'host'
+                                            ? 'bg-blue-50/50 text-blue-700'
+                                            : 'bg-pink-50/50 text-pink-700'
+                                            } animate-in fade-in slide-in-from-left-2 duration-300`}
+                                        style={{ animationDelay: `${idx * 100}ms` }}
+                                    >
+                                        <span className="font-bold shrink-0">{comment.author_type === 'host' ? '👤' : '💕'}</span>
+                                        <p className="break-words line-clamp-2">{comment.content}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Actions */}
                         <div className={`absolute top-2 ${isRightSide ? 'left-2' : 'right-2'} opacity-0 group-hover:opacity-100 transition-opacity`}>
                             <button
@@ -516,6 +567,47 @@ export const MomentsView: React.FC<MomentsViewProps> = ({
                                             className="text-xs md:text-sm text-gray-600 font-newsreader line-clamp-3 md:line-clamp-4 shrink-0 leading-relaxed overflow-hidden"
                                             dangerouslySetInnerHTML={{ __html: moment.description || '' }}
                                         />
+
+                                        {/* Interactions */}
+                                        <div className="mt-2 pt-2 border-t border-gray-50 flex items-center gap-2 shrink-0">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onOpenInteractions?.(moment.id, moment.title || moment.description?.substring(0, 20) || '無標題');
+                                                }}
+                                                className="flex items-center gap-1 p-1 rounded-lg hover:bg-gray-50 transition-colors"
+                                            >
+                                                <MessageCircle size={14} className="text-gray-400" />
+                                                {taskReactions[moment.id]?.length > 0 && (
+                                                    <div className="flex items-center -space-x-1 shrink-0">
+                                                        {Object.entries(taskReactions[moment.id].reduce((acc, r) => {
+                                                            acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                                            return acc;
+                                                        }, {} as Record<string, number>)).slice(0, 2).map(([emoji]) => (
+                                                            <span key={emoji} className="text-[10px]">{emoji}</span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        </div>
+
+                                        {/* Comments Preview (Horizontal) */}
+                                        {taskComments[moment.id]?.length > 0 && (
+                                            <div className="mt-2 space-y-1 overflow-hidden">
+                                                {taskComments[moment.id].slice(-1).map((comment) => (
+                                                    <div
+                                                        key={comment.id}
+                                                        className={`flex items-start gap-1.5 p-1.5 rounded-lg text-[10px] leading-tight ${comment.author_type === 'host'
+                                                            ? 'bg-blue-50/50 text-blue-700'
+                                                            : 'bg-pink-50/50 text-pink-700'
+                                                            }`}
+                                                    >
+                                                        <span className="shrink-0">{comment.author_type === 'host' ? '👤' : '💕'}</span>
+                                                        <p className="truncate">{comment.content}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             );

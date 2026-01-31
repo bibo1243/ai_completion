@@ -86,6 +86,25 @@ export interface Reminder {
   snoozed_until?: string | null; // If snoozed, when to remind again
 }
 
+// Task Comment for HeartScheduleView interactions
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_type: 'host' | 'guest';
+  author_name?: string;
+  content: string;
+  created_at: string;
+}
+
+// Task Reaction (emoji) for HeartScheduleView interactions
+export interface TaskReaction {
+  id: string;
+  task_id: string;
+  emoji: string;
+  author_type: 'host' | 'guest';
+  created_at: string;
+}
+
 export interface AIHistoryEntry {
   id: string;
   role: 'user' | 'assistant' | 'system';

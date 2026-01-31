@@ -61,9 +61,13 @@ export const FocusView = () => {
     const [showTagDropdown, setShowTagDropdown] = useState(false);
     const [showColorDropdown, setShowColorDropdown] = useState(false);
     const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+    const [tagSearchQuery, setTagSearchQuery] = useState('');
+    const [projectSearchQuery, setProjectSearchQuery] = useState('');
     const tagDropdownRef = useRef<HTMLDivElement>(null);
     const colorDropdownRef = useRef<HTMLDivElement>(null);
     const projectDropdownRef = useRef<HTMLDivElement>(null);
+    const tagSearchInputRef = useRef<HTMLInputElement>(null);
+    const projectSearchInputRef = useRef<HTMLInputElement>(null);
 
     // Persist filters to localStorage
     useEffect(() => {
@@ -115,12 +119,14 @@ export const FocusView = () => {
         const handleClickOutside = (e: MouseEvent) => {
             if (tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node)) {
                 setShowTagDropdown(false);
+                setTagSearchQuery(''); // 清空搜尋欄
             }
             if (colorDropdownRef.current && !colorDropdownRef.current.contains(e.target as Node)) {
                 setShowColorDropdown(false);
             }
             if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node)) {
                 setShowProjectDropdown(false);
+                setProjectSearchQuery(''); // 清空搜尋欄
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -422,7 +428,7 @@ export const FocusView = () => {
             >
                 {/* Touch Hit Area (Invisible but wider) */}
                 <div className="absolute inset-y-0 -left-2 -right-2 z-30 bg-transparent active:bg-indigo-400/20" />
-                
+
                 {/* Handle Icon */}
                 <div className={`
                     absolute opacity-0 group-hover:opacity-100 transition-opacity 
@@ -503,29 +509,47 @@ export const FocusView = () => {
                             <ChevronDown size={10} />
                         </button>
                         {showTagDropdown && (
-                            <div ref={tagDropdownRef} className="absolute top-full left-0 mt-1 w-56 bg-theme-card rounded-lg shadow-xl border border-theme z-50 p-1 max-h-64 overflow-y-auto">
-                                <div className="text-[9px] text-theme-tertiary px-2 py-1 border-b border-theme mb-1">
+                            <div ref={tagDropdownRef} className="absolute top-full left-0 mt-1 w-56 bg-theme-card rounded-lg shadow-xl border border-theme z-50 p-1 max-h-72 flex flex-col">
+                                <div className="text-[9px] text-theme-tertiary px-2 py-1 border-b border-theme mb-1 flex-shrink-0">
                                     點擊切換: 無 → <span className="text-green-600">包含</span> → <span className="text-red-500">排除</span> → 無
                                 </div>
-                                {tags.map((tag: any) => {
-                                    const isIncluded = filterTagsInclude.includes(tag.id);
-                                    const isExcluded = filterTagsExclude.includes(tag.id);
-                                    return (
-                                        <button
-                                            key={tag.id}
-                                            onClick={() => toggleTagFilter(tag.id)}
-                                            className={`w-full flex items-center justify-between px-2 py-1.5 text-xs rounded hover:bg-theme-hover transition-colors ${isIncluded ? 'bg-green-50' : isExcluded ? 'bg-red-50' : ''}`}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tagsWithResolvedColors[tag.id] || '#6366f1' }} />
-                                                <span className="text-theme-secondary">{tag.name}</span>
-                                            </div>
-                                            {isIncluded && <Check size={12} className="text-green-600" />}
-                                            {isExcluded && <X size={12} className="text-red-500" />}
-                                        </button>
-                                    );
-                                })}
-                                {tags.length === 0 && <div className="text-xs text-theme-tertiary p-2">無標籤</div>}
+                                {/* 搜尋輸入框 */}
+                                <div className="px-2 pb-1 flex-shrink-0">
+                                    <input
+                                        ref={tagSearchInputRef}
+                                        type="text"
+                                        value={tagSearchQuery}
+                                        onChange={(e) => setTagSearchQuery(e.target.value)}
+                                        placeholder="搜尋標籤..."
+                                        className="w-full px-2 py-1 text-xs border border-theme rounded bg-theme-main text-theme-secondary placeholder-theme-tertiary focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                                <div className="overflow-y-auto flex-1">
+                                    {tags
+                                        .filter((tag: any) => tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase()))
+                                        .map((tag: any) => {
+                                            const isIncluded = filterTagsInclude.includes(tag.id);
+                                            const isExcluded = filterTagsExclude.includes(tag.id);
+                                            return (
+                                                <button
+                                                    key={tag.id}
+                                                    onClick={() => toggleTagFilter(tag.id)}
+                                                    className={`w-full flex items-center justify-between px-2 py-1.5 text-xs rounded hover:bg-theme-hover transition-colors ${isIncluded ? 'bg-green-50' : isExcluded ? 'bg-red-50' : ''}`}
+                                                >
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tagsWithResolvedColors[tag.id] || '#6366f1' }} />
+                                                        <span className="text-theme-secondary">{tag.name}</span>
+                                                    </div>
+                                                    {isIncluded && <Check size={12} className="text-green-600" />}
+                                                    {isExcluded && <X size={12} className="text-red-500" />}
+                                                </button>
+                                            );
+                                        })}
+                                    {tags.filter((tag: any) => tag.name.toLowerCase().includes(tagSearchQuery.toLowerCase())).length === 0 && (
+                                        <div className="text-xs text-theme-tertiary p-2">{tagSearchQuery ? '無符合的標籤' : '無標籤'}</div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -572,23 +596,44 @@ export const FocusView = () => {
                             <ChevronDown size={10} />
                         </button>
                         {showProjectDropdown && (
-                            <div ref={projectDropdownRef} className="absolute top-full left-0 mt-1 w-56 bg-theme-card rounded-lg shadow-xl border border-theme z-50 p-1 max-h-64 overflow-y-auto">
-                                {projects.map((project: any) => (
-                                    <button
-                                        key={project.id}
-                                        onClick={() => {
-                                            setFilterProjects(prev => prev.includes(project.id) ? prev.filter(id => id !== project.id) : [...prev, project.id]);
-                                        }}
-                                        className={`w-full flex items-center justify-between px-2 py-1.5 text-xs rounded hover:bg-theme-hover transition-colors ${filterProjects.includes(project.id) ? 'bg-indigo-50' : ''}`}
-                                    >
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_THEMES[project.color]?.color || '#6366f1' }} />
-                                            <span className="text-theme-secondary truncate">{project.title}</span>
-                                        </div>
-                                        {filterProjects.includes(project.id) && <Check size={12} className="text-indigo-600" />}
-                                    </button>
-                                ))}
-                                {projects.length === 0 && <div className="text-xs text-theme-tertiary p-2">無專案</div>}
+                            <div ref={projectDropdownRef} className="absolute top-full left-0 mt-1 w-56 bg-theme-card rounded-lg shadow-xl border border-theme z-50 p-1 max-h-72 flex flex-col">
+                                <div className="text-[9px] text-theme-tertiary px-2 py-1 border-b border-theme mb-1 flex-shrink-0">
+                                    點擊切換: 無 → <span className="text-indigo-600">包含</span> → 無
+                                </div>
+                                {/* 搜尋輸入框 */}
+                                <div className="px-2 pb-1 flex-shrink-0">
+                                    <input
+                                        ref={projectSearchInputRef}
+                                        type="text"
+                                        value={projectSearchQuery}
+                                        onChange={(e) => setProjectSearchQuery(e.target.value)}
+                                        placeholder="搜尋專案..."
+                                        className="w-full px-2 py-1 text-xs border border-theme rounded bg-theme-main text-theme-secondary placeholder-theme-tertiary focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                </div>
+                                <div className="overflow-y-auto flex-1">
+                                    {projects
+                                        .filter((project: any) => project.title.toLowerCase().includes(projectSearchQuery.toLowerCase()))
+                                        .map((project: any) => (
+                                            <button
+                                                key={project.id}
+                                                onClick={() => {
+                                                    setFilterProjects(prev => prev.includes(project.id) ? prev.filter(id => id !== project.id) : [...prev, project.id]);
+                                                }}
+                                                className={`w-full flex items-center justify-between px-2 py-1.5 text-xs rounded hover:bg-theme-hover transition-colors ${filterProjects.includes(project.id) ? 'bg-indigo-50' : ''}`}
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_THEMES[project.color]?.color || '#6366f1' }} />
+                                                    <span className="text-theme-secondary truncate">{project.title}</span>
+                                                </div>
+                                                {filterProjects.includes(project.id) && <Check size={12} className="text-indigo-600" />}
+                                            </button>
+                                        ))}
+                                    {projects.filter((project: any) => project.title.toLowerCase().includes(projectSearchQuery.toLowerCase())).length === 0 && (
+                                        <div className="text-xs text-theme-tertiary p-2">{projectSearchQuery ? '無符合的專案' : '無專案'}</div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>

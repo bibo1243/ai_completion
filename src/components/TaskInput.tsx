@@ -963,8 +963,8 @@ export const TaskInput = ({ initialData, onClose, isQuickAdd = false, isEmbedded
     const theme: ThemeColor = COLOR_THEMES[effectiveColor] || COLOR_THEMES.blue;
 
     useClickOutside(containerRef, (event) => {
-        // Disable click outside for quick add (draggable modal)
-        if (isQuickAdd) return;
+        // Disable click outside for quick add or when embedded in a modal
+        if (isQuickAdd || isEmbedded) return;
 
         // Don't close when AI prompt modal, analysis panel, or title preview is open (they're rendered via portal)
         if (isPromptModalOpen) return;
